@@ -26,6 +26,10 @@ import {
   papelariaGenerationStatusLabel,
   resolvePapelariaGenerationPhase,
 } from "../papelariaGenerationStatus";
+import {
+  isReadyImposicaoPdf,
+  isWaitingImposicaoApogee,
+} from "../papelariaImposicaoStatus";
 import type { PapelariaViewMode } from "../papelariaViewMode";
 import {
   buildRuntimePreviewConfig,
@@ -60,6 +64,9 @@ type Props = {
   /** PDF da última prova na pasta Sefoc (quando não há job ativo com PDF). */
   folderProofPdfUrl?: string | null;
   folderProofLabel?: string | null;
+  /** PDF Digital de imposição na pasta Sefoc (quando não há job ativo). */
+  folderImposicaoPdfUrl?: string | null;
+  folderImposicaoLabel?: string | null;
   onCancelJob?: (jobId: number) => void;
   cancelPending?: boolean;
   onApproveProva?: (jobId: number) => void;
@@ -96,6 +103,8 @@ export function PapelariaProofPanel({
   onViewModeChange,
   folderProofPdfUrl = null,
   folderProofLabel = null,
+  folderImposicaoPdfUrl = null,
+  folderImposicaoLabel = null,
   onCancelJob,
   cancelPending = false,
   onApproveProva,
@@ -114,12 +123,8 @@ export function PapelariaProofPanel({
   const isTimbradoDigitalJob =
     activeJob?.tipo_job === "timbrado_a4_digital";
   const isImposicaoJob = activeJob?.tipo_job === "imposicao";
-  const arquivoPdfName = (activeJob?.arquivo_pdf || "").trim();
-  const waitingImposicaoApogee =
-    !!activeJob &&
-    isImposicaoJob &&
-    activeJob.status === "completed" &&
-    (!arquivoPdfName || arquivoPdfName.toLowerCase().endsWith(".jdf"));
+  const waitingImposicaoApogee = isWaitingImposicaoApogee(activeJob);
+  const readyImposicaoPdf = isReadyImposicaoPdf(activeJob);
   const generationPhase = resolvePapelariaGenerationPhase(
     isJobGenerating,
     activeJob,
@@ -137,10 +142,11 @@ export function PapelariaProofPanel({
     !!activeJob &&
     isTimbradoDigitalJob &&
     activeJob.status === "completed";
+  // Prova: nunca mistura PDF Digital de imposição.
   const showPdf =
     !!activeJob &&
     !isTimbradoDigitalJob &&
-    !waitingImposicaoApogee &&
+    !isImposicaoJob &&
     activeJob.status === "completed" &&
     activeJob.prova_revisao !== "discarded" &&
     (activeJob.tem_arquivo_pdf || !!activeJob.arquivo_pdf);
@@ -160,10 +166,17 @@ export function PapelariaProofPanel({
             result.job.nro_protocolo,
           ),
         });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.email.proofFiles(
+            result.job.ano_protocolo,
+            result.job.nro_protocolo,
+          ),
+        });
       }
       return result;
     },
-    enabled: viewMode === "prova" && waitingImposicaoApogee && !!activeJob,
+    // Continua o poll mesmo fora da aba Imposição (ex.: usuário voltou à SP).
+    enabled: waitingImposicaoApogee && !!activeJob,
     refetchInterval: (query) =>
       query.state.data?.status === "ready" ? false : 3000,
     retry: false,
@@ -191,10 +204,21 @@ export function PapelariaProofPanel({
   const jobPdfUrl = activeJob && showPdf ? papelariaJobFileUrl(activeJob.id, "pdf") : "";
   const provaPdfUrl = showPdf ? jobPdfUrl : folderProofPdfUrl ?? "";
   const showingFolderProof = !showPdf && Boolean(folderProofPdfUrl);
+  const jobImposicaoPdfUrl =
+    readyImposicaoPdf && activeJob
+      ? papelariaJobFileUrl(activeJob.id, "pdf")
+      : "";
+  const imposicaoPdfUrl = jobImposicaoPdfUrl || folderImposicaoPdfUrl || "";
+  const showingFolderImposicao =
+    !jobImposicaoPdfUrl && Boolean(folderImposicaoPdfUrl);
   const produtoParaPdf = produto || activeJob?.produto || "";
   const pastaAvulsoPdf = isPastaAvulsoProduct(produtoParaPdf);
   const provaPdfViewerSrc = papelariaProofPdfViewerSrc(
     provaPdfUrl,
+    produtoParaPdf,
+  );
+  const imposicaoPdfViewerSrc = papelariaProofPdfViewerSrc(
+    imposicaoPdfUrl,
     produtoParaPdf,
   );
 
@@ -266,10 +290,14 @@ export function PapelariaProofPanel({
   const subtitle =
     viewMode === "previa"
       ? "Prévia em tempo real dos campos do formulário."
-      : showGenerating
-        ? generationCopy.detail
-        : waitingImposicaoApogee
+      : viewMode === "imposicao"
+        ? waitingImposicaoApogee
           ? "Aguardando processamento pelo Apogee."
+          : imposicaoPdfUrl
+            ? "PDF de imposição (Digital) gerado pelo Apogee."
+            : "Nenhuma imposição encontrada na pasta desta OS."
+        : showGenerating
+          ? generationCopy.detail
           : showGenerationFailed
             ? "A geração falhou."
             : showGenerationCancelled
@@ -279,15 +307,13 @@ export function PapelariaProofPanel({
                 : needsProvaReview
                   ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
                   : showPdf
-                    ? isImposicaoJob
-                      ? "PDF de imposição (Digital) gerado pelo Apogee."
-                      : activeJob?.prova_revisao === "approved"
-                        ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
-                        : exibirMockup3d
-                          ? provaModo === "prova_email"
-                            ? "PDF A4 carimbado (ProvaSefoc) para envio por e-mail."
-                            : "PDF BaseSefoc e mockup 3D da prova gerada pelo sistema."
-                          : "PDF da prova gerada pelo sistema."
+                    ? activeJob?.prova_revisao === "approved"
+                      ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
+                      : exibirMockup3d
+                        ? provaModo === "prova_email"
+                          ? "PDF A4 carimbado (ProvaSefoc) para envio por e-mail."
+                          : "PDF BaseSefoc e mockup 3D da prova gerada pelo sistema."
+                        : "PDF da prova gerada pelo sistema."
                     : showingFolderProof
                       ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
                       : "Nenhuma prova encontrada na pasta desta OS.";
@@ -304,7 +330,89 @@ export function PapelariaProofPanel({
         <PapelariaViewModeToggle value={viewMode} onChange={onViewModeChange} />
       </div>
 
-      {viewMode === "prova" && showGenerating ? (
+      {viewMode === "imposicao" && waitingImposicaoApogee && activeJob ? (
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
+          data-testid="papelaria-imposicao-apogee-loading"
+        >
+          <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-neutral-700">
+              Aguardando processamento pelo Apogee
+            </p>
+            <p className="mt-2 inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900">
+              Imposição
+            </p>
+            <p className="mt-2 max-w-sm text-xs text-neutral-500">
+              O JDF foi enviado. Verificando a pasta Sefoc até surgir o PDF de
+              imposição…
+            </p>
+            <p className="mt-2 font-mono text-[10px] text-neutral-400">
+              Job #{activeJob.id}
+            </p>
+          </div>
+        </div>
+      ) : viewMode === "imposicao" && imposicaoPdfUrl ? (
+        <div className="flex min-h-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3">
+            <article
+              className={cn(
+                "flex flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
+                pastaAvulsoPdf
+                  ? "min-h-[min(42vh,300px)] sm:min-h-[280px]"
+                  : "min-h-[min(50vh,360px)] flex-1 sm:min-h-[320px]",
+              )}
+            >
+              <header className="flex shrink-0 items-center justify-between border-b border-sagra-border px-3 py-2">
+                <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
+                  PDF Imposição
+                  <span className="ml-2 font-normal normal-case tracking-normal text-neutral-400">
+                    {showingFolderImposicao && folderImposicaoLabel
+                      ? folderImposicaoLabel
+                      : "Digital"}
+                  </span>
+                </h3>
+                <a
+                  href={imposicaoPdfViewerSrc || imposicaoPdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-secondary-blue hover:underline"
+                >
+                  <ExternalLink className="size-3" aria-hidden />
+                  Abrir PDF
+                </a>
+              </header>
+              <iframe
+                key={
+                  jobImposicaoPdfUrl && activeJob
+                    ? `imp-${activeJob.id}-${activeJob.concluido_em ?? "pdf"}`
+                    : `imp-folder-${folderImposicaoLabel ?? imposicaoPdfUrl}`
+                }
+                title={
+                  jobImposicaoPdfUrl && activeJob
+                    ? `Imposição PDF — job ${activeJob.id}`
+                    : `Imposição PDF — ${folderImposicaoLabel ?? "Digital"}`
+                }
+                src={imposicaoPdfViewerSrc}
+                className={cn(
+                  "w-full border-0 bg-neutral-100",
+                  pastaAvulsoPdf
+                    ? "h-[min(48vh,560px)] min-h-[240px] flex-1"
+                    : "min-h-0 h-full flex-1",
+                )}
+              />
+            </article>
+          </div>
+        </div>
+      ) : viewMode === "imposicao" ? (
+        <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-neutral-400">
+          <div>
+            <FileText className="mx-auto mb-2 size-10 text-neutral-300" aria-hidden />
+            Nenhuma imposição nesta OS. Use a ação Imposição ou aguarde o
+            Apogee.
+          </div>
+        </div>
+      ) : viewMode === "prova" && showGenerating ? (
         <div
           className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
           data-testid="papelaria-generation-loading"
@@ -358,28 +466,6 @@ export function PapelariaProofPanel({
                   : "Cancelar solicitação"}
             </button>
           ) : null}
-        </div>
-      ) : viewMode === "prova" && waitingImposicaoApogee && activeJob ? (
-        <div
-          className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
-          data-testid="papelaria-imposicao-apogee-loading"
-        >
-          <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
-          <div>
-            <p className="text-sm font-medium text-neutral-700">
-              Aguardando processamento pelo Apogee
-            </p>
-            <p className="mt-2 inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900">
-              Imposição
-            </p>
-            <p className="mt-2 max-w-sm text-xs text-neutral-500">
-              O JDF foi enviado. Verificando a pasta Sefoc até surgir o PDF de
-              imposição…
-            </p>
-            <p className="mt-2 font-mono text-[10px] text-neutral-400">
-              Job #{activeJob.id}
-            </p>
-          </div>
         </div>
       ) : viewMode === "prova" && showGenerationFailed && activeJob ? (
         <div

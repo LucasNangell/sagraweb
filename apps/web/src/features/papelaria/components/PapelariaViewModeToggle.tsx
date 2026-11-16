@@ -8,7 +8,18 @@ type Props = {
   className?: string;
 };
 
+const OPTIONS: ReadonlyArray<readonly [PapelariaViewMode, string]> = [
+  ["previa", "Prévia"],
+  ["prova", "Prova"],
+  ["imposicao", "Imposição"],
+];
+
 export function PapelariaViewModeToggle({ value, onChange, className }: Props) {
+  const index = Math.max(
+    0,
+    OPTIONS.findIndex(([id]) => id === value),
+  );
+
   return (
     <div
       className={cn(
@@ -21,17 +32,12 @@ export function PapelariaViewModeToggle({ value, onChange, className }: Props) {
     >
       <span
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-y-0.5 w-[calc(50%-2px)] rounded-full bg-white shadow-sm transition-transform duration-200 ease-out",
-          value === "prova" ? "translate-x-[calc(100%+2px)]" : "translate-x-0.5",
-        )}
+        className="pointer-events-none absolute inset-y-0.5 w-[calc(33.333%-2px)] rounded-full bg-white shadow-sm transition-transform duration-200 ease-out"
+        style={{
+          transform: `translateX(calc(${index} * (100% + 2px) + 2px))`,
+        }}
       />
-      {(
-        [
-          ["previa", "Prévia"],
-          ["prova", "Prova"],
-        ] as const
-      ).map(([id, label]) => (
+      {OPTIONS.map(([id, label]) => (
         <button
           key={id}
           type="button"
@@ -41,7 +47,9 @@ export function PapelariaViewModeToggle({ value, onChange, className }: Props) {
           onClick={() => onChange(id)}
           className={cn(
             "relative z-10 min-w-[4.5rem] rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
-            value === id ? "text-secondary-blue" : "text-neutral-500 hover:text-neutral-700",
+            value === id
+              ? "text-secondary-blue"
+              : "text-neutral-500 hover:text-neutral-700",
           )}
         >
           {label}

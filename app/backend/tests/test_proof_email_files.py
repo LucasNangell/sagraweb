@@ -62,6 +62,34 @@ class TestListProofPdfFiles:
         result = svc.list_proof_pdf_files(2026, 999)
         assert result["files"] == []
         assert result["suggested"] is None
+        assert result["imposicao_files"] == []
+        assert result["imposicao_suggested"] is None
+
+    def test_lists_digital_imposicao_pdfs(self, monkeypatch, tmp_path):
+        from services import proof_files_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        digital = sefoc / "Digital"
+        digital.mkdir(parents=True)
+        (sefoc / "prova.pdf").write_bytes(b"%PDF-prova")
+        older = digital / "06225_Digit_10Up_A4.pdf"
+        newer = digital / "06225_Digit_10Up_A3.pdf"
+        older.write_bytes(b"%PDF-old")
+        newer.write_bytes(b"%PDF-new")
+        (digital / "outro.pdf").write_bytes(b"%PDF-other")
+        os.utime(older, (1_700_000_000, 1_700_000_000))
+        os.utime(newer, (1_800_000_000, 1_800_000_000))
+
+        monkeypatch.setattr(svc, "_sefoc_dir", lambda _a, _o: str(sefoc))
+        result = svc.list_proof_pdf_files(2026, 6225)
+        names = {f["name"] for f in result["imposicao_files"]}
+        assert names == {
+            "Digital/06225_Digit_10Up_A4.pdf",
+            "Digital/06225_Digit_10Up_A3.pdf",
+        }
+        assert "Digital/outro.pdf" not in names
+        assert result["imposicao_suggested"] == "Digital/06225_Digit_10Up_A3.pdf"
+        assert {f["name"] for f in result["files"]} == {"prova.pdf"}
 
     def test_suggested_prefers_highest_prova_sefoc_over_mtime(self, monkeypatch, tmp_path):
         from services import proof_files_service as svc

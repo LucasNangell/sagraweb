@@ -43,6 +43,10 @@ import {
   clienteAlteracaoIdentity,
   mergePapelariaFieldValues,
 } from "../applyPapelariaPrefill";
+import {
+  isReadyImposicaoPdf,
+  isWaitingImposicaoApogee,
+} from "../papelariaImposicaoStatus";
 import { isTimbradoA4DigitalProduct } from "../papelariaSession";
 import {
   resolveDefaultPapelariaViewMode,
@@ -308,7 +312,7 @@ export function PapelariaCorelPanel({
     }
   }, [activeJobId, activeJobQuery.data, jobsQuery.data, queryClient]);
 
-  /** Ao abrir/voltar para a SP, retoma o job ainda na fila ou em processamento. */
+  /** Ao abrir/voltar para a SP, retoma job em fila/processamento ou aguardando Apogee. */
   useEffect(() => {
     if (!hasOs || !jobsQuery.data?.length) return;
     const inFlight = [...jobsQuery.data]
@@ -316,22 +320,28 @@ export function PapelariaCorelPanel({
         (j) => j.status === "pending" || j.status === "processing",
       )
       .sort((a, b) => b.id - a.id)[0];
-    if (!inFlight) return;
+    const waitingApogee = [...jobsQuery.data]
+      .filter((j) => isWaitingImposicaoApogee(j))
+      .sort((a, b) => b.id - a.id)[0];
+    const target = inFlight ?? waitingApogee;
+    if (!target) return;
 
     setActiveJobId((prev) => {
-      if (prev === inFlight.id) return prev;
+      if (prev === target.id) return prev;
       if (prev != null) {
         const current = jobsQuery.data.find((j) => j.id === prev);
         if (
           current &&
-          (current.status === "pending" || current.status === "processing")
+          (current.status === "pending" ||
+            current.status === "processing" ||
+            isWaitingImposicaoApogee(current))
         ) {
           return prev;
         }
       }
-      return inFlight.id;
+      return target.id;
     });
-    setViewMode("prova");
+    setViewMode(inFlight ? "prova" : "imposicao");
     setMobilePanel("preview");
   }, [hasOs, jobsQuery.data, anoNum, nroNum]);
 
@@ -431,7 +441,7 @@ export function PapelariaCorelPanel({
       setCorelEditMode(false);
       setFormError(null);
       setProvaReviewMessage("JDF enviado ao Apogee.");
-      setViewMode("prova");
+      setViewMode("imposicao");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
@@ -951,28 +961,60 @@ export function PapelariaCorelPanel({
 
   const folderProofName = proofFilesQuery.data?.suggested ?? null;
   const hasFolderProof = (proofFilesQuery.data?.files.length ?? 0) > 0;
+  const folderImposicaoName =
+    proofFilesQuery.data?.imposicao_suggested ?? null;
+  const hasFolderImposicao = Boolean(folderImposicaoName);
   const hasJobProof = Boolean(
     activeJob &&
       activeJob.status === "completed" &&
       activeJob.tipo_job !== "timbrado_a4_digital" &&
+      activeJob.tipo_job !== "imposicao" &&
       activeJob.prova_revisao !== "discarded" &&
       (activeJob.tem_arquivo_pdf || activeJob.arquivo_pdf),
   );
+  const hasJobImposicaoPdf = isReadyImposicaoPdf(activeJob);
+  const listWaitingApogeeJob = useMemo(() => {
+    if (!jobsQuery.data?.length) return null;
+    return (
+      [...jobsQuery.data]
+        .filter((j) => isWaitingImposicaoApogee(j))
+        .sort((a, b) => b.id - a.id)[0] ?? null
+    );
+  }, [jobsQuery.data]);
+  const waitingApogee =
+    isWaitingImposicaoApogee(activeJob) || Boolean(listWaitingApogeeJob);
+  const hasImposicaoPdf = hasJobImposicaoPdf || hasFolderImposicao;
   const folderProofPdfUrl =
     hasOs && folderProofName
       ? emailProofFileUrl(anoNum, nroNum, folderProofName)
       : null;
+  const folderImposicaoPdfUrl =
+    hasOs && folderImposicaoName
+      ? emailProofFileUrl(anoNum, nroNum, folderImposicaoName)
+      : null;
 
   useEffect(() => {
-    if (!hasOs || proofFilesQuery.isLoading) {
+    if (!hasOs || proofFilesQuery.isLoading || jobsQuery.isLoading) {
       return;
     }
     if (viewModeInitialized.current) return;
     viewModeInitialized.current = true;
     setViewMode(
-      resolveDefaultPapelariaViewMode(hasFolderProof || hasJobProof),
+      resolveDefaultPapelariaViewMode({
+        hasImposicao: hasImposicaoPdf,
+        hasProof: hasFolderProof || hasJobProof,
+        waitingApogee,
+      }),
     );
-  }, [hasOs, proofFilesQuery.isLoading, hasFolderProof, hasJobProof]);
+  }, [
+    hasOs,
+    proofFilesQuery.isLoading,
+    jobsQuery.isLoading,
+    hasFolderProof,
+    hasJobProof,
+    hasImposicaoPdf,
+    waitingApogee,
+  ]);
 
   const mutationGenerating =
     createJobMutation.isPending ||
@@ -1009,6 +1051,9 @@ export function PapelariaCorelPanel({
       (activeJob.status === "pending" || activeJob.status === "processing")
         ? activeJob
         : listInFlightJob;
+    const apogeeJob = isWaitingImposicaoApogee(activeJob)
+      ? activeJob
+      : listWaitingApogeeJob;
 
     if (pipelineJob?.status === "processing") {
       onSpJobUiStatusChange(
@@ -1032,6 +1077,10 @@ export function PapelariaCorelPanel({
       onSpJobUiStatusChange(anoNum, nroNum, "pending", pipelineJob.id);
       return;
     }
+    if (apogeeJob) {
+      onSpJobUiStatusChange(anoNum, nroNum, "generating", apogeeJob.id);
+      return;
+    }
     if (activeJob?.status === "completed") {
       onSpJobUiStatusChange(anoNum, nroNum, "done", activeJob.id);
       return;
@@ -1051,6 +1100,7 @@ export function PapelariaCorelPanel({
     activeJob,
     activeJobId,
     listInFlightJob,
+    listWaitingApogeeJob,
   ]);
 
   if (!hasOs) {
@@ -1371,6 +1421,8 @@ export function PapelariaCorelPanel({
             onViewModeChange={setViewMode}
             folderProofPdfUrl={folderProofPdfUrl}
             folderProofLabel={folderProofName}
+            folderImposicaoPdfUrl={folderImposicaoPdfUrl}
+            folderImposicaoLabel={folderImposicaoName}
             onCancelJob={handleCancelJob}
             cancelPending={cancelJobMutation.isPending}
             onApproveProva={handleApproveProva}

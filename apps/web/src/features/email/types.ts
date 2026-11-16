@@ -129,6 +129,9 @@ export interface EmailProofFilesResponse {
   ano: number;
   files: EmailProofFileEntry[];
   suggested: string | null;
+  /** PDFs Digital/*_Digit_*Up_*.pdf (imposição Apogee), nomes relativos. */
+  imposicao_files?: EmailProofFileEntry[];
+  imposicao_suggested?: string | null;
 }
 
 export interface SaveEmailMhtResult {

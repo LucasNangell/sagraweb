@@ -15,6 +15,8 @@ _MAX_FILENAME_LEN = 512
 
 _PROVA_SEFOC_RE = re.compile(r"ProvaSefoc (\d+)\.pdf$", re.IGNORECASE)
 _PROVA_SEFOC_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
+# PDF Digital gerado após Apogee: {prefix}_Digit_{N}Up_{folha}.pdf
+_DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 
 
 def extract_prova_version_from_filename(filename: str) -> Optional[int]:
@@ -124,12 +126,16 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
     """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC).
 
     ``suggested`` prefere o maior número ProvaSefoc N; sem padrão, usa mtime.
+    Também lista PDFs de imposição em ``Sefoc/Digital/*_Digit_*Up_*.pdf``.
     """
     sefoc_path = _sefoc_dir(ano, os_id)
     files: list[dict[str, Any]] = []
     suggested: Optional[str] = None
     best_versioned: Optional[tuple[int, float, str]] = None
     best_mtime: Optional[tuple[float, str]] = None
+    imposicao_files: list[dict[str, Any]] = []
+    imposicao_suggested: Optional[str] = None
+    best_imposicao_mtime: Optional[tuple[float, str]] = None
 
     if sefoc_path:
         pattern = os.path.join(sefoc_path, "*.pdf")
@@ -166,13 +172,49 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
         elif best_mtime is not None:
             suggested = best_mtime[1]
 
+        digital_dir = os.path.join(sefoc_path, "Digital")
+        if os.path.isdir(digital_dir):
+            for pdf_path in glob.glob(os.path.join(digital_dir, "*.pdf")):
+                if not os.path.isfile(pdf_path):
+                    continue
+                name = os.path.basename(pdf_path)
+                if not _DIGIT_IMPOSICAO_RE.search(name):
+                    continue
+                relative = f"Digital/{name}"
+                try:
+                    stat = os.stat(pdf_path)
+                    mtime = stat.st_mtime
+                    modified_at = datetime.fromtimestamp(
+                        mtime, tz=timezone.utc
+                    ).isoformat()
+                    size = stat.st_size
+                except OSError:
+                    modified_at = None
+                    mtime = 0.0
+                    size = 0
+                imposicao_files.append(
+                    {
+                        "name": relative,
+                        "size": size,
+                        "modified_at": modified_at,
+                    }
+                )
+                if best_imposicao_mtime is None or mtime > best_imposicao_mtime[0]:
+                    best_imposicao_mtime = (mtime, relative)
+
+        if best_imposicao_mtime is not None:
+            imposicao_suggested = best_imposicao_mtime[1]
+
     files.sort(key=lambda item: item["name"].lower())
+    imposicao_files.sort(key=lambda item: item["name"].lower())
 
     return {
         "os": os_id,
         "ano": ano,
         "files": files,
         "suggested": suggested,
+        "imposicao_files": imposicao_files,
+        "imposicao_suggested": imposicao_suggested,
     }
 
 

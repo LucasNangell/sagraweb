@@ -1,8 +1,27 @@
-export type PapelariaViewMode = "previa" | "prova";
+export type PapelariaViewMode = "previa" | "prova" | "imposicao";
 
-/** Modo inicial da visualização: prova se já existir PDF; senão prévia. */
+export type ResolveDefaultPapelariaViewModeInput = {
+  hasImposicao?: boolean;
+  hasProof?: boolean;
+  waitingApogee?: boolean;
+};
+
+/**
+ * Modo inicial da visualização.
+ * Prioridade: Imposição (arquivo ou aguardando Apogee) → Prova → Prévia.
+ */
 export function resolveDefaultPapelariaViewMode(
-  hasProof: boolean,
+  input: boolean | ResolveDefaultPapelariaViewModeInput,
 ): PapelariaViewMode {
-  return hasProof ? "prova" : "previa";
+  // Compat com assinatura legada resolveDefaultPapelariaViewMode(hasProof).
+  if (typeof input === "boolean") {
+    return input ? "prova" : "previa";
+  }
+  if (input.waitingApogee || input.hasImposicao) {
+    return "imposicao";
+  }
+  if (input.hasProof) {
+    return "prova";
+  }
+  return "previa";
 }

@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@sagra/ui";
 
@@ -9,27 +9,38 @@ import type { OsSearchRow } from "@/features/os/types";
 
 import { sameOsRow } from "../papelariaSelection";
 import { setPapelariaNavigationContext } from "../papelariaSession";
+import { isWaitingImposicaoApogee } from "../papelariaImposicaoStatus";
 import {
-  papelariaSpJobUiFromJobStatus,
-  papelariaSpJobUiKey,
-  type PapelariaSpJobUiStatus,
-} from "../papelariaSpJobUi";
+  overlayPhaseFromJobStatus,
+  papelariaSpStatusKey,
+  type PapelariaSpLaneOverlay,
+  type PapelariaSpPipelineLane,
+} from "../papelariaSpPipelineUi";
 import { PapelariaCorelPanel } from "./PapelariaCorelPanel";
 import { PapelariaSpList } from "./PapelariaSpList";
 
 type MobilePane = "lista" | "trabalho";
 
+type TrackedLaneJob = {
+  lane: PapelariaSpPipelineLane;
+  jobId: number;
+};
+
 export function PapelariaPage() {
   /** Só preenche histórico/formulário/visualização após clique na lista de SPs. */
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
-  const [jobUiBySp, setJobUiBySp] = useState<
-    Record<string, PapelariaSpJobUiStatus>
+  const [provaOverlayBySp, setProvaOverlayBySp] = useState<
+    Record<string, PapelariaSpLaneOverlay>
   >({});
-  /** Jobs em voo por SP — continuam sendo polled mesmo ao trocar de SP. */
-  const [trackedJobIdsBySp, setTrackedJobIdsBySp] = useState<
-    Record<string, number>
+  const [imposicaoOverlayBySp, setImposicaoOverlayBySp] = useState<
+    Record<string, PapelariaSpLaneOverlay>
   >({});
+  /** Jobs em voo por SP+lane — continuam polled ao trocar de SP. */
+  const [trackedBySp, setTrackedBySp] = useState<
+    Record<string, TrackedLaneJob>
+  >({});
+  const queryClient = useQueryClient();
 
   const osId = selected ? String(selected.nr_os) : null;
   const osAno = selected ? String(selected.ano) : null;
@@ -53,81 +64,157 @@ export function PapelariaPage() {
     handleSelect(row);
   };
 
-  const handleSpJobUiStatusChange = useCallback(
+  const invalidateSpStatusResumo = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["papelaria", "spStatusResumo"],
+    });
+  }, [queryClient]);
+
+  const handleSpPipelineStatusChange = useCallback(
     (
       ano: number,
       nro: number,
-      status: PapelariaSpJobUiStatus | null,
+      lane: PapelariaSpPipelineLane,
+      phase: string | null,
       jobId?: number | null,
+      versao?: number | null,
     ) => {
-      const key = papelariaSpJobUiKey(ano, nro);
-      setJobUiBySp((prev) => {
-        if (status === null) {
+      const key = papelariaSpStatusKey(ano, nro);
+      const setOverlay =
+        lane === "prova" ? setProvaOverlayBySp : setImposicaoOverlayBySp;
+
+      setOverlay((prev) => {
+        if (phase === null) {
           if (!(key in prev)) return prev;
           const next = { ...prev };
           delete next[key];
           return next;
         }
-        if (prev[key] === status) return prev;
-        return { ...prev, [key]: status };
+        const nextVal: PapelariaSpLaneOverlay = {
+          phase,
+          jobId: jobId ?? null,
+          versao: versao ?? null,
+        };
+        const cur = prev[key];
+        if (
+          cur &&
+          cur.phase === nextVal.phase &&
+          cur.jobId === nextVal.jobId &&
+          cur.versao === nextVal.versao
+        ) {
+          return prev;
+        }
+        return { ...prev, [key]: nextVal };
       });
 
-      setTrackedJobIdsBySp((prev) => {
-        if (
-          status === "pending" ||
-          status === "generating"
-        ) {
+      setTrackedBySp((prev) => {
+        const inFlight =
+          phase === "queued" ||
+          phase === "processing" ||
+          phase === "waiting_apogee";
+        if (inFlight) {
           if (jobId == null || jobId <= 0) return prev;
-          if (prev[key] === jobId) return prev;
-          return { ...prev, [key]: jobId };
+          const cur = prev[key];
+          if (cur && cur.jobId === jobId && cur.lane === lane) return prev;
+          return { ...prev, [key]: { lane, jobId } };
         }
         if (!(key in prev)) return prev;
         const next = { ...prev };
         delete next[key];
         return next;
       });
+
+      if (
+        phase === "approved" ||
+        phase === "ready_send" ||
+        phase === "ready" ||
+        phase === "pending" ||
+        phase === null
+      ) {
+        invalidateSpStatusResumo();
+      }
     },
-    [],
+    [invalidateSpStatusResumo],
   );
 
   const trackedEntries = useMemo(
-    () => Object.entries(trackedJobIdsBySp),
-    [trackedJobIdsBySp],
+    () => Object.entries(trackedBySp),
+    [trackedBySp],
   );
 
   const trackedJobQueries = useQueries({
-    queries: trackedEntries.map(([spKey, jobId]) => ({
-      queryKey: queryKeys.papelaria.job(jobId),
-      queryFn: () => fetchPapelariaJob(jobId),
+    queries: trackedEntries.map(([, tracked]) => ({
+      queryKey: queryKeys.papelaria.job(tracked.jobId),
+      queryFn: () => fetchPapelariaJob(tracked.jobId),
       refetchInterval: 2_000,
-      meta: { spKey, jobId },
     })),
   });
 
   useEffect(() => {
-    trackedEntries.forEach(([spKey], index) => {
+    trackedEntries.forEach(([spKey, tracked], index) => {
       const job = trackedJobQueries[index]?.data;
       if (!job) return;
-      const ui = papelariaSpJobUiFromJobStatus(job.status);
-      setJobUiBySp((prev) => {
-        if (ui === null) {
+      const waitingApogee = isWaitingImposicaoApogee(job);
+      const phase = overlayPhaseFromJobStatus(tracked.lane, job.status, {
+        waitingApogee,
+        approvedProva: job.prova_revisao === "approved",
+      });
+      const setOverlay =
+        tracked.lane === "prova"
+          ? setProvaOverlayBySp
+          : setImposicaoOverlayBySp;
+
+      if (phase === null) {
+        setOverlay((prev) => {
           if (!(spKey in prev)) return prev;
           const next = { ...prev };
           delete next[spKey];
           return next;
+        });
+        setTrackedBySp((prev) => {
+          if (!(spKey in prev)) return prev;
+          const next = { ...prev };
+          delete next[spKey];
+          return next;
+        });
+        invalidateSpStatusResumo();
+        return;
+      }
+
+      setOverlay((prev) => {
+        const nextVal: PapelariaSpLaneOverlay = {
+          phase,
+          jobId: job.id,
+          versao: typeof job.versao === "number" ? job.versao : null,
+        };
+        const cur = prev[spKey];
+        if (
+          cur &&
+          cur.phase === nextVal.phase &&
+          cur.jobId === nextVal.jobId &&
+          cur.versao === nextVal.versao
+        ) {
+          return prev;
         }
-        if (prev[spKey] === ui) return prev;
-        return { ...prev, [spKey]: ui };
+        return { ...prev, [spKey]: nextVal };
       });
-      if (ui === "pending" || ui === "generating") return;
-      setTrackedJobIdsBySp((prev) => {
+
+      if (
+        phase === "queued" ||
+        phase === "processing" ||
+        phase === "waiting_apogee"
+      ) {
+        return;
+      }
+      setTrackedBySp((prev) => {
         if (!(spKey in prev)) return prev;
         const next = { ...prev };
         delete next[spKey];
         return next;
       });
+      invalidateSpStatusResumo();
     });
-  }, [trackedEntries, trackedJobQueries]);
+  }, [trackedEntries, trackedJobQueries, invalidateSpStatusResumo]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">
@@ -170,7 +257,8 @@ export function PapelariaPage() {
           <PapelariaSpList
             selected={selected}
             onSelect={handleSelectFromList}
-            jobUiBySp={jobUiBySp}
+            provaOverlayBySp={provaOverlayBySp}
+            imposicaoOverlayBySp={imposicaoOverlayBySp}
             className="min-h-[200px] flex-1 md:min-h-0"
           />
           <section className="flex min-h-[260px] min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm md:min-h-[280px]">
@@ -196,7 +284,7 @@ export function PapelariaPage() {
             key={osPanelKey}
             osId={osId}
             osAno={osAno}
-            onSpJobUiStatusChange={handleSpJobUiStatusChange}
+            onSpPipelineStatusChange={handleSpPipelineStatusChange}
           />
         </div>
       </div>

@@ -52,7 +52,7 @@ import {
   resolveDefaultPapelariaViewMode,
   type PapelariaViewMode,
 } from "../papelariaViewMode";
-import type { PapelariaSpJobUiStatus } from "../papelariaSpJobUi";
+import type { PapelariaSpPipelineLane } from "../papelariaSpPipelineUi";
 import type {
   PapelariaCorelModelSummary,
   PapelariaField,
@@ -64,11 +64,13 @@ import type {
 type Props = {
   osId: string | null;
   osAno: string | null;
-  onSpJobUiStatusChange?: (
+  onSpPipelineStatusChange?: (
     ano: number,
     nro: number,
-    status: PapelariaSpJobUiStatus | null,
+    lane: PapelariaSpPipelineLane,
+    phase: string | null,
     jobId?: number | null,
+    versao?: number | null,
   ) => void;
 };
 
@@ -139,7 +141,7 @@ export function dadosForProvaCdrExistente(
 export function PapelariaCorelPanel({
   osId,
   osAno,
-  onSpJobUiStatusChange,
+  onSpPipelineStatusChange,
 }: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
@@ -492,6 +494,25 @@ export function PapelariaCorelPanel({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
+      void queryClient.invalidateQueries({
+        queryKey: ["papelaria", "spStatusResumo"],
+      });
+      onSpPipelineStatusChange?.(
+        anoNum,
+        nroNum,
+        "prova",
+        "approved",
+        result.job.id,
+        result.prova_versao,
+      );
+      onSpPipelineStatusChange?.(
+        anoNum,
+        nroNum,
+        "imposicao",
+        "pending",
+        null,
+        null,
+      );
     },
     onError: (err: Error) => {
       setFormError(err.message || "Não foi possível aprovar a prova.");
@@ -1045,7 +1066,8 @@ export function PapelariaCorelPanel({
   }, [jobsQuery.data]);
 
   useEffect(() => {
-    if (!onSpJobUiStatusChange || !hasOs) return;
+    if (!onSpPipelineStatusChange || !hasOs) return;
+
     const pipelineJob =
       activeJob &&
       (activeJob.status === "pending" || activeJob.status === "processing")
@@ -1056,47 +1078,71 @@ export function PapelariaCorelPanel({
       : listWaitingApogeeJob;
 
     if (pipelineJob?.status === "processing") {
-      onSpJobUiStatusChange(
+      const lane: PapelariaSpPipelineLane =
+        pipelineJob.tipo_job === "imposicao" ? "imposicao" : "prova";
+      onSpPipelineStatusChange(
         anoNum,
         nroNum,
-        "generating",
+        lane,
+        "processing",
         pipelineJob.id,
+        pipelineJob.versao,
       );
       return;
     }
     if (mutationGenerating) {
-      onSpJobUiStatusChange(
+      const lane: PapelariaSpPipelineLane = imposicaoMutation.isPending
+        ? "imposicao"
+        : "prova";
+      onSpPipelineStatusChange(
         anoNum,
         nroNum,
-        "pending",
+        lane,
+        "queued",
         pipelineJob?.id ?? activeJobId,
+        pipelineJob?.versao ?? null,
       );
       return;
     }
     if (pipelineJob?.status === "pending") {
-      onSpJobUiStatusChange(anoNum, nroNum, "pending", pipelineJob.id);
+      const lane: PapelariaSpPipelineLane =
+        pipelineJob.tipo_job === "imposicao" ? "imposicao" : "prova";
+      onSpPipelineStatusChange(
+        anoNum,
+        nroNum,
+        lane,
+        "queued",
+        pipelineJob.id,
+        pipelineJob.versao,
+      );
       return;
     }
     if (apogeeJob) {
-      onSpJobUiStatusChange(anoNum, nroNum, "generating", apogeeJob.id);
-      return;
-    }
-    if (activeJob?.status === "completed") {
-      onSpJobUiStatusChange(anoNum, nroNum, "done", activeJob.id);
+      onSpPipelineStatusChange(
+        anoNum,
+        nroNum,
+        "imposicao",
+        "waiting_apogee",
+        apogeeJob.id,
+        null,
+      );
       return;
     }
     if (
       activeJob?.status === "failed" ||
       activeJob?.status === "cancelled"
     ) {
-      onSpJobUiStatusChange(anoNum, nroNum, null, activeJob.id);
+      const lane: PapelariaSpPipelineLane =
+        activeJob.tipo_job === "imposicao" ? "imposicao" : "prova";
+      onSpPipelineStatusChange(anoNum, nroNum, lane, null, activeJob.id, null);
     }
   }, [
-    onSpJobUiStatusChange,
+    onSpPipelineStatusChange,
     hasOs,
     anoNum,
     nroNum,
     mutationGenerating,
+    imposicaoMutation.isPending,
     activeJob,
     activeJobId,
     listInFlightJob,

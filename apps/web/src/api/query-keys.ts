@@ -165,6 +165,8 @@ export const queryKeys = {
     corelModelo: (id: number) => ["papelaria", "corelModelo", id] as const,
     jobsOs: (ano: number, nro: number) =>
       ["papelaria", "jobs", ano, nro] as const,
+    spStatusResumo: (fingerprint: string) =>
+      ["papelaria", "spStatusResumo", fingerprint] as const,
     job: (jobId: number) => ["papelaria", "job", jobId] as const,
     previewPages: (jobId: number) =>
       ["papelaria", "previewPages", jobId] as const,

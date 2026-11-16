@@ -1,17 +1,23 @@
 import { useMemo, useState } from "react";
-import { Check, Clock, Loader2, Settings2, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Check, Clock, Loader2, Send, Settings2, X } from "lucide-react";
 import { cn } from "@sagra/ui";
 
+import { fetchPapelariaSpStatusResumo } from "@/api/papelaria";
 import { useOsSearch } from "@/api/hooks/useOsSearch";
 import { useSituacoesLookup } from "@/api/hooks/useAuxLookups";
+import { queryKeys } from "@/api/query-keys";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { defaultOsFilters } from "@/features/os/osFiltersStore";
 import type { OsSearchFilters, OsSearchRow } from "@/features/os/types";
 import { sameOsRow } from "../papelariaSelection";
 import {
-  papelariaSpJobUiKey,
-  type PapelariaSpJobUiStatus,
-} from "../papelariaSpJobUi";
+  papelariaSpStatusKey,
+  resolveSpImposicaoCell,
+  resolveSpProvaCell,
+  type PapelariaSpLaneOverlay,
+  type PapelariaSpStatusResumoItem,
+} from "../papelariaSpPipelineUi";
 import {
   loadPapelariaSpSituacoes,
   savePapelariaSpSituacoes,
@@ -20,7 +26,8 @@ import {
 type Props = {
   selected: OsSearchRow | null;
   onSelect: (row: OsSearchRow) => void;
-  jobUiBySp?: Record<string, PapelariaSpJobUiStatus>;
+  provaOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
+  imposicaoOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
   className?: string;
 };
 
@@ -43,10 +50,41 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
   };
 }
 
+function PipelineIcon({
+  icon,
+  label,
+}: {
+  icon: "clock" | "loader" | "send" | "check";
+  label: string;
+}) {
+  if (icon === "clock") {
+    return (
+      <Clock className="size-3.5 shrink-0 text-amber-600" aria-label={label} />
+    );
+  }
+  if (icon === "loader") {
+    return (
+      <Loader2
+        className="size-3.5 shrink-0 animate-spin text-secondary-blue"
+        aria-label={label}
+      />
+    );
+  }
+  if (icon === "send") {
+    return (
+      <Send className="size-3.5 shrink-0 text-secondary-blue" aria-label={label} />
+    );
+  }
+  return (
+    <Check className="size-3.5 shrink-0 text-emerald-600" aria-label={label} />
+  );
+}
+
 export function PapelariaSpList({
   selected,
   onSelect,
-  jobUiBySp = {},
+  provaOverlayBySp = {},
+  imposicaoOverlayBySp = {},
   className,
 }: Props) {
   const [situacoes, setSituacoes] = useState<string[]>(() =>
@@ -63,6 +101,35 @@ export function PapelariaSpList({
   const searchEnabled = situacoes.length > 0;
   const searchQuery = useOsSearch(filters, searchEnabled);
   const rows = searchQuery.data?.data ?? [];
+
+  const statusItems = useMemo(
+    () => rows.map((row) => ({ ano: row.ano, nro: row.nr_os })),
+    [rows],
+  );
+  const statusFingerprint = useMemo(
+    () =>
+      statusItems
+        .map((item) => `${item.ano}-${item.nro}`)
+        .sort()
+        .join("|"),
+    [statusItems],
+  );
+
+  const statusQuery = useQuery({
+    queryKey: queryKeys.papelaria.spStatusResumo(statusFingerprint || "empty"),
+    queryFn: () => fetchPapelariaSpStatusResumo(statusItems),
+    enabled: statusItems.length > 0,
+    refetchInterval: 20_000,
+    staleTime: 10_000,
+  });
+
+  const statusBySp = useMemo(() => {
+    const map: Record<string, PapelariaSpStatusResumoItem> = {};
+    for (const item of statusQuery.data?.items ?? []) {
+      map[papelariaSpStatusKey(item.ano, item.nro)] = item as PapelariaSpStatusResumoItem;
+    }
+    return map;
+  }, [statusQuery.data]);
 
   const openSettings = () => {
     setDraftSituacoes(situacoes);
@@ -134,20 +201,39 @@ export function PapelariaSpList({
             Nenhuma SP no SEFOC com as situações configuradas.
           </p>
         ) : (
-          <table className="w-full min-w-[28rem] border-collapse text-[11px]">
+          <table className="w-full min-w-[30rem] border-collapse text-[11px]">
             <thead className="sticky top-0 bg-slate-100 text-left">
               <tr>
                 <th className="px-2 py-1.5 font-semibold">Nr SP</th>
                 <th className="px-2 py-1.5 font-semibold">Ano</th>
                 <th className="px-2 py-1.5 font-semibold">Produto</th>
                 <th className="px-2 py-1.5 font-semibold">Solicitante</th>
-                <th className="w-8 px-1 py-1.5" aria-label="Status da geração" />
+                <th className="w-14 px-1 py-1.5 text-center font-semibold">
+                  Prova
+                </th>
+                <th className="w-14 px-1 py-1.5 text-center font-semibold">
+                  Imposição
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
                 const isSelected = sameOsRow(selected, row);
-                const jobUi = jobUiBySp[papelariaSpJobUiKey(row.ano, row.nr_os)];
+                const key = papelariaSpStatusKey(row.ano, row.nr_os);
+                const resumo = statusBySp[key];
+                const provaCell = resolveSpProvaCell(
+                  resumo?.prova,
+                  provaOverlayBySp[key],
+                );
+                const imposicaoCell = resolveSpImposicaoCell(
+                  resumo?.imposicao,
+                  imposicaoOverlayBySp[key],
+                  resumo?.prova.phase ??
+                    (provaOverlayBySp[key]?.phase as
+                      | "approved"
+                      | "none"
+                      | undefined),
+                );
                 return (
                   <tr
                     key={`${row.ano}-${row.nr_os}`}
@@ -165,28 +251,47 @@ export function PapelariaSpList({
                       {row.nr_os}
                     </td>
                     <td className="px-2 py-1.5">{row.ano}</td>
-                    <td className="max-w-[9rem] truncate px-2 py-1.5" title={row.produto ?? undefined}>
+                    <td
+                      className="max-w-[8rem] truncate px-2 py-1.5"
+                      title={row.produto ?? undefined}
+                    >
                       {row.produto ?? "—"}
                     </td>
-                    <td className="max-w-[9rem] truncate px-2 py-1.5" title={row.solicitante ?? undefined}>
+                    <td
+                      className="max-w-[8rem] truncate px-2 py-1.5"
+                      title={row.solicitante ?? undefined}
+                    >
                       {row.solicitante ?? "—"}
                     </td>
-                    <td className="w-8 px-1 py-1.5 text-center">
-                      {jobUi === "pending" ? (
-                        <Clock
-                          className="mx-auto size-3.5 text-amber-600"
-                          aria-label="Na fila"
+                    <td
+                      className="w-14 px-1 py-1.5 text-center"
+                      title={provaCell.label}
+                      data-testid={`papelaria-sp-prova-${row.nr_os}`}
+                    >
+                      <span className="inline-flex items-center justify-center gap-0.5">
+                        {provaCell.versao != null ? (
+                          <span className="font-mono text-[10px] font-semibold text-neutral-700">
+                            {provaCell.versao}
+                          </span>
+                        ) : null}
+                        <PipelineIcon
+                          icon={provaCell.icon}
+                          label={provaCell.label}
                         />
-                      ) : jobUi === "generating" ? (
-                        <Loader2
-                          className="mx-auto size-3.5 animate-spin text-secondary-blue"
-                          aria-label="Processando"
-                        />
-                      ) : jobUi === "done" ? (
-                        <Check
-                          className="mx-auto size-3.5 text-emerald-600"
-                          aria-label="Geração concluída"
-                        />
+                      </span>
+                    </td>
+                    <td
+                      className="w-14 px-1 py-1.5 text-center"
+                      title={imposicaoCell.label || undefined}
+                      data-testid={`papelaria-sp-imposicao-${row.nr_os}`}
+                    >
+                      {imposicaoCell.icon ? (
+                        <span className="inline-flex items-center justify-center">
+                          <PipelineIcon
+                            icon={imposicaoCell.icon}
+                            label={imposicaoCell.label}
+                          />
+                        </span>
                       ) : null}
                     </td>
                   </tr>

@@ -71,6 +71,15 @@ class PapelariaOsActionPayload(BaseModel):
     lancar_andamento: bool = False
 
 
+class PapelariaSpStatusItem(BaseModel):
+    ano: int = Field(..., ge=2000, le=2100)
+    nro: int = Field(..., ge=1)
+
+
+class PapelariaSpStatusResumoPayload(BaseModel):
+    items: list[PapelariaSpStatusItem] = Field(default_factory=list)
+
+
 class PapelariaMockupConfigPayload(BaseModel):
     mockup_config_json: Optional[Any] = None
 
@@ -769,6 +778,23 @@ def listar_jobs_os(
     except Exception as e:
         logger.exception("Erro listar jobs OS %s/%s: %s", nro, ano, e)
         raise HTTPException(500, "Erro ao listar jobs da OS.")
+
+
+@router.post("/sp-status-resumo")
+def sp_status_resumo(
+    payload: PapelariaSpStatusResumoPayload,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Resumo Prova/Imposição para a lista de SPs (lote)."""
+    try:
+        from services.papelaria_sp_status_service import build_sp_status_resumo
+
+        return build_sp_status_resumo(
+            [item.model_dump() for item in payload.items]
+        )
+    except Exception as e:
+        logger.exception("Erro no resumo de status das SPs: %s", e)
+        raise HTTPException(500, "Erro ao montar resumo de status das SPs.")
 
 
 @router.get("/os/{ano}/{nro}/cdr-path")

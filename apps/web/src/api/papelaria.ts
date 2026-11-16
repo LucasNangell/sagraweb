@@ -221,6 +221,34 @@ export async function fetchPapelariaJobsForOs(
   return apiFetch<PapelariaJob[]>(`/papelaria/os/${ano}/${nro}/jobs`);
 }
 
+export type PapelariaSpStatusResumoResponse = {
+  items: Array<{
+    ano: number;
+    nro: number;
+    prova: {
+      phase: string;
+      versao: number | null;
+      job_id?: number | null;
+    };
+    imposicao: {
+      phase: string;
+      job_id?: number | null;
+    };
+  }>;
+};
+
+export async function fetchPapelariaSpStatusResumo(
+  items: Array<{ ano: number; nro: number }>,
+): Promise<PapelariaSpStatusResumoResponse> {
+  return apiFetch<PapelariaSpStatusResumoResponse>(
+    `/papelaria/sp-status-resumo`,
+    {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    },
+  );
+}
+
 export async function cancelPapelariaJob(jobId: number): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(`/papelaria/jobs/${jobId}/cancel`, {
     method: "POST",

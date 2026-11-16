@@ -41,6 +41,7 @@ from corel_generator import (
     validar_acesso_export_cdr,
     validar_acesso_job,
 )
+from pdf_blank_pages import copy_pdf_without_blank_pages, summarize_kept_pages
 from prova_email_a4 import compose_prova_email_a4
 from credenciais_depol_generator import gerar_credenciais_depol
 from timbrado_a4_digital_generator import (
@@ -654,21 +655,35 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 pdf_name = prova_name
                 result.pdf_path = prova_path
             elif prova_web and not cancel_requested.is_set():
-                # Arquiva cópia versionada do BaseSefoc; a UI continua no BaseSefoc.pdf.
+                # Arquiva cópia versionada sem páginas em branco; BaseSefoc intacto.
                 prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
                 if prova_web_name and os.path.isfile(output_pdf):
                     prova_web_path = os.path.join(output_dir, prova_web_name)
-                    if os.path.isfile(prova_web_path):
-                        os.remove(prova_web_path)
-                    shutil.copy2(output_pdf, prova_web_path)
-                    result.logs.append(
-                        f"Prova web arquivada: {prova_web_name}"
-                    )
-                    api.append_log(
-                        job_id,
-                        f"Cópia BaseSefoc → {prova_web_name} (arquivo na pasta)",
-                        "info",
-                    )
+                    try:
+                        archive = copy_pdf_without_blank_pages(
+                            output_pdf,
+                            prova_web_path,
+                        )
+                        kept = summarize_kept_pages(
+                            archive.get("kept_pages") or []
+                        )
+                        src_pages = int(archive.get("source_pages") or 0)
+                        kept_count = int(archive.get("kept_count") or 0)
+                        msg = (
+                            f"Prova web arquivada: {prova_web_name} "
+                            f"({kept_count}/{src_pages} págs.; manteve {kept}; "
+                            "BaseSefoc com brancos intacto)"
+                        )
+                    except Exception as archive_exc:
+                        if os.path.isfile(prova_web_path):
+                            os.remove(prova_web_path)
+                        shutil.copy2(output_pdf, prova_web_path)
+                        msg = (
+                            f"Prova web arquivada (cópia integral — falha ao "
+                            f"filtrar brancos: {archive_exc}): {prova_web_name}"
+                        )
+                    result.logs.append(msg)
+                    api.append_log(job_id, msg, "info")
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():

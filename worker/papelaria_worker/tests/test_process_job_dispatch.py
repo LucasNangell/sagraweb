@@ -296,12 +296,20 @@ class TestProcessJobDispatch:
     def test_create_prova_web_arquiva_copia_provan(
         self, patched_runtime, monkeypatch, tmp_path
     ):
+        import fitz
+
         gerar, _exportar, cfg = patched_runtime
         out_dir = tmp_path / "Sefoc"
         out_dir.mkdir()
 
         def fake_gerar(**kwargs):
-            Path(kwargs["output_pdf_path"]).write_bytes(b"%PDF-base")
+            doc = fitz.open()
+            blank = doc.new_page(width=200, height=200)
+            _ = blank
+            page = doc.new_page(width=200, height=200)
+            page.insert_text((40, 100), "Arte", fontsize=16)
+            doc.save(kwargs["output_pdf_path"])
+            doc.close()
             return GenerationResult(
                 cdr_path=kwargs["output_cdr_path"],
                 pdf_path=kwargs["output_pdf_path"],
@@ -326,9 +334,15 @@ class TestProcessJobDispatch:
                 prova_numero=1,
             ),
         )
-        assert (out_dir / "05024-Nome-BaseSefoc.pdf").is_file()
-        assert (out_dir / "05024-Nome-Prova1.pdf").is_file()
-        assert (out_dir / "05024-Nome-Prova1.pdf").read_bytes() == b"%PDF-base"
+        base = out_dir / "05024-Nome-BaseSefoc.pdf"
+        prova = out_dir / "05024-Nome-Prova1.pdf"
+        assert base.is_file()
+        assert prova.is_file()
+        with fitz.open(base) as base_doc:
+            assert base_doc.page_count == 2
+        with fitz.open(prova) as prova_doc:
+            assert prova_doc.page_count == 1
+            assert "Arte" in prova_doc[0].get_text()
         assert api.completed
         # Job continua apontando para BaseSefoc (cópia é só arquivo na pasta).
         assert api.completed[0][2] == "05024-Nome-BaseSefoc.pdf"

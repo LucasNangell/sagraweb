@@ -209,14 +209,15 @@ export async function apiFetch<T>(
   const url = apiUrl(path);
   let res: Response;
   try {
-    res = await fetch(url, {
+    const { headers: initHeaders, ...restInit } = init ?? {};
+  res = await fetch(url, {
       credentials: "include",
+      ...restInit,
       headers: {
         Accept: "application/json",
         "X-Requested-With": "XMLHttpRequest",
-        ...(init?.headers ?? {}),
+        ...(initHeaders ?? {}),
       },
-      ...init,
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

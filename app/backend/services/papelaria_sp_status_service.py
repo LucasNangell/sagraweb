@@ -61,22 +61,27 @@ def _sp_key(ano: int, nro: int) -> str:
 
 
 def _extract_versao(*candidates: Any) -> Optional[int]:
+    """Prefere número do ProvaSefoc no nome do arquivo; senão Versao do job."""
+    from_name: Optional[int] = None
+    from_int: Optional[int] = None
     for raw in candidates:
         if raw is None or raw == "":
             continue
-        if isinstance(raw, int) and raw > 0:
-            return raw
+        if isinstance(raw, int) and raw > 0 and from_int is None:
+            from_int = raw
+            continue
         text = str(raw).strip()
         if not text:
             continue
-        if text.isdigit():
-            val = int(text)
-            if val > 0:
-                return val
         match = _PROVA_SEFOC_RE.search(text) or _PROVA_LEGACY_RE.search(text)
         if match:
-            return int(match.group(1))
-    return None
+            from_name = int(match.group(1))
+            break
+        if text.isdigit() and from_int is None:
+            val = int(text)
+            if val > 0:
+                from_int = val
+    return from_name if from_name is not None else from_int
 
 
 def _is_waiting_apogee(row: dict[str, Any]) -> bool:
@@ -287,7 +292,13 @@ def build_sp_status_resumo(items: list[Any]) -> dict[str, Any]:
         return {"items": []}
 
     jobs = _fetch_jobs_for_pairs(pairs)
-    alteracoes = _fetch_alteracoes_for_pairs(pairs)
+    try:
+        alteracoes = _fetch_alteracoes_for_pairs(pairs)
+    except Exception:
+        logger.exception(
+            "Falha ao buscar pedidos de alteração de prova — seguindo sem eles"
+        )
+        alteracoes = {}
 
     prova_by_sp: dict[str, dict[str, Any]] = {}
     imposicao_by_sp: dict[str, dict[str, Any]] = {}

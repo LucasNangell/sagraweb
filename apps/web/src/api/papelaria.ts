@@ -244,6 +244,7 @@ export async function fetchPapelariaSpStatusResumo(
     `/papelaria/sp-status-resumo`,
     {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items }),
     },
   );

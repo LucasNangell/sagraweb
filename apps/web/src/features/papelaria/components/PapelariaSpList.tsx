@@ -221,19 +221,33 @@ export function PapelariaSpList({
                 const isSelected = sameOsRow(selected, row);
                 const key = papelariaSpStatusKey(row.ano, row.nr_os);
                 const resumo = statusBySp[key];
-                const provaCell = resolveSpProvaCell(
-                  resumo?.prova,
-                  provaOverlayBySp[key],
-                );
-                const imposicaoCell = resolveSpImposicaoCell(
-                  resumo?.imposicao,
-                  imposicaoOverlayBySp[key],
-                  resumo?.prova.phase ??
-                    (provaOverlayBySp[key]?.phase as
-                      | "approved"
-                      | "none"
-                      | undefined),
-                );
+                const hasOverlay =
+                  Boolean(provaOverlayBySp[key]) ||
+                  Boolean(imposicaoOverlayBySp[key]);
+                // Sem resumo do servidor e sem overlay: não inventar "pendente".
+                const statusPending =
+                  !resumo &&
+                  !hasOverlay &&
+                  (statusQuery.isLoading ||
+                    statusQuery.isFetching ||
+                    statusQuery.isError);
+                const provaCell = statusPending
+                  ? null
+                  : resolveSpProvaCell(
+                      resumo?.prova,
+                      provaOverlayBySp[key],
+                    );
+                const imposicaoCell = statusPending
+                  ? null
+                  : resolveSpImposicaoCell(
+                      resumo?.imposicao,
+                      imposicaoOverlayBySp[key],
+                      resumo?.prova.phase ??
+                        (provaOverlayBySp[key]?.phase as
+                          | "approved"
+                          | "none"
+                          | undefined),
+                    );
                 return (
                   <tr
                     key={`${row.ano}-${row.nr_os}`}
@@ -265,27 +279,38 @@ export function PapelariaSpList({
                     </td>
                     <td
                       className="w-14 px-1 py-1.5 text-center"
-                      title={provaCell.label}
+                      title={provaCell?.label}
                       data-testid={`papelaria-sp-prova-${row.nr_os}`}
                     >
-                      <span className="inline-flex items-center justify-center gap-0.5">
-                        {provaCell.versao != null ? (
-                          <span className="font-mono text-[10px] font-semibold text-neutral-700">
-                            {provaCell.versao}
-                          </span>
-                        ) : null}
-                        <PipelineIcon
-                          icon={provaCell.icon}
-                          label={provaCell.label}
+                      {provaCell ? (
+                        <span className="inline-flex items-center justify-center gap-0.5">
+                          {provaCell.versao != null ? (
+                            <span className="font-mono text-[10px] font-semibold text-neutral-700">
+                              {provaCell.versao}
+                            </span>
+                          ) : null}
+                          <PipelineIcon
+                            icon={provaCell.icon}
+                            label={provaCell.label}
+                          />
+                        </span>
+                      ) : statusQuery.isError ? (
+                        <span className="text-[10px] text-neutral-400" title="Falha ao carregar status">
+                          —
+                        </span>
+                      ) : (
+                        <Loader2
+                          className="mx-auto size-3 animate-spin text-neutral-300"
+                          aria-label="Carregando status"
                         />
-                      </span>
+                      )}
                     </td>
                     <td
                       className="w-14 px-1 py-1.5 text-center"
-                      title={imposicaoCell.label || undefined}
+                      title={imposicaoCell?.label || undefined}
                       data-testid={`papelaria-sp-imposicao-${row.nr_os}`}
                     >
-                      {imposicaoCell.icon ? (
+                      {imposicaoCell?.icon ? (
                         <span className="inline-flex items-center justify-center">
                           <PipelineIcon
                             icon={imposicaoCell.icon}

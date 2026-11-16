@@ -38,6 +38,15 @@ def test_resolve_prova_queued_and_processing():
     assert processing["phase"] == "processing"
 
 
+def test_extract_versao_prefers_provasefoc_filename():
+    from services.papelaria_sp_status_service import _extract_versao
+
+    assert (
+        _extract_versao(1, "06089-Nome-ProvaSefoc 3.pdf")
+        == 3
+    )
+
+
 def test_resolve_prova_ready_send_alteracao_approved():
     from services.papelaria_sp_status_service import resolve_prova_phase
 
@@ -45,7 +54,7 @@ def test_resolve_prova_ready_send_alteracao_approved():
         latest_prova_job={
             "ID": 12,
             "Status": "completed",
-            "Versao": 4,
+            "Versao": 1,
             "ArquivoPdfGerado": "x-ProvaSefoc 4.pdf",
             "ProvaRevisao": "pending",
         },

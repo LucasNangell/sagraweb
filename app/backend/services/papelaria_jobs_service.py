@@ -1753,21 +1753,28 @@ def _sanitize_relative_filename(name: str) -> str:
 
 
 def _max_prova_sefoc_version(sefoc_dir: str, prefix: str, nro: int) -> int:
-    """Maior versão de prova já existente (padrão novo ou legado ProvaN_SEFOC)."""
+    """Maior versão de prova já existente (ProvaSefoc, ProvaN_SEFOC ou *-ProvaN)."""
     num_os = f"{int(nro):05d}"
-    pattern_new = re.compile(
-        rf"^{re.escape(prefix)}-ProvaSefoc (\d+)\.pdf$",
-        re.IGNORECASE,
-    )
-    pattern_legacy = re.compile(
-        rf"^{num_os}.*-Prova(\d+)_SEFOC\.pdf$",
-        re.IGNORECASE,
+    patterns = (
+        re.compile(
+            rf"^{re.escape(prefix)}-ProvaSefoc (\d+)\.pdf$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^{num_os}.*-Prova(\d+)_SEFOC\.pdf$",
+            re.IGNORECASE,
+        ),
+        # Access / prova web: {prefix}-Prova1.pdf
+        re.compile(
+            rf"^{re.escape(prefix)}-Prova(\d+)\.pdf$",
+            re.IGNORECASE,
+        ),
     )
     max_ver = 0
     if not os.path.isdir(sefoc_dir):
         return max_ver
     for fname in os.listdir(sefoc_dir):
-        for pattern in (pattern_new, pattern_legacy):
+        for pattern in patterns:
             match = pattern.match(fname)
             if match:
                 max_ver = max(max_ver, int(match.group(1)))
@@ -1802,6 +1809,14 @@ def build_prova_email_pdf_name(ano: int, nro: int) -> str:
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     next_ver = _max_prova_sefoc_version(sefoc_dir, prefix, nro) + 1
     return f"{prefix}-ProvaSefoc {next_ver}.pdf"
+
+
+def build_prova_web_pdf_name(ano: int, nro: int) -> str:
+    """Cópia arquivada da prova web: {prefix}-Prova{N}.pdf (espelho do BaseSefoc)."""
+    prefix = get_os_folder_basename(ano, nro)
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    next_ver = _max_prova_sefoc_version(sefoc_dir, prefix, nro) + 1
+    return f"{prefix}-Prova{next_ver}.pdf"
 
 
 def build_base_sefoc_pdf_name(ano: int, nro: int) -> str:
@@ -2077,7 +2092,11 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         payload["output_cdr_name"] = ""
         payload["output_pdf_name"] = ""
 
-    from services.papelaria_prova_modo import MODO_PROVA_EMAIL, get_modo
+    from services.papelaria_prova_modo import (
+        MODO_PROVA_EMAIL,
+        MODO_PROVA_WEB,
+        get_modo,
+    )
 
     modo = get_modo()
     payload["prova_modo"] = modo
@@ -2098,6 +2117,18 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         )
         if template_abs:
             payload["prova_email_template_pdf"] = template_abs
+    elif job["tipo_job"] == TIPO_JOB_CREATE and modo == MODO_PROVA_WEB:
+        prova_web_pdf = build_prova_web_pdf_name(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+        )
+        prova_numero = extract_prova_version_from_filename(prova_web_pdf)
+        if prova_numero is None:
+            raise ValueError(
+                "Não foi possível determinar o número da prova web (ProvaN)."
+            )
+        payload["prova_web_pdf_name"] = prova_web_pdf
+        payload["prova_numero"] = prova_numero
 
     return payload
 

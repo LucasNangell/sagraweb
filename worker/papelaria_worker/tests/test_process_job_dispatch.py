@@ -293,6 +293,46 @@ class TestProcessJobDispatch:
         assert api.completed
         assert api.completed[0][2] == "05024-Nome-ProvaSefoc 1.pdf"
 
+    def test_create_prova_web_arquiva_copia_provan(
+        self, patched_runtime, monkeypatch, tmp_path
+    ):
+        gerar, _exportar, cfg = patched_runtime
+        out_dir = tmp_path / "Sefoc"
+        out_dir.mkdir()
+
+        def fake_gerar(**kwargs):
+            Path(kwargs["output_pdf_path"]).write_bytes(b"%PDF-base")
+            return GenerationResult(
+                cdr_path=kwargs["output_cdr_path"],
+                pdf_path=kwargs["output_pdf_path"],
+                logs=["ok"],
+            )
+
+        gerar.side_effect = fake_gerar
+        monkeypatch.setattr(
+            worker_mod,
+            "_resolve_model_path",
+            lambda models_dir, name: str(tmp_path / name),
+        )
+        api = FakeApi()
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(
+                prova_modo="prova_web",
+                output_dir=str(out_dir),
+                output_pdf_name="05024-Nome-BaseSefoc.pdf",
+                prova_web_pdf_name="05024-Nome-Prova1.pdf",
+                prova_numero=1,
+            ),
+        )
+        assert (out_dir / "05024-Nome-BaseSefoc.pdf").is_file()
+        assert (out_dir / "05024-Nome-Prova1.pdf").is_file()
+        assert (out_dir / "05024-Nome-Prova1.pdf").read_bytes() == b"%PDF-base"
+        assert api.completed
+        # Job continua apontando para BaseSefoc (cópia é só arquivo na pasta).
+        assert api.completed[0][2] == "05024-Nome-BaseSefoc.pdf"
+
     def test_timbrado_digital_nao_chama_gerar_arquivo(
         self, patched_runtime, monkeypatch, tmp_path
     ):

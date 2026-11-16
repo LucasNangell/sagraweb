@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -589,7 +590,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             }
             dados = job.get("dados") or {}
             caminho_modelo = _caminho_modelo_create(cfg, job)
-            prova_email = str(job.get("prova_modo") or "").strip() == "prova_email"
+            prova_modo = str(job.get("prova_modo") or "").strip()
+            prova_email = prova_modo == "prova_email"
+            prova_web = prova_modo == "prova_web" or not prova_modo
             api.append_log(
                 job_id,
                 f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}",
@@ -650,6 +653,22 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 # UI / e-mail / portal usam o A4 carimbado; BaseSefoc.pdf permanece no disco.
                 pdf_name = prova_name
                 result.pdf_path = prova_path
+            elif prova_web and not cancel_requested.is_set():
+                # Arquiva cópia versionada do BaseSefoc; a UI continua no BaseSefoc.pdf.
+                prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
+                if prova_web_name and os.path.isfile(output_pdf):
+                    prova_web_path = os.path.join(output_dir, prova_web_name)
+                    if os.path.isfile(prova_web_path):
+                        os.remove(prova_web_path)
+                    shutil.copy2(output_pdf, prova_web_path)
+                    result.logs.append(
+                        f"Prova web arquivada: {prova_web_name}"
+                    )
+                    api.append_log(
+                        job_id,
+                        f"Cópia BaseSefoc → {prova_web_name} (arquivo na pasta)",
+                        "info",
+                    )
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():

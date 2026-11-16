@@ -112,6 +112,62 @@ def test_payload_create_email_sem_alias_csp(monkeypatch, tmp_path):
     assert payload["prova_numero"] == 2
 
 
+def test_payload_create_prova_web_inclui_provan(monkeypatch, tmp_path):
+    from services import papelaria_jobs_service as svc
+
+    job = {
+        "id": 79,
+        "ano_protocolo": 2026,
+        "nro_protocolo": 5954,
+        "tipo_job": svc.TIPO_JOB_CREATE,
+        "produto": "Ct Visita",
+        "modelo_id": 1,
+        "arquivo_modelo": "CtVisitaFV.cdr",
+        "dados": {},
+        "tentativas": 0,
+    }
+    monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 79 else None)
+    monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(tmp_path))
+    monkeypatch.setattr(
+        svc,
+        "build_output_filenames",
+        lambda ano, nro: ("os.cdr", "05954-Nome-BaseSefoc.pdf"),
+    )
+    monkeypatch.setattr(
+        svc,
+        "build_prova_web_pdf_name",
+        lambda ano, nro: "05954-Nome-Prova3.pdf",
+    )
+    monkeypatch.setattr(
+        "services.papelaria_prova_modo.get_modo",
+        lambda: "prova_web",
+    )
+    with patch(
+        "services.papelaria_models_service.get_modelo_by_id",
+        return_value={"id": 1, "campos": {}, "frente_versao": None, "cores": None},
+    ):
+        payload = svc.build_worker_job_payload(79)
+
+    assert payload["prova_modo"] == "prova_web"
+    assert payload["output_pdf_name"] == "05954-Nome-BaseSefoc.pdf"
+    assert payload["prova_web_pdf_name"] == "05954-Nome-Prova3.pdf"
+    assert payload["prova_numero"] == 3
+    assert "prova_email_pdf_name" not in payload
+
+
+def test_build_prova_web_pdf_name_incrementa(tmp_path, monkeypatch):
+    from services import papelaria_jobs_service as svc
+
+    sefoc = tmp_path / "Sefoc"
+    sefoc.mkdir()
+    (sefoc / "05954-Nome-Prova1.pdf").write_bytes(b"%PDF")
+    (sefoc / "05954-Nome-ProvaSefoc 2.pdf").write_bytes(b"%PDF")
+    monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(sefoc))
+    monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Nome")
+    name = svc.build_prova_web_pdf_name(2026, 5954)
+    assert name == "05954-Nome-Prova3.pdf"
+
+
 def test_payload_create_modelo_sem_csp_alias_ok(monkeypatch, tmp_path):
     from services import papelaria_jobs_service as svc
 

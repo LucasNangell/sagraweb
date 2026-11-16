@@ -663,6 +663,103 @@ def create_imposicao_job(
     return job
 
 
+def resend_imposicao_jdf(
+    job_id: int,
+    *,
+    solicitado_por: str = "",
+) -> dict[str, Any]:
+    """
+    Regrava o JDF no hotfolder do Apogee para um job de imposição ainda
+    aguardando o PDF (sem criar novo job).
+    """
+    ensure_papelaria_jobs_tables()
+    from services import papelaria_imposicao_config_service as imposicao_cfg_svc
+
+    job = get_job(job_id, include_logs=False)
+    if not job:
+        raise LookupError("Job não encontrado.")
+    if job.get("tipo_job") != TIPO_JOB_IMPOSICAO:
+        raise ValueError("Somente jobs de imposição podem reenviar o JDF.")
+    if job.get("status") != STATUS_COMPLETED:
+        raise ValueError("Job de imposição não está em estado concluído.")
+
+    dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    pdf_name = (job.get("arquivo_pdf") or "").strip()
+    aguardando = bool(dados.get("aguardando_apogee")) or (
+        not pdf_name or pdf_name.lower().endswith(".jdf")
+    )
+    if not aguardando:
+        raise ValueError(
+            "Este job já possui PDF de imposição. Não é necessário reenviar o JDF."
+        )
+
+    raw_config = dados.get("imposicao_config")
+    if not isinstance(raw_config, dict):
+        raise ValueError(
+            "Configuração de imposição ausente no job. Gere a imposição novamente."
+        )
+    config = imposicao_cfg_svc.validate_imposicao_config_payload(
+        raw_config,
+        require_marcas_pdf=True,
+    )
+
+    ano = int(job["ano_protocolo"])
+    nro = int(job["nro_protocolo"])
+    produto = (job.get("produto") or "").strip() or "Papelaria"
+    base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
+    base_pdf_name = os.path.basename(base_pdf_path)
+
+    artifacts = _build_imposicao_jdf_artifacts(
+        ano=ano,
+        nro=nro,
+        produto=produto,
+        config=config,
+        base_pdf_path=base_pdf_path,
+    )
+
+    dados_next = dict(dados)
+    dados_next.update(
+        {
+            "base_pdf": base_pdf_name,
+            "imposicao_config": config,
+            "jdf_path": artifacts["jdf_path"],
+            "jdf_dir": artifacts["jdf_dir"],
+            "jdf_name": artifacts["jdf_name"],
+            "aguardando_apogee": True,
+        }
+    )
+    if solicitado_por:
+        dados_next["jdf_reenviado_por"] = str(solicitado_por).strip()
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET DadosJson = %(dados)s,
+            ArquivoPdfGerado = NULL
+        WHERE ID = %(id)s
+        """,
+        {
+            "id": job_id,
+            "dados": json.dumps(dados_next, ensure_ascii=False),
+        },
+    )
+
+    who = f" por {solicitado_por}" if (solicitado_por or "").strip() else ""
+    append_job_log(
+        job_id,
+        (
+            f"JDF reenviado ao Apogee{who}: {artifacts['jdf_name']} "
+            f"({artifacts['jdf_dir']}) a partir de {base_pdf_name}."
+        ),
+        "info",
+    )
+    updated = get_job(job_id, include_logs=True)
+    if not updated:
+        raise RuntimeError("Falha ao recuperar job após reenvio do JDF.")
+    broadcast_job_update(updated)
+    return updated
+
+
 def create_export_existing_cdr_job(
     ano: int,
     nro: int,

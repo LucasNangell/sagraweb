@@ -1009,6 +1009,30 @@ def obter_job_papelaria(
         raise HTTPException(500, "Erro ao consultar job.")
 
 
+@router.post("/jobs/{job_id}/reenviar-jdf")
+def reenviar_jdf_imposicao(
+    job_id: int,
+    session: SessionData = Depends(_require_papelaria_access),
+):
+    """Reenvia o JDF ao hotfolder do Apogee para job ainda aguardando PDF."""
+    try:
+        from services import papelaria_jobs_service as jobs_svc
+
+        return jobs_svc.resend_imposicao_jdf(
+            job_id,
+            solicitado_por=str(session.ponto),
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao reenviar JDF do job %s: %s", job_id, e)
+        raise HTTPException(500, "Erro ao reenviar JDF ao Apogee.")
+
+
 @router.post("/jobs/{job_id}/cancel")
 def cancelar_job_papelaria(
     job_id: int,

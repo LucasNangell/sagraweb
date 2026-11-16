@@ -1591,6 +1591,81 @@ class TestImposicaoJob:
         assert "JDFNoMarks" in jdf_text
         assert "xmlns:mis=" not in jdf_text
 
+    def test_resend_imposicao_jdf(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "05954-Teste-BaseSefoc.pdf").write_bytes(b"%PDF-1.4 base")
+        jdf_root = tmp_path / "jdf"
+        jdf_root.mkdir()
+        config = {
+            "folha_mm": {"largura": 297, "altura": 210},
+            "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
+            "grid": {"colunas": 2, "linhas": 1},
+            "espacamento_mm": {"horizontal": 0, "vertical": 0},
+            "sangria_mm": 0,
+            "marcas_corte": False,
+            "centralizar_na_folha": True,
+            "work_style": "Simplex",
+        }
+        job_state = {
+            "id": 92,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_IMPOSICAO,
+            "status": svc.STATUS_COMPLETED,
+            "produto": "Bloco A5",
+            "arquivo_pdf": None,
+            "tem_arquivo_pdf": False,
+            "dados": {
+                "imposicao_config": config,
+                "aguardando_apogee": True,
+                "jdf_name": "old.jdf",
+            },
+            "prova_revisao": svc.PROVA_REVISAO_NA,
+        }
+        updates: list[dict] = []
+
+        def fake_get(job_id, include_logs=False):
+            return dict(job_state) if job_id == 92 else None
+
+        def fake_query(sql, params=None):
+            if "UPDATE tabPapelariaJobs" in sql and "DadosJson" in sql:
+                updates.append(params or {})
+                job_state["dados"] = __import__("json").loads(params["dados"])
+                return []
+            return []
+
+        monkeypatch.setattr(svc, "get_job", fake_get)
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
+        monkeypatch.setattr(svc, "append_job_log", lambda *a, **k: None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_base_sefoc_pdf_path",
+            lambda ano, nro: str(sefoc / "05954-Teste-BaseSefoc.pdf"),
+        )
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
+        monkeypatch.setenv("SAGRA_JDF_IMPORT_ROOT", str(jdf_root))
+
+        out = svc.resend_imposicao_jdf(92, solicitado_por="918713")
+        assert out["dados"]["aguardando_apogee"] is True
+        assert out["dados"]["jdf_reenviado_por"] == "918713"
+        jdf_name = out["dados"]["jdf_name"]
+        assert (jdf_root / jdf_name).is_file()
+        assert updates and updates[0]["id"] == 92
+
+        with pytest.raises(ValueError, match="já possui PDF"):
+            job_state["dados"]["aguardando_apogee"] = False
+            job_state["arquivo_pdf"] = "Digital/x.pdf"
+            svc.resend_imposicao_jdf(92)
+
     def test_poll_imposicao_move_para_digital(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 

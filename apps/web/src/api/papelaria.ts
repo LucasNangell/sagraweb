@@ -210,6 +210,15 @@ export async function pollPapelariaImposicaoResultado(
   );
 }
 
+export async function reenviarPapelariaImposicaoJdf(
+  jobId: number,
+): Promise<PapelariaJob> {
+  return apiFetch<PapelariaJob>(`/papelaria/jobs/${jobId}/reenviar-jdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export async function fetchPapelariaJob(jobId: number): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(`/papelaria/jobs/${jobId}`);
 }

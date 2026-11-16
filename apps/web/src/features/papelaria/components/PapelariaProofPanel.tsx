@@ -1,4 +1,11 @@
-import { Check, ExternalLink, FileText, Loader2, XCircle } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  FileText,
+  Loader2,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { cn } from "@sagra/ui";
 
@@ -8,9 +15,10 @@ import {
   fetchPapelariaJobPreviewPages,
   papelariaJobFileUrl,
   pollPapelariaImposicaoResultado,
+  reenviarPapelariaImposicaoJdf,
 } from "@/api/papelaria";
 import { queryKeys } from "@/api/query-keys";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 import {
@@ -125,6 +133,33 @@ export function PapelariaProofPanel({
   const isImposicaoJob = activeJob?.tipo_job === "imposicao";
   const waitingImposicaoApogee = isWaitingImposicaoApogee(activeJob);
   const readyImposicaoPdf = isReadyImposicaoPdf(activeJob);
+  const [resendJdfMessage, setResendJdfMessage] = useState<string | null>(null);
+  const [resendJdfError, setResendJdfError] = useState<string | null>(null);
+
+  const resendJdfMutation = useMutation({
+    mutationFn: reenviarPapelariaImposicaoJdf,
+    onSuccess: (job) => {
+      setResendJdfError(null);
+      setResendJdfMessage("JDF reenviado ao Apogee.");
+      queryClient.setQueryData(queryKeys.papelaria.job(job.id), job);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.jobsOs(
+          job.ano_protocolo,
+          job.nro_protocolo,
+        ),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["papelaria", "imposicao-resultado", job.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["papelaria", "spStatusResumo"],
+      });
+    },
+    onError: (err: Error) => {
+      setResendJdfMessage(null);
+      setResendJdfError(err.message || "Não foi possível reenviar o JDF.");
+    },
+  });
   const generationPhase = resolvePapelariaGenerationPhase(
     isJobGenerating,
     activeJob,
@@ -340,9 +375,29 @@ export function PapelariaProofPanel({
             <p className="text-sm font-medium text-neutral-700">
               Aguardando processamento pelo Apogee
             </p>
-            <p className="mt-2 inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900">
-              Imposição
-            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <p className="inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900">
+                Imposição
+              </p>
+              <button
+                type="button"
+                data-testid="papelaria-reenviar-jdf"
+                disabled={resendJdfMutation.isPending}
+                className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+                onClick={() => {
+                  setResendJdfError(null);
+                  setResendJdfMessage(null);
+                  resendJdfMutation.mutate(activeJob.id);
+                }}
+              >
+                {resendJdfMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-3.5" aria-hidden />
+                )}
+                {resendJdfMutation.isPending ? "Reenviando…" : "Reenviar JDF"}
+              </button>
+            </div>
             <p className="mt-2 max-w-sm text-xs text-neutral-500">
               O JDF foi enviado. Verificando a pasta Sefoc até surgir o PDF de
               imposição…
@@ -350,6 +405,16 @@ export function PapelariaProofPanel({
             <p className="mt-2 font-mono text-[10px] text-neutral-400">
               Job #{activeJob.id}
             </p>
+            {resendJdfMessage ? (
+              <p className="mt-2 text-[11px] font-medium text-emerald-700">
+                {resendJdfMessage}
+              </p>
+            ) : null}
+            {resendJdfError ? (
+              <p className="mt-2 max-w-sm text-[11px] font-medium text-red-700">
+                {resendJdfError}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : viewMode === "imposicao" && imposicaoPdfUrl ? (

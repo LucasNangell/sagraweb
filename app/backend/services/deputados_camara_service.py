@@ -486,7 +486,16 @@ def _cache_tem_dados_oficiais(dep: DeputadoCamara) -> bool:
     return True
 
 
-def buscar_deputado_por_nome(nome: str) -> Optional[DeputadoCamara]:
+def buscar_deputado_por_nome(
+    nome: str,
+    *,
+    local_only: bool = False,
+) -> Optional[DeputadoCamara]:
+    """Busca deputado por nome.
+
+    Com ``local_only=True`` (ex.: prefill do contexto da Papelaria), usa apenas
+    cache MySQL — fresco, incompleto ou expirado — e **não** chama a API Câmara.
+    """
     nome = (nome or "").strip()
     if len(nome) < 3:
         return None
@@ -497,21 +506,30 @@ def buscar_deputado_por_nome(nome: str) -> Optional[DeputadoCamara]:
         logger.debug("Deputado '%s' obtido do cache local", nome)
         return cached
 
-    try:
-        dep = _buscar_deputado_via_api(nome)
-        if dep:
-            _gravar_cache(dep)
-            return dep
-    except Exception as exc:
-        logger.warning("API Câmara indisponível para '%s': %s", nome, exc)
+    if not local_only:
+        try:
+            dep = _buscar_deputado_via_api(nome)
+            if dep:
+                _gravar_cache(dep)
+                return dep
+        except Exception as exc:
+            logger.warning("API Câmara indisponível para '%s': %s", nome, exc)
 
     if cached:
-        logger.debug("Deputado '%s' obtido do cache local (incompleto)", nome)
+        logger.debug(
+            "Deputado '%s' obtido do cache local (incompleto%s)",
+            nome,
+            ", local_only" if local_only else "",
+        )
         return cached
 
     stale = _ler_cache_deputado(nome, ignore_freshness=True)
     if stale:
-        logger.debug("Deputado '%s' obtido do cache local (expirado)", nome)
+        logger.debug(
+            "Deputado '%s' obtido do cache local (expirado%s)",
+            nome,
+            ", local_only" if local_only else "",
+        )
         return stale
 
     return None

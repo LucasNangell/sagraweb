@@ -50,9 +50,9 @@ class TestBuildPrefillCorel:
 
         dados = svc.build_prefill_corel(2025, 5024)
 
-        api_mock.assert_called_once_with("Jonas Donizette")
+        api_mock.assert_called_once_with("Jonas Donizette", local_only=True)
         assert dados["nome_deputado"] == "Jonas Donizette"
-        assert dados["genero"] == "Deputado Federal"
+        assert dados["genero"] == "Deputado"
         assert dados["partido"] == "PSB"
         assert dados["uf"] == "SP"
         assert dados["anexo"] == "IV"
@@ -100,14 +100,14 @@ class TestBuildPrefillCorel:
         dados = svc.build_prefill_corel(2025, 5024)
 
         assert dados["nome_deputado"] == "Maria Silva"
-        assert dados["genero"] == "Deputada Federal"
+        assert dados["genero"] == "Deputada"
         assert dados["partido"] == "PT"
         assert dados["uf"] == "BA"
         assert dados["anexo"] == "IV"
         assert dados["gabinete"] == "210"
         assert dados["email"] == "dep.mariasilva@camara.leg.br"
 
-    def test_api_indisponivel_mantem_heuristica(self, monkeypatch):
+    def test_cache_local_indisponivel_mantem_heuristica(self, monkeypatch):
         from services import papelaria_models_service as svc
 
         monkeypatch.setattr(
@@ -124,12 +124,13 @@ class TestBuildPrefillCorel:
             ],
         )
 
-        def _api_fail(_nome):
-            raise RuntimeError("API offline")
+        def _local_miss(nome, *, local_only=False):
+            assert local_only is True
+            return None
 
         monkeypatch.setattr(
             "services.deputados_camara_service.buscar_deputado_por_nome",
-            _api_fail,
+            _local_miss,
         )
 
         dados = svc.build_prefill_corel(2025, 5024)
@@ -140,3 +141,31 @@ class TestBuildPrefillCorel:
         assert dados["uf"] == "SP"
         assert dados["gabinete"] == "716"
         assert "dep.jonas@camara.leg.br" == dados["email"]
+
+    def test_reutiliza_row_sem_segunda_query(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        calls = {"n": 0}
+
+        def _query(*_a, **_k):
+            calls["n"] += 1
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", _query)
+        monkeypatch.setattr(
+            "services.deputados_camara_service.buscar_deputado_por_nome",
+            MagicMock(return_value=None),
+        )
+
+        row = {
+            "NomeUsuario": "Solicitante",
+            "Titular": "Jonas Donizette",
+            "SiglaOrgao": "PSB/SP",
+            "GabSalaUsuario": "716",
+            "Titulo": "",
+        }
+        dados = svc.build_prefill_corel(2025, 5024, row=row)
+
+        assert calls["n"] == 0
+        assert dados["nome_deputado"] == "Jonas Donizette"
+        assert dados["partido"] == "PSB"

@@ -117,24 +117,19 @@ def require_email_admin_config_access(
     )
 
 def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
-    """Helper para localizar a pasta da OS na rede (Duplicado de os_routes para evitar circularidade)."""
-    if id >= 5000:
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
-    else:
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
-        
-    os_pattern = os.path.join(base_path, f"{id:05d}*")
-    
-    # Check fallback for local testing
-    if not os.path.exists(r"\\redecamara\DfsData"):
-        local_path = os.path.abspath(f"storage_test/{ano}/{id}")
-        if os.path.exists(local_path):
-            return local_path
+    """Localiza a pasta da OS na rede (cache + timeout compartilhados)."""
+    from resilience.fs_timeout import FsTimeoutError
+    from services.os_folder_path_service import resolve_os_folder_path
 
-    found = glob.glob(os_pattern)
-    if found:
-        return found[0]
-    return None
+    try:
+        return resolve_os_folder_path(ano, id)
+    except FsTimeoutError:
+        logger.warning(
+            "Timeout ao localizar pasta da OS %s/%s para e-mail/prova",
+            id,
+            ano,
+        )
+        return None
 
 def _get_latest_pdf(os_path: str) -> Optional[str]:
     """Busca o PDF mais recente na pasta Sefoc dentro da OS."""

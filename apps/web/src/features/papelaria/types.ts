@@ -97,6 +97,8 @@ export interface PapelariaOsContext {
   prefill: Record<string, string>;
   modelos: PapelariaCorelModelSummary[];
   autoSelectedModelId: number | null;
+  /** Detalhe do modelo auto-selecionado (evita round-trip extra ao abrir a SP). */
+  autoSelectedModel?: PapelariaCorelModelDetail | null;
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
   prova_modo?: "prova_web" | "prova_email";

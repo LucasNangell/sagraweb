@@ -1379,25 +1379,31 @@ def _parse_partido_uf(sigla: str, titulo: str) -> tuple[str, str]:
     return raw, ""
 
 
-def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
-    rows = db.execute_query(
-        """
-        SELECT p.NomeUsuario, p.Titular, p.SiglaOrgao, p.GabSalaUsuario,
-               p.RamalUsuario, p.Localizacao, p.Andar,
-               d.Titulo, d.TipoPublicacaoLink, d.Cores, d.CoresDescricao,
-               d.FrenteVerso
-        FROM tabProtocolos p
-        LEFT JOIN tabDetalhesServico d
-          ON p.NroProtocolo = d.NroProtocoloLinkDet
-         AND p.AnoProtocolo = d.AnoProtocoloLinkDet
-        WHERE p.NroProtocolo = %(nro)s AND p.AnoProtocolo = %(ano)s
-        """,
-        {"nro": nro, "ano": ano},
-    )
-    if not rows:
-        return {}
+def build_prefill_corel(
+    ano: int,
+    nro: int,
+    *,
+    row: Optional[dict[str, Any]] = None,
+) -> dict[str, str]:
+    if row is None:
+        rows = db.execute_query(
+            """
+            SELECT p.NomeUsuario, p.Titular, p.SiglaOrgao, p.GabSalaUsuario,
+                   p.RamalUsuario, p.Localizacao, p.Andar,
+                   d.Titulo, d.TipoPublicacaoLink, d.Cores, d.CoresDescricao,
+                   d.FrenteVerso
+            FROM tabProtocolos p
+            LEFT JOIN tabDetalhesServico d
+              ON p.NroProtocolo = d.NroProtocoloLinkDet
+             AND p.AnoProtocolo = d.AnoProtocoloLinkDet
+            WHERE p.NroProtocolo = %(nro)s AND p.AnoProtocolo = %(ano)s
+            """,
+            {"nro": nro, "ano": ano},
+        )
+        if not rows:
+            return {}
+        row = rows[0]
 
-    row = rows[0]
     nome = _as_str(row.get("Titular") or row.get("NomeUsuario"))
     partido, uf = _parse_partido_uf(
         _as_str(row.get("SiglaOrgao")),
@@ -1437,11 +1443,12 @@ def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
                 buscar_deputado_por_nome,
             )
 
-            dep = buscar_deputado_por_nome(nome)
+            # Prefill do contexto não pode esperar a API Câmara (timeout 12s).
+            dep = buscar_deputado_por_nome(nome, local_only=True)
             if dep:
                 dados = aplicar_deputado_em_campos_corel(dados, dep)
         except Exception as exc:
-            logger.warning("Prefill deputado (Corel) via API Câmara falhou: %s", exc)
+            logger.warning("Prefill deputado (Corel) via cache local falhou: %s", exc)
 
     if not (dados.get("genero") or "").strip():
         dados["genero"] = "Deputado Federal"
@@ -1449,36 +1456,43 @@ def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
     return dados
 
 
-def is_papelaria_os_by_product(ano: int, nro: int) -> bool:
-    rows = db.execute_query(
-        """
-        SELECT d.TipoPublicacaoLink
-        FROM tabProtocolos p
-        LEFT JOIN tabDetalhesServico d
-          ON p.NroProtocolo = d.NroProtocoloLinkDet
-         AND p.AnoProtocolo = d.AnoProtocoloLinkDet
-        WHERE p.NroProtocolo = %(nro)s AND p.AnoProtocolo = %(ano)s
-        """,
-        {"nro": nro, "ano": ano},
-    )
-    if not rows:
-        return False
-    produto = _as_str(rows[0].get("TipoPublicacaoLink"))
+def is_papelaria_os_by_product(
+    ano: int,
+    nro: int,
+    *,
+    produto: Optional[str] = None,
+    modelos: Optional[list[dict[str, Any]]] = None,
+) -> bool:
+    if produto is None:
+        rows = db.execute_query(
+            """
+            SELECT d.TipoPublicacaoLink
+            FROM tabProtocolos p
+            LEFT JOIN tabDetalhesServico d
+              ON p.NroProtocolo = d.NroProtocoloLinkDet
+             AND p.AnoProtocolo = d.AnoProtocoloLinkDet
+            WHERE p.NroProtocolo = %(nro)s AND p.AnoProtocolo = %(ano)s
+            """,
+            {"nro": nro, "ano": ano},
+        )
+        if not rows:
+            return False
+        produto = _as_str(rows[0].get("TipoPublicacaoLink"))
+    else:
+        produto = _as_str(produto)
+
     if not produto:
         return False
-    
+
     prod_norm = normalizar_texto_produto(produto)
     if not prod_norm:
         return False
-    
-    todos = list_modelos()
+
+    todos = modelos if modelos is not None else list_modelos()
     return any(normalizar_texto_produto(m["produto"]) == prod_norm for m in todos)
 
 
 def build_os_context(ano: int, nro: int) -> dict[str, Any]:
-    if nro < 5000 and not is_papelaria_os_by_product(ano, nro):
-        raise ValueError("OS de papelaria deve ter número >= 5000 ou possuir produto de papelaria configurado.")
-
     rows = db.execute_query(
         """
         SELECT p.NroProtocolo, p.AnoProtocolo, p.NomeUsuario, p.Titular,
@@ -1501,7 +1515,15 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     cores = _as_str(row.get("CoresDescricao") or row.get("Cores"))
     frente_verso = _as_str(row.get("FrenteVerso"))
 
-    prefill = build_prefill_corel(ano, nro)
+    todos_modelos = list_modelos()
+    if nro < 5000 and not is_papelaria_os_by_product(
+        ano, nro, produto=produto, modelos=todos_modelos
+    ):
+        raise ValueError(
+            "OS de papelaria deve ter número >= 5000 ou possuir produto de papelaria configurado."
+        )
+
+    prefill = build_prefill_corel(ano, nro, row=row)
     cliente_alteracao = None
     alt = None
     try:
@@ -1561,7 +1583,6 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
                 "campos_alterados": campos_alterados or None,
             }
 
-    todos_modelos = list_modelos()
     modelos, warnings, auto_id = match_modelos_para_os(
         produto, cores, frente_verso, todos_modelos
     )
@@ -1580,6 +1601,18 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     warnings.extend(avisos_modo)
     if not any(m.get("id") == auto_id for m in modelos):
         auto_id = modelos[0]["id"] if len(modelos) == 1 else None
+
+    auto_model: Optional[dict[str, Any]] = None
+    if auto_id:
+        try:
+            auto_model = get_modelo_by_id(int(auto_id))
+        except Exception as exc:
+            logger.warning(
+                "Falha ao embutir detalhe do modelo auto-selecionado %s: %s",
+                auto_id,
+                exc,
+            )
+            auto_model = None
 
     partido, uf = _parse_partido_uf(
         _as_str(row.get("SiglaOrgao")),
@@ -1604,6 +1637,7 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "prefill": prefill,
         "modelos": modelos,
         "autoSelectedModelId": auto_id,
+        "autoSelectedModel": auto_model,
         "warnings": warnings,
         "cliente_alteracao": cliente_alteracao,
         "prova_modo": get_modo(),

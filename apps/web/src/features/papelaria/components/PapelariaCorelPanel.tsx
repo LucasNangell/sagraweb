@@ -204,6 +204,8 @@ export function PapelariaCorelPanel({
     retry: 2,
   });
 
+  const contextReady = hasOs && contextQuery.isSuccess;
+
   const cdrPathQuery = useQuery({
     queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
     queryFn: async () => {
@@ -213,7 +215,7 @@ export function PapelariaCorelPanel({
         return null;
       }
     },
-    enabled: hasOs,
+    enabled: contextReady,
     staleTime: 30_000,
     retry: false,
   });
@@ -273,7 +275,7 @@ export function PapelariaCorelPanel({
   const proofFilesQuery = useEmailProofFiles(
     Number.isFinite(anoNum) ? anoNum : null,
     Number.isFinite(nroNum) ? nroNum : null,
-    hasOs,
+    contextReady,
   );
 
   const jobsQuery = useQuery({
@@ -626,11 +628,20 @@ export function PapelariaCorelPanel({
 
   useEffect(() => {
     if (!contextQuery.data || autoSelectDone.current) return;
-    if (contextQuery.data.autoSelectedModelId) {
-      setSelectedModelId(contextQuery.data.autoSelectedModelId);
+    const embedded = contextQuery.data.autoSelectedModel;
+    const autoId =
+      contextQuery.data.autoSelectedModelId ?? embedded?.id ?? null;
+    if (embedded && autoId) {
+      queryClient.setQueryData(
+        queryKeys.papelaria.corelModelo(autoId),
+        embedded,
+      );
+    }
+    if (autoId) {
+      setSelectedModelId(autoId);
     }
     autoSelectDone.current = true;
-  }, [contextQuery.data]);
+  }, [contextQuery.data, queryClient]);
 
   useEffect(() => {
     const ctx = contextQuery.data;
@@ -1033,7 +1044,8 @@ export function PapelariaCorelPanel({
       : null;
 
   useEffect(() => {
-    if (!hasOs || proofFilesQuery.isLoading || jobsQuery.isLoading) {
+    // proof-files só roda após o contexto; não escolher aba antes disso.
+    if (!hasOs || !contextReady || !proofFilesQuery.isFetched || jobsQuery.isLoading) {
       return;
     }
     if (viewModeInitialized.current) return;
@@ -1047,7 +1059,8 @@ export function PapelariaCorelPanel({
     );
   }, [
     hasOs,
-    proofFilesQuery.isLoading,
+    contextReady,
+    proofFilesQuery.isFetched,
     jobsQuery.isLoading,
     hasFolderProof,
     hasJobProof,

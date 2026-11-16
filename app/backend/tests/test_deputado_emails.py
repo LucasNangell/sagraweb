@@ -76,7 +76,7 @@ class TestAplicarDeputadoCamposCorel:
             dep,
         )
         assert out["nome_deputado"] == "Jonas Donizette"
-        assert out["genero"] == "Deputado Federal"
+        assert out["genero"] == "Deputado"
         assert out["partido"] == "PSB"
         assert out["uf"] == "SP"
         assert out["anexo"] == "IV"
@@ -101,7 +101,7 @@ class TestAplicarDeputadoCamposCorel:
             dep,
         )
         assert out["nome_deputado"] == "Jonas Donizette"
-        assert out["genero"] == "Deputado Federal"
+        assert out["genero"] == "Deputado"
         assert out["partido"] == "PSB"
         assert out["uf"] == "SP"
         assert out["anexo"] == "IV"
@@ -126,7 +126,7 @@ class TestAplicarDeputadoCamposCorel:
 
         dep = self._dep_fake(sexo="F", nome_eleitoral="Maria Silva")
         out = aplicar_deputado_em_campos_corel({"genero": "Deputado Federal"}, dep)
-        assert out["genero"] == "Deputada Federal"
+        assert out["genero"] == "Deputada"
 
     def test_sexo_vazio_nao_forca_genero(self):
         from services.deputados_camara_service import aplicar_deputado_em_campos_corel
@@ -178,6 +178,50 @@ class TestBuscarDeputadoPorNomeCache:
 
         api_mock.assert_not_called()
         assert result is completo
+
+    def test_local_only_nao_consulta_api_mesmo_com_cache_incompleto(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        incompleto = MagicMock()
+        incompleto.sexo = ""
+        incompleto.partido = "PSB"
+        incompleto.uf = "SP"
+        monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(
+            svc,
+            "_ler_cache_deputado",
+            lambda nome, ignore_freshness=False: incompleto,
+        )
+        api_mock = MagicMock()
+        monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
+
+        result = svc.buscar_deputado_por_nome("Maria Silva", local_only=True)
+
+        api_mock.assert_not_called()
+        assert result is incompleto
+
+    def test_local_only_usa_cache_expirado_sem_api(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        stale = MagicMock()
+        stale.sexo = "F"
+        stale.partido = "PT"
+        stale.uf = "BA"
+
+        def _ler(nome, ignore_freshness=False):
+            if ignore_freshness:
+                return stale
+            return None
+
+        monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_ler_cache_deputado", _ler)
+        api_mock = MagicMock()
+        monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
+
+        result = svc.buscar_deputado_por_nome("Maria Silva", local_only=True)
+
+        api_mock.assert_not_called()
+        assert result is stale
 
 
 class TestObterEmailsDeputado:

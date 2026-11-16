@@ -202,6 +202,7 @@ def test_contexto_email_mantem_todos_modelos(monkeypatch):
             },
         ],
     )
+    monkeypatch.setattr(svc, "get_modelo_by_id", lambda _id: None)
     monkeypatch.setattr(
         "services.papelaria_prova_modo.get_modo",
         lambda: "prova_email",

@@ -359,6 +359,26 @@ class TestBuildOsContextCoercion:
             "services.papelaria_prova_modo.get_modo",
             lambda: "prova_web",
         )
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            svc,
+            "get_modelo_by_id",
+            lambda modelo_id: {
+                "id": modelo_id,
+                "produto": "Ct Visita",
+                "frente_versao": "Somente Frente",
+                "cores": "Policromia",
+                "arquivo_modelo": "Ct.cdr",
+                "variaveis": ["nome_deputado"],
+                "nome_exibicao": "Ct Visita",
+                "ordem": 1,
+                "campos": {"nome_deputado": ""},
+                "campos_formulario": [
+                    {"key": "nome_deputado", "label": "Nome", "type": "text"}
+                ],
+            },
+        )
 
     def test_build_os_context_com_campos_numericos(self, monkeypatch):
         from services import papelaria_models_service as svc
@@ -407,6 +427,10 @@ class TestBuildOsContextCoercion:
         assert ctx["os"]["cores"] == "4"
         assert ctx["os"]["frente_verso"] == "Frente e Verso"
         assert ctx["os"]["observ"] == "Obs teste OS"
+        assert ctx["autoSelectedModelId"] == 1
+        assert ctx["autoSelectedModel"] is not None
+        assert ctx["autoSelectedModel"]["id"] == 1
+        assert ctx["autoSelectedModel"]["campos_formulario"]
 
     def test_build_os_context_aplica_alteracao_cliente_com_diff(self, monkeypatch):
         from services import papelaria_models_service as svc

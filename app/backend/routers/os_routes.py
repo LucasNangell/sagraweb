@@ -723,21 +723,13 @@ def move_os_folders(ano: int, id: int, body: OsFolderMoveExecuteRequest):
 
 
 def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
-    """Helper para localizar a pasta da OS na rede."""
-    if id >= 5000:
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
-    else:
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
-        
-    os_pattern = os.path.join(base_path, f"{id:05d}*")
-    
-    logger.info(f"DEBUG PATH: Searching for OS {id}/{ano} in {base_path}")
-    logger.info(f"DEBUG PATH: Pattern used: {os_pattern}")
+    """Helper para localizar a pasta da OS na rede (cache compartilhado)."""
+    from resilience.fs_timeout import FsTimeoutError
+    from services.os_folder_path_service import resolve_os_folder_path
 
-    from resilience.fs_timeout import FsTimeoutError, glob_with_timeout
-
+    logger.info("DEBUG PATH: Searching for OS %s/%s (shared resolver)", id, ano)
     try:
-        found = glob_with_timeout(os_pattern)
+        found = resolve_os_folder_path(ano, id)
     except FsTimeoutError as exc:
         raise HTTPException(
             status_code=503,
@@ -745,9 +737,9 @@ def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
             headers={"Retry-After": "10"},
         ) from exc
     if found:
-        logger.info(f"DEBUG PATH: Found: {found[0]}")
-        return found[0]
-        
+        logger.info("DEBUG PATH: Found: %s", found)
+        return found
+
     logger.info("DEBUG PATH: Not found in network.")
     return None
 

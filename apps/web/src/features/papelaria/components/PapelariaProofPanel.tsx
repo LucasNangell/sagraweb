@@ -26,6 +26,7 @@ import {
   PAPELARIA_MOCKUP_SCENE_BASE_PX,
   PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW,
 } from "../mockup";
+import { extractProvaVersionFromFilename } from "@/features/email/utils/proofFilePicker";
 import {
   isPastaAvulsoProduct,
   papelariaProofPdfViewerSrc,
@@ -38,6 +39,7 @@ import {
   isReadyImposicaoPdf,
   isWaitingImposicaoApogee,
 } from "../papelariaImposicaoStatus";
+import { resolvePapelariaProvaDisplay } from "../papelariaProvaDisplay";
 import type { PapelariaViewMode } from "../papelariaViewMode";
 import {
   buildRuntimePreviewConfig,
@@ -242,9 +244,21 @@ export function PapelariaProofPanel({
     previewPagesQuery.data?.pages.map((p) => resolvePreviewImageUrl(p.url)) ??
     [];
 
-  const jobPdfUrl = activeJob && showPdf ? papelariaJobFileUrl(activeJob.id, "pdf") : "";
+  const provaDisplay = showPdf
+    ? resolvePapelariaProvaDisplay(activeJob)
+    : null;
+  const jobPdfUrl = provaDisplay?.pdfUrl ?? "";
   const provaPdfUrl = showPdf ? jobPdfUrl : folderProofPdfUrl ?? "";
   const showingFolderProof = !showPdf && Boolean(folderProofPdfUrl);
+  const folderProvaVersao =
+    !showPdf && folderProofLabel
+      ? extractProvaVersionFromFilename(folderProofLabel)
+      : null;
+  const displayedProvaLabel =
+    provaDisplay?.provaLabel ??
+    (folderProvaVersao != null ? `Prova ${folderProvaVersao}` : null);
+  const displayedProvaFile =
+    provaDisplay?.fileLabel ?? folderProofLabel ?? null;
   const jobImposicaoPdfUrl =
     readyImposicaoPdf && activeJob
       ? papelariaJobFileUrl(activeJob.id, "pdf")
@@ -653,18 +667,38 @@ export function PapelariaProofPanel({
                 : "min-h-[min(50vh,360px)] flex-1 sm:min-h-[320px]",
             )}
           >
-            <header className="flex shrink-0 items-center justify-between border-b border-sagra-border px-3 py-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
-                PDF
-                <span className="ml-2 font-normal normal-case tracking-normal text-neutral-400">
-                  {pastaAvulsoPdf ? "ajuste à largura" : "ajuste à altura"}
-                </span>
-              </h3>
+            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-sagra-border px-3 py-2">
+              <div className="min-w-0">
+                <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-neutral-600">
+                  PDF
+                  {displayedProvaLabel ? (
+                    <span
+                      className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-sky-900"
+                      data-testid="papelaria-prova-version-badge"
+                    >
+                      {displayedProvaLabel}
+                    </span>
+                  ) : (
+                    <span className="font-normal normal-case tracking-normal text-neutral-400">
+                      {pastaAvulsoPdf ? "ajuste à largura" : "ajuste à altura"}
+                    </span>
+                  )}
+                </h3>
+                {displayedProvaFile ? (
+                  <p
+                    className="mt-0.5 truncate text-[10px] font-normal normal-case tracking-normal text-neutral-500"
+                    title={displayedProvaFile}
+                    data-testid="papelaria-prova-file-label"
+                  >
+                    {displayedProvaFile}
+                  </p>
+                ) : null}
+              </div>
               <a
                 href={provaPdfViewerSrc || provaPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] font-medium text-secondary-blue hover:underline"
+                className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-secondary-blue hover:underline"
               >
                 <ExternalLink className="size-3" aria-hidden />
                 Abrir PDF
@@ -673,13 +707,13 @@ export function PapelariaProofPanel({
             <iframe
               key={
                 showPdf && activeJob
-                  ? `${activeJob.id}-${activeJob.concluido_em ?? "pdf"}-${pastaAvulsoPdf ? "w" : "h"}`
+                  ? `${activeJob.id}-${provaDisplay?.fileLabel ?? "pdf"}-${activeJob.concluido_em ?? "pdf"}-${pastaAvulsoPdf ? "w" : "h"}`
                   : `${folderProofLabel ?? provaPdfUrl}-${pastaAvulsoPdf ? "w" : "h"}`
               }
               title={
                 showPdf && activeJob
-                  ? `Prova PDF — job ${activeJob.id}`
-                  : `Prova PDF — ${folderProofLabel ?? "pasta Sefoc"}`
+                  ? `Prova PDF — ${displayedProvaLabel ?? `job ${activeJob.id}`}`
+                  : `Prova PDF — ${displayedProvaLabel ?? folderProofLabel ?? "pasta Sefoc"}`
               }
               src={provaPdfViewerSrc}
               className={cn(

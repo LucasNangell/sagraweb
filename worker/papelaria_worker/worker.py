@@ -655,7 +655,8 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 pdf_name = prova_name
                 result.pdf_path = prova_path
             elif prova_web and not cancel_requested.is_set():
-                # Arquiva cópia versionada sem páginas em branco; BaseSefoc intacto.
+                # Arquiva ProvaN sem brancos; BaseSefoc permanece no disco.
+                # A visualização / ArquivoPdfGerado passa a apontar para ProvaN.
                 prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
                 if prova_web_name and os.path.isfile(output_pdf):
                     prova_web_path = os.path.join(output_dir, prova_web_name)
@@ -684,6 +685,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                         )
                     result.logs.append(msg)
                     api.append_log(job_id, msg, "info")
+                    if os.path.isfile(prova_web_path):
+                        pdf_name = prova_web_name
+                        result.pdf_path = prova_web_path
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():

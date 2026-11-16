@@ -344,8 +344,8 @@ class TestProcessJobDispatch:
             assert prova_doc.page_count == 1
             assert "Arte" in prova_doc[0].get_text()
         assert api.completed
-        # Job continua apontando para BaseSefoc (cópia é só arquivo na pasta).
-        assert api.completed[0][2] == "05024-Nome-BaseSefoc.pdf"
+        # ArquivoPdfGerado / visualização apontam para ProvaN (BaseSefoc fica no disco).
+        assert api.completed[0][2] == "05024-Nome-Prova1.pdf"
 
     def test_timbrado_digital_nao_chama_gerar_arquivo(
         self, patched_runtime, monkeypatch, tmp_path

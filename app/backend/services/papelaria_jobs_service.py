@@ -674,6 +674,21 @@ def create_imposicao_job(
     usar_pre = bool(config.get("usar_pre_impresso")) and juntada_svc.is_pre_impresso_produto(
         produto_job
     )
+    # Pré-impresso → Apogee Offset: nunca usar a variante Digital (A4).
+    if usar_pre and "offset" in disponiveis and var != "offset":
+        var = "offset"
+        offset_cfg = opcoes.get("offset")
+        if not isinstance(offset_cfg, dict):
+            raise ValueError(
+                "Imposição Offset obrigatória para pré-impresso Apogee."
+            )
+        config = imposicao_cfg_svc.validate_imposicao_config_payload(
+            offset_cfg,
+            require_marcas_pdf=True,
+        )
+        usar_pre = bool(config.get("usar_pre_impresso")) and (
+            juntada_svc.is_pre_impresso_produto(produto_job)
+        )
 
     # arquivo_cdr ignorado no fluxo JDF clássico
     _ = arquivo_cdr
@@ -3105,6 +3120,38 @@ def _complete_pre_impresso_imposicao_job(
         raise FileNotFoundError(
             "PDF ganged da imposição pré-impressa não encontrado."
         )
+    # Pasta: gang já é a folha montada no PDF de imposição → JDF 1-up.
+    jdf_config = config
+    if dados.get("compose_com_template"):
+        folha = config.get("folha_mm") or {}
+        try:
+            from services import papelaria_jdf_service as jdf_svc
+
+            gang_w, gang_h = jdf_svc.read_pdf_page_size_mm(gang_path)
+        except Exception:
+            gang_w = float(folha.get("largura") or 0)
+            gang_h = float(folha.get("altura") or 0)
+        jdf_config = {
+            **config,
+            "folha_mm": {
+                "largura": gang_w or float(folha.get("largura") or 0),
+                "altura": gang_h or float(folha.get("altura") or 0),
+            },
+            "pagina": {
+                "origem": "fixixa",
+                "largura_mm": gang_w or float(folha.get("largura") or 0),
+                "altura_mm": gang_h or float(folha.get("altura") or 0),
+            },
+            "grid": {
+                "colunas": 1,
+                "linhas": 1,
+                "ocupadas": [{"col": 0, "row": 0, "pagina": 1}],
+            },
+            "espacamento_mm": {"horizontal": 0.0, "vertical": 0.0},
+            "centralizar_na_folha": False,
+            "marcas_corte": False,
+            "marcas_pdf_path": None,
+        }
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])
     produto = str(job.get("produto") or "Papelaria")
@@ -3113,7 +3160,7 @@ def _complete_pre_impresso_imposicao_job(
         ano=ano,
         nro=nro,
         produto=produto,
-        config=config,
+        config=jdf_config,
         base_pdf_path=gang_path,
         comment=comment,
         descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,

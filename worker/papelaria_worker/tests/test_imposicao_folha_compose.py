@@ -11,7 +11,12 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from imposicao_folha_compose import compose_folha_com_template  # noqa: E402
+from imposicao_folha_compose import (  # noqa: E402
+    compose_folha_com_template,
+    expand_art_to_pagina,
+)
+
+MM_TO_PT = 72.0 / 25.4
 
 
 def _make_pdf(path: Path, *, w: float, h: float, color: tuple[float, float, float]) -> None:
@@ -54,8 +59,35 @@ def test_compose_folha_duas_artes(tmp_path: Path):
     )
     assert out.is_file()
     assert any("Folha montada" in m for m in logs)
+    assert any("arte à direita" in m for m in logs)
     with fitz.open(out) as doc:
         assert doc.page_count == 1
+
+
+def test_expand_art_alinha_direita(tmp_path: Path):
+    """Arte 220×320 vira página 440×320 com conteúdo à direita."""
+    art = tmp_path / "art.pdf"
+    out = tmp_path / "pagina.pdf"
+    art_w = 220 * MM_TO_PT
+    art_h = 320 * MM_TO_PT
+    _make_pdf(art, w=art_w, h=art_h, color=(0.1, 0.1, 0.9))
+    expand_art_to_pagina(
+        art_pdf_path=str(art),
+        page_w_mm=440,
+        page_h_mm=320,
+        output_pdf_path=str(out),
+        align="right",
+    )
+    with fitz.open(out) as doc:
+        page = doc[0]
+        assert abs(page.rect.width / MM_TO_PT - 440) < 0.5
+        assert abs(page.rect.height / MM_TO_PT - 320) < 0.5
+        # Amostra: esquerda clara (branco), direita com tinta azul.
+        pix = page.get_pixmap(matrix=fitz.Matrix(1, 1), alpha=False)
+        left = pix.pixel(int(pix.width * 0.15), pix.height // 2)
+        right = pix.pixel(int(pix.width * 0.85), pix.height // 2)
+        assert sum(left) > 700  # ~branco
+        assert right[2] > right[0]  # canal azul dominante
 
 
 def test_compose_exige_template(tmp_path: Path):

@@ -323,8 +323,8 @@ export function ImposicaoConfigEditor({
               }
             />
             <span className="text-[10px] text-slate-400">
-              Folha usada para montar as 2 artes (com duplicação se for 1 SP)
-              antes de enviar ao Apogee.
+              Folha 656×470 com pastas 440×320; arte 220×320 à direita
+              (esquerda em branco), antes de enviar ao Apogee.
             </span>
           </label>
         ) : null}

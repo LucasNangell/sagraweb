@@ -159,11 +159,20 @@ export function PapelariaImposicaoOsModal({
     const digital = asConfig(opcoes.digital);
     const offset = asConfig(opcoes.offset);
     setDrafts({ digital, offset });
+    const disponiveisOpen = (opcoes.variantes_disponiveis || []).filter(
+      (v): v is PapelariaImposicaoVariante =>
+        v === "digital" || v === "offset",
+    );
+    const produtoOpen = (opcoes.produto || "").trim();
+    // Pré-impresso Apogee: abrir direto em Offset (folha 656×470 / pasta 440×320).
+    const preferOffset =
+      disponiveisOpen.includes("offset") &&
+      Boolean(offset?.usar_pre_impresso) &&
+      isPreImpressoImposicaoProduct(produtoOpen);
     const first =
-      (opcoes.variantes_disponiveis || []).find(
-        (v): v is PapelariaImposicaoVariante =>
-          v === "digital" || v === "offset",
-      ) || (digital ? "digital" : offset ? "offset" : "digital");
+      (preferOffset ? "offset" : undefined) ||
+      disponiveisOpen.find((v) => v === "digital" || v === "offset") ||
+      (digital ? "digital" : offset ? "offset" : "digital");
     setTab(first);
     setLocalError(null);
     setSelectedKeys(new Set());

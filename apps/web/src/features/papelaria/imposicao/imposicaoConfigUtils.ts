@@ -377,6 +377,11 @@ export function cloneImposicaoConfigForProduto(
     cfg.usar_pre_impresso = true;
     cfg.jdf_import_root =
       "\\\\apogee\\JDFImportRoot\\Papelaria_Pasta";
+    // Offset padrão: folha 656×470, pasta 440×320 (arte 220×320 à direita).
+    cfg.folha_mm = { largura: 656, altura: 470 };
+    cfg.pagina = { origem: "fixixa", largura_mm: 440, altura_mm: 320 };
+    cfg.grid = { colunas: 2, linhas: 1 };
+    cfg.work_style = "Simplex";
   } else if (name === "timbrado a4") {
     cfg.usar_pre_impresso = true;
     cfg.jdf_import_root =

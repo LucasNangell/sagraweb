@@ -48,7 +48,7 @@ export function ClienteProofActions({
   return (
     <section
       data-tour="proof-actions"
-      className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5"
+      className="min-w-0 rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5"
     >
       <h2 className="text-base font-bold text-secondary-blue">Sua resposta</h2>
       <p className="mt-1 text-sm text-neutral-600">
@@ -112,7 +112,7 @@ export function ClienteProofActions({
         data-tour="proof-actions-buttons"
         className={
           publicPortal
-            ? "mt-5 flex flex-row gap-2"
+            ? "mt-5 flex w-full min-w-0 flex-col gap-2"
             : "mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
         }
       >
@@ -129,11 +129,11 @@ export function ClienteProofActions({
           onClick={onRejectClick}
           className={
             publicPortal
-              ? "min-h-11 flex-1 sagra-btn sagra-btn--warning sagra-btn--md"
+              ? "min-h-11 w-full min-w-0 sagra-btn sagra-btn--warning sagra-btn--md"
               : "min-h-11 flex-1 sagra-btn sagra-btn--warning sagra-btn--md sm:flex-none"
           }
         >
-          <MessageSquareWarning className="size-4" aria-hidden />
+          <MessageSquareWarning className="size-4 shrink-0" aria-hidden />
           Solicitar alterações
         </button>
         <button
@@ -143,14 +143,14 @@ export function ClienteProofActions({
           onClick={onApproveClick}
           className={
             publicPortal
-              ? "min-h-11 flex-1 sagra-btn sagra-btn--primary sagra-btn--md"
+              ? "min-h-11 w-full min-w-0 sagra-btn sagra-btn--primary sagra-btn--md"
               : "min-h-11 flex-1 sagra-btn sagra-btn--primary sagra-btn--md sm:flex-none"
           }
         >
           {isPending ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
+            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
           ) : (
-            <CheckCircle2 className="size-4" aria-hidden />
+            <CheckCircle2 className="size-4 shrink-0" aria-hidden />
           )}
           Aprovar prova
         </button>

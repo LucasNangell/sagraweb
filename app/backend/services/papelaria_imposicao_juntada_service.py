@@ -80,16 +80,57 @@ def _gcd_many(values: list[int]) -> int:
     return max(1, g)
 
 
+def preencher_slots_ate_capacidade(
+    slots: list[int],
+    tiragens: list[int],
+    cap: int,
+) -> list[int]:
+    """
+    Garante sum(slots) == cap duplicando (Apogee Pasta=2, Timbrado=4).
+
+    Se cap é múltiplo da soma, multiplica proporcionalmente; senão
+    reparte extras priorizando maior tiragem.
+    """
+    if cap < 1:
+        raise ValueError("Capacidade da folha inválida.")
+    out = [max(0, int(s)) for s in slots]
+    if len(out) != len(tiragens):
+        raise ValueError("slots e tiragens com tamanhos diferentes.")
+    total = sum(out)
+    if total < 1:
+        raise ValueError("Nenhum slot alocado.")
+    if total > cap:
+        raise ValueError(
+            f"Slots {out} somam {total} (máx. {cap})."
+        )
+    if total == cap:
+        return out
+    if cap % total == 0:
+        k = cap // total
+        return [s * k for s in out]
+
+    remaining = cap - total
+    # Prioriza maior tiragem; em empate, menor quantidade atual de slots.
+    while remaining > 0:
+        order = sorted(
+            range(len(out)),
+            key=lambda i: (-int(tiragens[i]), int(out[i]), i),
+        )
+        out[order[0]] += 1
+        remaining -= 1
+    return out
+
+
 def alocar_slots(
     tiragens: list[Any],
     *,
     produto: Optional[str],
 ) -> dict[str, Any]:
     """
-    Aloca slots na folha conforme tiragens.
+    Aloca slots na folha conforme tiragens e **preenche sempre** a capacidade:
+    Pasta → 2; Timbrado A4 → 4 (duplica o PDF base quando necessário).
 
-    Pasta: tiragens iguais; 1 slot por OS; máx. 2.
-    Timbrado: unit=gcd; slots_i=tiragem_i/unit; sum <= 4; folhas=unit.
+    Pasta: tiragens iguais; Timbrado: unit=gcd; folhas=unit.
     """
     if not tiragens:
         raise ValueError("Informe ao menos uma tiragem.")
@@ -105,35 +146,43 @@ def alocar_slots(
             raise ValueError(
                 "Pasta Avulso: tiragens das OSs juntadas devem ser iguais."
             )
-        slots = [1] * len(nums)
-        if sum(slots) > cap:
-            raise ValueError(f"Pasta Avulso: no máximo {cap} OS(s) na folha.")
+        base = [1] * len(nums)
+        slots = preencher_slots_ate_capacidade(base, nums, cap)
         return {
             "slots": slots,
             "unit": nums[0],
             "folhas": nums[0],
             "total_slots": sum(slots),
             "max_slots": cap,
+            "pdfs_enviados": cap,
         }
 
     if is_timbrado_a4_offset(produto):
         unit = _gcd_many(nums)
-        slots = [n // unit for n in nums]
-        total = sum(slots)
-        if total > cap:
-            raise ValueError(
-                f"Timbrado A4: slots {slots} somam {total} (máx. {cap}). "
-                "Ajuste a seleção ou as tiragens."
-            )
+        base = [n // unit for n in nums]
+        slots = preencher_slots_ate_capacidade(base, nums, cap)
         return {
             "slots": slots,
             "unit": unit,
             "folhas": unit,
-            "total_slots": total,
+            "total_slots": sum(slots),
             "max_slots": cap,
+            "pdfs_enviados": cap,
         }
 
     raise ValueError("Produto não elegível à juntada pré-impressa.")
+
+
+def expandir_paginas_por_slots(slots_por_os: list[int]) -> list[int]:
+    """
+    Lista de índices de OS (0-based) na ordem das páginas do PDF ganged.
+    Ex.: slots [1,1,2] → [0, 1, 2, 2] (sempre max_slots páginas).
+    """
+    paginas: list[int] = []
+    for os_idx, n_slots in enumerate(slots_por_os):
+        for _ in range(max(0, int(n_slots))):
+            paginas.append(os_idx)
+    return paginas
 
 
 def montar_ocupadas_por_slots(
@@ -143,8 +192,10 @@ def montar_ocupadas_por_slots(
     slots_por_pagina: list[int],
 ) -> list[dict[str, int]]:
     """
-    Preenche a grade na ordem linha-major, repetindo `pagina` (1-based)
-    conforme slots_por_pagina[i] para a página i+1.
+    Preenche a grade na ordem linha-major.
+
+    O PDF ganged já traz uma página por slot (com duplicatas físicas).
+    Cada célula aponta para pagina 1..N sequencial.
     """
     capacity = max(1, int(colunas) * int(linhas))
     total = sum(max(0, int(s)) for s in slots_por_pagina)
@@ -155,15 +206,22 @@ def montar_ocupadas_por_slots(
             f"Slots ({total}) excedem a grade {colunas}×{linhas} ({capacity})."
         )
 
+    # Páginas físicas no PDF ganged = 1..total (já duplicadas).
     ocupadas: list[dict[str, int]] = []
     cells = [(c, r) for r in range(int(linhas)) for c in range(int(colunas))]
-    idx = 0
-    for page_i, n_slots in enumerate(slots_por_pagina, start=1):
-        for _ in range(int(n_slots)):
-            col, row = cells[idx]
-            ocupadas.append({"col": col, "row": row, "pagina": page_i})
-            idx += 1
+    for i in range(total):
+        col, row = cells[i]
+        ocupadas.append({"col": col, "row": row, "pagina": i + 1})
     return ocupadas
+
+
+def grid_padrao_pre_impresso(produto: Optional[str]) -> dict[str, int]:
+    """Grade que comporta a capacidade fixa (Pasta 2×1, Timbrado 2×2)."""
+    if is_pasta_avulso_familia(produto):
+        return {"colunas": 2, "linhas": 1}
+    if is_timbrado_a4_offset(produto):
+        return {"colunas": 2, "linhas": 2}
+    return {"colunas": 1, "linhas": 1}
 
 
 def format_juntada_descricao(

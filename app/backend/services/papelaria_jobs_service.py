@@ -702,21 +702,29 @@ def create_imposicao_job(
     slots_info: Optional[dict[str, Any]] = None
     if usar_pre:
         slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
+        # Apogee já tem o layout; SAGRA envia sempre 2 (Pasta) ou 4 (Timbrado) páginas.
+        padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
         grid = dict(config.get("grid") or {})
-        cols = int(grid.get("colunas") or 1)
-        rows = int(grid.get("linhas") or 1)
+        cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
+        rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
         capacity = cols * rows
-        if int(slots_info["total_slots"]) > capacity:
+        need = int(slots_info["total_slots"])
+        if need > capacity:
             raise ValueError(
-                f"Slots da juntada ({slots_info['total_slots']}) excedem a grade "
-                f"{cols}×{rows} ({capacity}). Ajuste a imposição ou a seleção."
+                f"Slots da juntada ({need}) excedem a grade "
+                f"{cols}×{rows} ({capacity})."
             )
         ocupadas = juntada_svc.montar_ocupadas_por_slots(
             colunas=cols,
             linhas=rows,
             slots_por_pagina=list(slots_info["slots"]),
         )
-        grid["ocupadas"] = ocupadas
+        grid = {
+            **grid,
+            "colunas": cols,
+            "linhas": rows,
+            "ocupadas": ocupadas,
+        }
         config = {**config, "grid": grid}
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)

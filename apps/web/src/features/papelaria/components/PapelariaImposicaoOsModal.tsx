@@ -40,6 +40,26 @@ function gcd(a: number, b: number): number {
   return x || 1;
 }
 
+function fillSlotsToCap(slots: number[], tiragens: number[], cap: number): number[] {
+  let out = slots.map((s) => Math.max(0, s));
+  const total = out.reduce((a, b) => a + b, 0);
+  if (total < 1 || total > cap) return out;
+  if (total === cap) return out;
+  if (cap % total === 0) {
+    const k = cap / total;
+    return out.map((s) => s * k);
+  }
+  let remaining = cap - total;
+  while (remaining > 0) {
+    const order = out
+      .map((_, i) => i)
+      .sort((a, b) => tiragens[b]! - tiragens[a]! || out[a]! - out[b]! || a - b);
+    out[order[0]!]! += 1;
+    remaining -= 1;
+  }
+  return out;
+}
+
 function previewSlots(
   produto: string,
   tiragens: number[],
@@ -58,31 +78,43 @@ function previewSlots(
         message: "Pasta: tiragens devem ser iguais.",
       };
     }
-    const slots = tiragens.map(() => 1);
-    const total = slots.reduce((a, b) => a + b, 0);
-    if (total > maxSlots) {
+    if (tiragens.length > maxSlots) {
       return {
         ok: false,
-        slots,
-        total,
+        slots: [],
+        total: 0,
         message: `Pasta: máximo ${maxSlots} OS(s).`,
       };
     }
-    return { ok: true, slots, total };
+    const slots = fillSlotsToCap(
+      tiragens.map(() => 1),
+      tiragens,
+      maxSlots,
+    );
+    return { ok: true, slots, total: slots.reduce((a, b) => a + b, 0) };
   }
   if (name === "timbrado a4") {
-    const unit = tiragens.reduce((g, t) => gcd(g, t), tiragens[0] ?? 1);
-    const slots = tiragens.map((t) => Math.floor(t / unit));
-    const total = slots.reduce((a, b) => a + b, 0);
-    if (total > maxSlots) {
+    if (tiragens.length > maxSlots) {
       return {
         ok: false,
-        slots,
-        total,
-        message: `Timbrado: slots ${slots.join("+")} = ${total} (máx. ${maxSlots}).`,
+        slots: [],
+        total: 0,
+        message: `Timbrado: máximo ${maxSlots} OS(s).`,
       };
     }
-    return { ok: true, slots, total };
+    const unit = tiragens.reduce((g, t) => gcd(g, t), tiragens[0] ?? 1);
+    const base = tiragens.map((t) => Math.floor(t / unit));
+    const baseTotal = base.reduce((a, b) => a + b, 0);
+    if (baseTotal > maxSlots) {
+      return {
+        ok: false,
+        slots: base,
+        total: baseTotal,
+        message: `Timbrado: slots ${base.join("+")} = ${baseTotal} (máx. ${maxSlots}).`,
+      };
+    }
+    const slots = fillSlotsToCap(base, tiragens, maxSlots);
+    return { ok: true, slots, total: slots.reduce((a, b) => a + b, 0) };
   }
   return { ok: false, slots: [], total: 0, message: "Produto sem juntada." };
 }

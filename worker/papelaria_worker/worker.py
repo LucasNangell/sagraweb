@@ -647,21 +647,26 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 if not gang_path:
                     raise CorelGenerationError("gang_pdf_path ausente no job.")
                 os.makedirs(os.path.dirname(gang_path) or ".", exist_ok=True)
+                # Duplica páginas conforme slots (Pasta=2, Timbrado=4 sempre).
                 out = fitz.open()
                 try:
-                    for src in pre_pdfs:
+                    total_pages = 0
+                    for item, src in zip(lote, pre_pdfs):
+                        copies = max(1, int(item.get("slots") or 1))
                         with fitz.open(src) as doc:
                             if doc.page_count < 1:
                                 raise CorelGenerationError(
                                     f"PDF pré-impresso sem páginas: {src}"
                                 )
-                            out.insert_pdf(doc, from_page=0, to_page=0)
+                            for _ in range(copies):
+                                out.insert_pdf(doc, from_page=0, to_page=0)
+                                total_pages += 1
                     out.save(gang_path)
                 finally:
                     out.close()
                 msg = (
                     f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
-                    f"({len(pre_pdfs)} página(s))."
+                    f"({total_pages} página(s), duplicadas por slot)."
                 )
                 pre_logs.append(msg)
                 api.append_log(job_id, msg, "info")

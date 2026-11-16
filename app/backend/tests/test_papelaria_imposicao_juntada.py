@@ -34,13 +34,28 @@ class TestImposicaoJuntada:
         assert out["unit"] == 500
         assert out["folhas"] == 500
         assert out["total_slots"] == 4
+        assert out["pdfs_enviados"] == 4
+
+    def test_timbrado_uma_os_duplica_ate_4(self):
+        from services.papelaria_imposicao_juntada_service import alocar_slots
+
+        out = alocar_slots([1000], produto="Timbrado A4")
+        assert out["slots"] == [4]
+        assert out["total_slots"] == 4
+
+    def test_timbrado_duas_os_duplica_ate_4(self):
+        from services.papelaria_imposicao_juntada_service import alocar_slots
+
+        out = alocar_slots([500, 500], produto="Timbrado A4")
+        assert out["slots"] == [2, 2]
+        assert out["total_slots"] == 4
 
     def test_timbrado_excede_slots(self):
         from services.papelaria_imposicao_juntada_service import alocar_slots
 
         with pytest.raises(ValueError, match="Máximo de 4"):
             alocar_slots([500, 500, 500, 500, 500], produto="Timbrado A4")
-        with pytest.raises(ValueError, match="slots"):
+        with pytest.raises(ValueError, match=r"somam 8|máx\. 4"):
             alocar_slots([500, 1500, 2000], produto="Timbrado A4")
 
     def test_pasta_tiragens_iguais(self):
@@ -49,6 +64,14 @@ class TestImposicaoJuntada:
         out = alocar_slots([200, 200], produto="Pasta Avulso c/ Bolso")
         assert out["slots"] == [1, 1]
         assert out["folhas"] == 200
+        assert out["pdfs_enviados"] == 2
+
+    def test_pasta_uma_os_duplica_ate_2(self):
+        from services.papelaria_imposicao_juntada_service import alocar_slots
+
+        out = alocar_slots([200], produto="Pasta Avulso c/ Bolso")
+        assert out["slots"] == [2]
+        assert out["total_slots"] == 2
 
     def test_pasta_tiragens_diferentes(self):
         from services.papelaria_imposicao_juntada_service import alocar_slots
@@ -58,17 +81,20 @@ class TestImposicaoJuntada:
 
     def test_montar_ocupadas(self):
         from services.papelaria_imposicao_juntada_service import (
+            expandir_paginas_por_slots,
             montar_ocupadas_por_slots,
         )
 
+        assert expandir_paginas_por_slots([1, 1, 2]) == [0, 1, 2, 2]
         ocup = montar_ocupadas_por_slots(
             colunas=2, linhas=2, slots_por_pagina=[1, 1, 2]
         )
+        # PDF ganged já tem 4 páginas físicas (com duplicata).
         assert ocup == [
             {"col": 0, "row": 0, "pagina": 1},
             {"col": 1, "row": 0, "pagina": 2},
             {"col": 0, "row": 1, "pagina": 3},
-            {"col": 1, "row": 1, "pagina": 3},
+            {"col": 1, "row": 1, "pagina": 4},
         ]
 
     def test_jdf_root_defaults(self):

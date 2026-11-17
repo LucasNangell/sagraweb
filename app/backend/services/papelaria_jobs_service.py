@@ -3269,11 +3269,9 @@ def build_imposicao_digital_pdf_name(
     return f"{prefix}_Digit_{n_up}Up_{cc}{safe_folha}.pdf"
 
 
-# Resultado do Apogee: sufixo «Apogee» (ou legado «Imposição»); não ImposicaoGang.
-_APOGEE_IMPOSICAO_EXPORT_RE = re.compile(
-    r"(?:^|[_\s-])(?:Imposi[cç][aã]o|Apogee)\.pdf$",
-    re.IGNORECASE,
-)
+# Resultado do Apogee: a palavra «Apogee» em qualquer posição do nome
+# (ex.: X_Apogee.pdf, Apogee_X.pdf, X-Apogee-2Up.pdf). Só esses PDFs são movidos.
+_APOGEE_IMPOSICAO_EXPORT_RE = re.compile(r"apogee", re.IGNORECASE)
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 _EXCLUDE_SEFOC_PDF_RE = re.compile(
     r"(ProvaSefoc|BaseSefoc|Prova\d+_SEFOC|ImposicaoGang|PreImpresso|"
@@ -3314,52 +3312,38 @@ def _imposicao_export_stem(ano: int, nro: int) -> str:
     return os.path.splitext(label)[0]
 
 
+def is_apogee_export_pdf(filename: str) -> bool:
+    """PDF exportado pelo Apogee: «Apogee» em qualquer lugar do nome."""
+    name = os.path.basename(filename or "")
+    return name.lower().endswith(".pdf") and bool(_APOGEE_IMPOSICAO_EXPORT_RE.search(name))
+
+
 def find_imposicao_pdf_in_sefoc(
     sefoc_dir: str,
     *,
     expected_stem: Optional[str] = None,
 ) -> Optional[str]:
     """
-    PDF de imposição do Apogee na raiz de Sefoc.
-
-    Aceita export com sufixo «Apogee» (ou legado «Imposição»).
-    Ignora artefatos internos (ImposicaoGang, PreImpresso, BaseSefoc, provas).
+    PDF de imposição do Apogee na raiz de Sefoc: o mais recente cujo nome
+    contém «Apogee» (em qualquer posição). Prefere o que também contém o
+    stem do JDF. PDFs sem «Apogee» nunca são movidos.
     """
     pdfs = _list_pdfs_with_mtime(sefoc_dir)
-    if not pdfs:
-        return None
-
-    candidates = [
-        path
-        for _mtime, path in pdfs
-        if not _EXCLUDE_SEFOC_PDF_RE.search(os.path.basename(path))
-    ]
-    if not candidates:
-        return None
-
-    # 1) Sufixo típico: ..._Apogee.pdf / ..._Imposição.pdf
     marked = [
         path
-        for path in candidates
-        if _APOGEE_IMPOSICAO_EXPORT_RE.search(os.path.basename(path))
+        for _mtime, path in pdfs
+        if is_apogee_export_pdf(path)
+        and not _EXCLUDE_SEFOC_PDF_RE.search(os.path.basename(path))
     ]
-    if marked:
-        return marked[0]
+    if not marked:
+        return None
 
-    # 2) Export com stem exato do JDF (ex.: Label.pdf) — sem artefatos internos.
     stem = (expected_stem or "").strip().lower()
     if stem:
-        for path in candidates:
-            stem_file = os.path.splitext(os.path.basename(path))[0].lower()
-            if stem_file == stem:
+        for path in marked:
+            if stem in os.path.basename(path).lower():
                 return path
-            # Stem + sufixo Apogee/Imposição, ex.: Label_Apogee.pdf
-            if stem_file.startswith(f"{stem}_") and re.search(
-                r"(?:imposi[cç][aã]o|apogee)$", stem_file, re.IGNORECASE
-            ):
-                return path
-
-    return None
+    return marked[0]
 
 
 def find_imposicao_pdf_in_digital(
@@ -3370,7 +3354,8 @@ def find_imposicao_pdf_in_digital(
     """
     PDF já presente em Sefoc/Digital.
 
-    Preferência: nome Digit_NUp esperado → qualquer *_Digit_*Up_ → PDF mais recente.
+    Preferência: nome Digit_NUp esperado → qualquer *_Digit_*Up_ (já
+    finalizados) → PDF mais recente com «Apogee» no nome.
     """
     pdfs = _list_pdfs_with_mtime(digital_dir)
     if not pdfs:
@@ -3390,7 +3375,10 @@ def find_imposicao_pdf_in_digital(
     if digit_matches:
         return digit_matches[0]
 
-    return pdfs[0][1]
+    for _mtime, path in pdfs:
+        if is_apogee_export_pdf(path):
+            return path
+    return None
 
 
 def clear_digital_imposicao_pdfs(sefoc_dir: str) -> list[str]:

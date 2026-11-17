@@ -381,3 +381,70 @@ def test_write_jdf_file(tmp_path: Path):
     out = write_jdf_file("<JDF/>", str(tmp_path), "teste.jdf")
     assert Path(out).is_file()
     assert Path(out).read_text(encoding="utf-8") == "<JDF/>"
+
+
+def _duplex_com_marcas_xml(tmp_path: Path, paginas_marcas: int) -> str:
+    import fitz
+
+    from services.papelaria_jdf_service import MM_TO_PT, build_apogee_jdf_xml
+
+    pdf = tmp_path / "base.pdf"
+    pdf.write_bytes(b"%PDF")
+    marcas_path = tmp_path / f"Marcas{paginas_marcas}p.pdf"
+    doc = fitz.open()
+    for _ in range(paginas_marcas):
+        doc.new_page(width=297 * MM_TO_PT, height=210 * MM_TO_PT)
+    doc.save(str(marcas_path))
+    doc.close()
+    return build_apogee_jdf_xml(
+        ano=2026,
+        nro=6227,
+        descriptive_name="CartaoFV",
+        comment="duplex com marcas",
+        export_folder=str(tmp_path),
+        export_filename="CartaoFV.pdf",
+        base_pdf_path=str(pdf),
+        base_pdf_user_name=pdf.stem,
+        config=_base_config(
+            work_style="Duplex",
+            marcas_corte=True,
+            marcas_pdf_path=str(marcas_path),
+            grid={
+                "colunas": 2,
+                "linhas": 1,
+                "ocupadas": [
+                    {"col": 0, "row": 0, "pagina": 1},
+                    {"col": 1, "row": 0, "pagina": 1},
+                ],
+                "ocupadas_verso": [
+                    {"col": 0, "row": 0, "pagina": 2},
+                    {"col": 1, "row": 0, "pagina": 2},
+                ],
+            },
+        ),
+        page_w_mm=148,
+        page_h_mm=210,
+    )
+
+
+def _surface(xml: str, side: str) -> str:
+    start = xml.index(f'<Surface Side="{side}"')
+    return xml[start : xml.index("</Surface>", start)]
+
+
+def test_duplex_marcas_de_uma_pagina_vao_na_frente_e_no_verso(tmp_path: Path):
+    xml = _duplex_com_marcas_xml(tmp_path, paginas_marcas=1)
+    # Arte: páginas 0 e 1; marcas = Ord 2 nos dois lados.
+    assert 'ContentObject Ord="2"' in _surface(xml, "Front")
+    assert 'ContentObject Ord="2"' in _surface(xml, "Back")
+    assert 'Run="MarcasVerso"' not in xml
+    assert 'NPage="3"' in xml
+
+
+def test_duplex_marcas_de_duas_paginas_usa_a_segunda_no_verso(tmp_path: Path):
+    xml = _duplex_com_marcas_xml(tmp_path, paginas_marcas=2)
+    assert 'ContentObject Ord="2"' in _surface(xml, "Front")
+    assert 'ContentObject Ord="3"' in _surface(xml, "Back")
+    assert 'ContentObject Ord="3"' not in _surface(xml, "Front")
+    assert 'Run="MarcasVerso" Pages="1"' in xml
+    assert 'NPage="4"' in xml

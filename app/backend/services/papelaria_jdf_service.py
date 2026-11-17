@@ -484,6 +484,16 @@ def build_apogee_jdf_xml(
         marcas_pdf_path=marcas_pdf_path,
         marcas_ord=marcas_ord,
     )
+    # Verso também leva as marcas de corte. PDF de marcas com 2+ páginas:
+    # a 2ª é a do verso; com 1 página, a mesma marca vale para os dois lados.
+    marcas_verso_run = False
+    if marcas_corte and is_duplex:
+        try:
+            marcas_verso_run = read_pdf_page_count(marcas_pdf_path) >= 2
+        except Exception:
+            marcas_verso_run = False
+    marcas_ord_verso = marcas_ord + 1 if marcas_verso_run else marcas_ord
+
     contents_back = ""
     if is_duplex:
         contents_back = _content_objects_xml(
@@ -492,10 +502,9 @@ def build_apogee_jdf_xml(
             page_h_pt=page_h_pt,
             folha_w_pt=folha_w_pt,
             folha_h_pt=folha_h_pt,
-            # Marcas só na frente (mesmo PDF de marcas na folha).
-            marcas_corte=False,
-            marcas_pdf_path="",
-            marcas_ord=marcas_ord,
+            marcas_corte=marcas_corte,
+            marcas_pdf_path=marcas_pdf_path,
+            marcas_ord=marcas_ord_verso,
         )
 
     file_url = escape(path_to_file_url(base_pdf_path))
@@ -533,9 +542,20 @@ def build_apogee_jdf_xml(
         marcas_user = escape(
             os.path.splitext(os.path.basename(marcas_pdf_path.replace("/", "\\")))[0]
         )
+        marcas_verso_xml = ""
+        if marcas_verso_run:
+            marcas_verso_xml = f"""
+        <RunList Run="MarcasVerso" Pages="1">
+          <LayoutElement>
+            <FileSpec URL="{marcas_url}"
+                      MimeType="application/pdf" FileVersion="1"
+                      UserFileName="{marcas_user}"/>
+          </LayoutElement>
+        </RunList>"""
+        n_marcas_runs = 2 if marcas_verso_run else 1
         if max_pagina <= 1:
             # Compat: 1 página de arte + marcas (Ord 0 / Ord 1).
-            document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="2">
+            document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="{1 + n_marcas_runs}">
         <RunList Run="Arte" Pages="0">
           <LayoutElement>
             <FileSpec URL="{file_url}"
@@ -549,7 +569,7 @@ def build_apogee_jdf_xml(
                       MimeType="application/pdf" FileVersion="1"
                       UserFileName="{marcas_user}"/>
           </LayoutElement>
-        </RunList>
+        </RunList>{marcas_verso_xml}
       </RunList>"""
         else:
             # Uma Run por página do PDF base (Pages=i) + Run de marcas.
@@ -564,7 +584,7 @@ def build_apogee_jdf_xml(
           </LayoutElement>
         </RunList>"""
                 )
-            n_page_total = max_pagina + 1
+            n_page_total = max_pagina + n_marcas_runs
             document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="{n_page_total}">
 {chr(10).join(arte_runs)}
         <RunList Run="Marcas" Pages="0">
@@ -573,7 +593,7 @@ def build_apogee_jdf_xml(
                       MimeType="application/pdf" FileVersion="1"
                       UserFileName="{marcas_user}"/>
           </LayoutElement>
-        </RunList>
+        </RunList>{marcas_verso_xml}
       </RunList>"""
     else:
         document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="{max_pagina}">

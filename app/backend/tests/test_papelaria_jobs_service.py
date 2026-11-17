@@ -1878,7 +1878,7 @@ class TestImposicaoJob:
         assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_2Up_297x210.pdf"
         assert job_state["dados"]["aguardando_apogee"] is False
 
-    def test_poll_imposicao_reconhece_export_sem_sufixo_imposicao(
+    def test_poll_imposicao_nao_move_pdf_sem_apogee_no_nome(
         self, monkeypatch, tmp_path
     ):
         from services import papelaria_jobs_service as svc
@@ -1936,8 +1936,16 @@ class TestImposicaoJob:
         )
 
         out = svc.poll_imposicao_apogee_result(94)
+        assert out["status"] == "waiting_apogee"
+        assert src.exists()
+
+        # «Apogee» no meio do nome é reconhecido e movido.
+        src2 = sefoc / "Teste-Apogee-10Up.pdf"
+        src2.write_bytes(b"%PDF-export")
+        out = svc.poll_imposicao_apogee_result(94)
         assert out["status"] == "ready"
-        assert not src.exists()
+        assert not src2.exists()
+        assert src.exists()
         dest = sefoc / "Digital" / "05954-Teste_Digit_10Up_210x297.pdf"
         assert dest.is_file()
         assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_10Up_210x297.pdf"
@@ -2079,10 +2087,20 @@ class TestImposicaoJob:
         found = svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="X")
         assert found == str(apogee)
 
-        legado = sefoc / "Y_Imposição.pdf"
-        legado.write_bytes(b"%PDF-legado")
-        found_legado = svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="Y")
-        assert found_legado == str(legado)
+        # Sem «Apogee» no nome não é resultado do Apogee.
+        apogee.unlink()
+        (sefoc / "Y_Imposição.pdf").write_bytes(b"%PDF-legado")
+        (sefoc / "Y.pdf").write_bytes(b"%PDF-stem")
+        assert svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="Y") is None
+
+        # «Apogee» em qualquer posição do nome.
+        meio = sefoc / "Y-Apogee-2Up.pdf"
+        meio.write_bytes(b"%PDF-meio")
+        assert svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="Y") == str(meio)
+        meio.unlink()
+        inicio = sefoc / "apogee_Y.pdf"
+        inicio.write_bytes(b"%PDF-inicio")
+        assert svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="Y") == str(inicio)
 
     def test_poll_offset_nao_move_imposicao_gang(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc

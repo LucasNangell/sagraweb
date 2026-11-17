@@ -884,6 +884,13 @@ def build_apogee_passthrough_jdf_xml(
 
 MARCAS_OP_PLACEHOLDER = "0000-0000-0000-0000_SM74"
 
+# Fonte do TxtOPs nos PDFs de marcas (Arial Bold).
+_MARCAS_OP_FONT_CANDIDATES = (
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\ARIALBD.TTF",
+    r"C:\Windows\Fonts\Arialbd.ttf",
+)
+
 
 def format_marcas_op_token(nros: list[int]) -> str:
     """NUMOP1-NUMOP2-…-NUMOPN_SM74 (números com 5 dígitos)."""
@@ -891,6 +898,28 @@ def format_marcas_op_token(nros: list[int]) -> str:
     if not parts:
         raise ValueError("Nenhuma OP para o PDF de marcas.")
     return f"{'-'.join(parts)}_SM74"
+
+
+def _pdf_color_to_rgb(color: Any) -> tuple[float, float, float]:
+    if isinstance(color, (tuple, list)) and len(color) >= 3:
+        vals = [float(c) for c in color[:3]]
+        if max(vals) > 1.0:
+            return vals[0] / 255.0, vals[1] / 255.0, vals[2] / 255.0
+        return vals[0], vals[1], vals[2]
+    try:
+        c = int(color or 0)
+    except (TypeError, ValueError):
+        return 0.0, 0.0, 0.0
+    return ((c >> 16) & 255) / 255.0, ((c >> 8) & 255) / 255.0, (c & 255) / 255.0
+
+
+def _load_marcas_op_font():
+    import fitz  # pymupdf
+
+    for path in _MARCAS_OP_FONT_CANDIDATES:
+        if os.path.isfile(path):
+            return fitz.Font(fontfile=path)
+    return fitz.Font("helv")
 
 
 def prepare_marcas_pdf_with_ops(
@@ -902,8 +931,11 @@ def prepare_marcas_pdf_with_ops(
 ) -> str:
     """
     Copia o PDF de marcas e substitui o placeholder TxtOPs pelo token das OPs.
-    Retorna o caminho absoluto do PDF gerado.
+
+    Preserva fonte (Arial Bold), tamanho, cor e rotação (texto da esquerda a 180°).
     """
+    import math
+
     import fitz  # pymupdf
 
     src = os.path.normpath((source_pdf_path or "").strip())
@@ -912,6 +944,7 @@ def prepare_marcas_pdf_with_ops(
     token = format_marcas_op_token(nros)
     dest = os.path.normpath(output_pdf_path)
     os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    font = _load_marcas_op_font()
 
     doc = fitz.open(src)
     try:
@@ -920,28 +953,82 @@ def prepare_marcas_pdf_with_ops(
             hits = page.search_for(placeholder)
             if not hits:
                 continue
-            # Tamanho de fonte aproximado a partir do texto da página.
-            fontsize = 16.0
+
+            # Metadados do span original (fonte/cor/direção) por sobreposição.
+            span_meta: list[dict[str, Any]] = []
             for block in page.get_text("dict").get("blocks", []):
                 if block.get("type") != 0:
                     continue
                 for line in block.get("lines", []):
+                    direction = line.get("dir") or (1.0, 0.0)
                     for span in line.get("spans", []):
-                        if placeholder in (span.get("text") or ""):
-                            fontsize = float(span.get("size") or fontsize)
-                            break
-            for rect in hits:
-                page.add_redact_annot(
-                    rect,
-                    text=token,
-                    fontsize=fontsize,
-                    fontname="helv",
-                    align=fitz.TEXT_ALIGN_LEFT,
-                    fill=(1, 1, 1),
-                    text_color=(0, 0, 0),
+                        text = span.get("text") or ""
+                        if placeholder not in text:
+                            continue
+                        span_meta.append(
+                            {
+                                "rect": fitz.Rect(span["bbox"]),
+                                "fontsize": float(span.get("size") or 16.22),
+                                "color": span.get("color") or 0,
+                                "dir": (
+                                    float(direction[0]),
+                                    float(direction[1]),
+                                ),
+                            }
+                        )
+
+            inserts: list[dict[str, Any]] = []
+            for hit in hits:
+                hit_rect = fitz.Rect(hit)
+                meta = None
+                best = None
+                for m in span_meta:
+                    inter = abs(hit_rect & m["rect"])
+                    if inter <= 0:
+                        continue
+                    if best is None or inter > best:
+                        best = inter
+                        meta = m
+                fontsize = float((meta or {}).get("fontsize") or 16.22)
+                color = (meta or {}).get("color") or 0
+                direction = (meta or {}).get("dir") or (1.0, 0.0)
+                inserts.append(
+                    {
+                        "rect": hit_rect,
+                        "fontsize": fontsize,
+                        "color": color,
+                        "dir": direction,
+                    }
                 )
+                # Redação só apaga o placeholder; texto novo é desenhado depois.
+                page.add_redact_annot(hit_rect, fill=(1, 1, 1))
                 replaced += 1
-            page.apply_redactions()
+
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+            for item in inserts:
+                rect = item["rect"]
+                fontsize = item["fontsize"]
+                rgb = _pdf_color_to_rgb(item["color"])
+                dx, dy = item["dir"]
+                angle = math.degrees(math.atan2(dy, dx))
+                tw = fitz.TextWriter(page.rect)
+                # Baseline no canto inferior-esquerdo da caixa do placeholder.
+                pos = fitz.Point(rect.x0, rect.y1 - max(0.5, fontsize * 0.12))
+                tw.append(pos, token, font=font, fontsize=fontsize)
+                if abs(angle) < 1.0:
+                    tw.write_text(page, color=rgb)
+                else:
+                    pivot = fitz.Point(
+                        (rect.x0 + rect.x1) / 2.0,
+                        (rect.y0 + rect.y1) / 2.0,
+                    )
+                    tw.write_text(
+                        page,
+                        color=rgb,
+                        morph=(pivot, fitz.Matrix(angle)),
+                    )
+
         if replaced < 1:
             raise ValueError(
                 f"Placeholder {placeholder!r} não encontrado no PDF de marcas."

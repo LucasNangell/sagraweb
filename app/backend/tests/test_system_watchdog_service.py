@@ -441,7 +441,9 @@ def test_recovery_request_validation(tmp_path: Path):
     assert watchdog.read_sync_recovery_request(tmp_path / "missing.json", now.timestamp(), 600) is None
 
 
-def test_monitor_request_restarts_healthy_sync_once(tmp_path: Path, monkeypatch):
+def test_count_divergence_request_ignored_when_heartbeat_healthy(
+    tmp_path: Path, monkeypatch
+):
     config = make_config(tmp_path, failure_threshold=2)
     sync_root = tmp_path / "sync"
     monkeypatch.setenv("SYSTEM_WATCHDOG_SYNC_ROOT", str(sync_root))
@@ -463,16 +465,24 @@ def test_monitor_request_restarts_healthy_sync_once(tmp_path: Path, monkeypatch)
     base = time.time() + 1
 
     first = service.run_once(now=base)
-    assert first["sync"]["recovery"]["phase"] == "confirming_failure"
+    assert first["sync"]["recovery"]["phase"] == "data_dependency"
+    assert first["sync"]["recovery"]["attempted"] is False
     second = service.run_once(now=base + 20)
-    assert second["sync"]["recovery"]["attempted"] is True
-    for offset in (200, 400, 590):
-        _write_fresh_heartbeat(sync_root, at=base + offset)
-        service.run_once(now=base + offset)
+    assert second["sync"]["recovery"]["phase"] in {"healthy", "data_dependency"}
+    assert second["sync"]["recovery"]["attempted"] is False
 
-    assert calls == [("SAGRA-SyncAndamentos", False)]
+    assert calls == []
     persisted = json.loads((config.maintenance_file.parent / "system_watchdog_state.json").read_text())
     assert persisted["sync"]["handled_request_id"] == "req1"
+
+
+def test_is_count_divergence_recovery_request():
+    assert watchdog.is_count_divergence_recovery_request(
+        {"reason": "divergencia persistente mdb=15 mysql=14"}
+    )
+    assert not watchdog.is_count_divergence_recovery_request(
+        {"reason": "heartbeat stale"}
+    )
 
 
 def test_monitor_request_ignored_during_maintenance(tmp_path: Path, monkeypatch):

@@ -800,6 +800,18 @@ def read_sync_recovery_request(path: Path, now: float, ttl_seconds: int) -> Opti
     }
 
 
+def is_count_divergence_recovery_request(request: Optional[Dict[str, Any]]) -> bool:
+    """
+    Pedidos legados do monitor por COUNT divergente nao devem reiniciar o sync
+    nem consumir o circuit breaker: o sync cura lag sozinho; processo morto
+    ja e coberto pelo heartbeat.
+    """
+    if not isinstance(request, dict):
+        return False
+    reason = str(request.get("reason") or "").lower()
+    return "divergencia" in reason or "divergência" in reason
+
+
 def maintenance_status(path: Path, now: float, max_age_seconds: int) -> Dict[str, Any]:
     if not path.is_file():
         return {"active": False, "stale": False, "age_seconds": None, "reason": None}
@@ -987,7 +999,36 @@ class SystemWatchdog:
             heartbeat = probe_sync_heartbeat(
                 heartbeat_path, now, self.config.sync_stale_seconds
             )
-            if heartbeat["healthy"] and pending_request:
+            if (
+                heartbeat["healthy"]
+                and pending_request
+                and is_count_divergence_recovery_request(pending_request)
+            ):
+                # Lag/COUNT: nao reinicia; marca como tratado para nao reprocessar.
+                # Em manutenção, a fase permanece maintenance (sem ação).
+                sync_state.handled_request_id = pending_request["id"]
+                if maintenance["active"]:
+                    sync_state.consecutive_failures = 0
+                    sync_recovery = {
+                        "phase": "maintenance",
+                        "attempted": False,
+                        "ok": None,
+                    }
+                else:
+                    note_healthy(self._states["sync"], now)
+                    sync_recovery = {
+                        "phase": "data_dependency",
+                        "attempted": False,
+                        "ok": None,
+                        "detail": pending_request["reason"],
+                    }
+                    self.log.info(
+                        "SYNC_DATA_DEPENDENCY ignorando recovery_request id=%s reason=%s",
+                        pending_request["id"],
+                        pending_request["reason"],
+                    )
+                pending_request = None
+            elif heartbeat["healthy"] and pending_request:
                 sync_recovery = self._recover(
                     "sync",
                     f"pedido do monitor: {pending_request['reason']}",

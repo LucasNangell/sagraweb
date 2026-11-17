@@ -603,11 +603,33 @@ function ServiceCard({
         </dl>
       ) : null}
       {service?.mdb_count != null || service?.mysql_count != null ? (
-        <p className="mt-2 text-[11px] text-slate-600">
-          Contagem andamentos (monitor): MDB {service.mdb_count ?? "—"} / MySQL{" "}
-          {service.mysql_count ?? "—"}
-          {service.data_stale ? " — divergência" : ""}
-        </p>
+        <div className="mt-2 space-y-1 text-[11px] text-slate-600">
+          <p>
+            Contagem andamentos (monitor): MDB {service.mdb_count ?? "—"} / MySQL{" "}
+            {service.mysql_count ?? "—"}
+            {service.data_stale
+              ? " — divergência travada"
+              : service.data_lagging
+                ? " — lag em recuperação"
+                : ""}
+          </p>
+          {service.sample &&
+          ((service.sample.only_mdb?.length ?? 0) > 0 ||
+            (service.sample.only_mysql?.length ?? 0) > 0) ? (
+            <p className="break-all text-slate-500">
+              Amostra CodStatus
+              {service.sample.only_mdb_count
+                ? ` só-MDB(${service.sample.only_mdb_count}): ${(service.sample.only_mdb ?? []).slice(0, 5).join(", ")}`
+                : ""}
+              {service.sample.only_mdb_count && service.sample.only_mysql_count
+                ? " | "
+                : ""}
+              {service.sample.only_mysql_count
+                ? ` só-MySQL(${service.sample.only_mysql_count}): ${(service.sample.only_mysql ?? []).slice(0, 5).join(", ")}`
+                : ""}
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

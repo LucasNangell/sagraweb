@@ -346,6 +346,11 @@ def _empty_cycle_stats() -> Dict[str, int]:
         "ultimo_heals": 0,
         "safety_lock_aborts": 0,
         "mysql_only_remaining": 0,
+        "mdb_only_remaining": 0,
+        "skipped_tombstone": 0,
+        "skipped_deleted_os": 0,
+        "skipped_excluido": 0,
+        "row_errors": 0,
         "conflitos": 0,
         "baseline_rows": 0,
         "os_del_candidates": 0,
@@ -2317,8 +2322,10 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
             self._hb.mark_progress("inserts_m2y")
             novos_no_mdb = mdb_all_codes - mysql_codes
+            self._cycle_stats["mdb_only_remaining"] = len(novos_no_mdb)
             for code in novos_no_mdb:
                 if code in excluidos_mysql:
+                    self._cycle_stats["skipped_excluido"] += 1
                     self._svc_log.info(
                         "[M2Y] skip CodStatus=%s motivo=excluido_mysql", code
                     )
@@ -2336,7 +2343,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                             and_ = a
                             origem = "Papelaria"
                             break
-                if and_:
+                if not and_:
+                    continue
+                try:
                     self.sync_os_data_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"], origem
                     )
@@ -2345,11 +2354,19 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         continue
                     self._mark_baseline(code, self._payload_hash(and_))
                     self._cycle_stats["ins_m2y"] += 1
+                    self._cycle_stats["mdb_only_remaining"] = max(
+                        0, self._cycle_stats["mdb_only_remaining"] - 1
+                    )
                     touched_os.add(
                         (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
                     )
                     self.ensure_mysql_ultimo_status_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
+                    )
+                except Exception as e:
+                    self._cycle_stats["row_errors"] += 1
+                    self._svc_log.warning(
+                        "[M2Y] falha CodStatus=%s: %s — ciclo segue", code, e
                     )
 
             if bidi:
@@ -2357,11 +2374,13 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 novos_no_mysql = mysql_codes - mdb_all_codes
                 for code in novos_no_mysql:
                     if code in excluidos:
+                        self._cycle_stats["skipped_excluido"] += 1
                         self._svc_log.info(
                             "[CATCHUP] skip CodStatus=%s motivo=excluido", code
                         )
                         continue
                     if self.is_deleted(code):
+                        self._cycle_stats["skipped_tombstone"] += 1
                         self._svc_log.info(
                             "[CATCHUP] skip CodStatus=%s motivo=tombstone", code
                         )
@@ -2372,6 +2391,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     nro = and_["NroProtocoloLink"]
                     ano = and_["AnoProtocoloLink"]
                     if self.is_os_deleted(nro, ano):
+                        self._cycle_stats["skipped_deleted_os"] += 1
                         self._svc_log.info(
                             "[CATCHUP] skip CodStatus=%s motivo=deleted_os", code
                         )
@@ -2392,8 +2412,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         )
                         self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
                     except Exception as e:
+                        self._cycle_stats["row_errors"] += 1
                         self._svc_log.warning(
-                            "[CATCHUP] falha MySQL->MDB CodStatus=%s: %s", code, e
+                            "[CATCHUP] falha MySQL->MDB CodStatus=%s: %s — ciclo segue",
+                            code,
+                            e,
                         )
 
                 remaining = len(mysql_codes - mdb_all_codes) - self._cycle_stats["ins_y2m"]
@@ -2434,28 +2457,42 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     self._mark_baseline(code, self._payload_hash(mdb_rec))
                     continue
 
-                if bidi and direction == "mysql":
-                    mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
-                    destino = self.conn_mgr.get_mdb_name_by_nro(nro)
-                    self.update_mdb(mysql_rec, mdb_conn, destino)
-                    self._mark_baseline(code, self._payload_hash(mysql_rec))
-                    self._cycle_stats["upd_y2m"] += 1
-                    self._svc_log.info(
-                        "[BI] UPDATE MySQL->MDB CodStatus=%s OS=%s/%s", code, nro, ano
-                    )
-                else:
-                    self.sync_os_data_from_mdb(nro, ano, origem)
-                    self.update_mysql(mdb_rec, origem)
-                    self._mark_baseline(code, self._payload_hash(mdb_rec))
-                    self._cycle_stats["upd_m2y"] += 1
+                try:
+                    if bidi and direction == "mysql":
+                        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+                        destino = self.conn_mgr.get_mdb_name_by_nro(nro)
+                        self.update_mdb(mysql_rec, mdb_conn, destino)
+                        self._mark_baseline(code, self._payload_hash(mysql_rec))
+                        self._cycle_stats["upd_y2m"] += 1
+                        self._svc_log.info(
+                            "[BI] UPDATE MySQL->MDB CodStatus=%s OS=%s/%s",
+                            code,
+                            nro,
+                            ano,
+                        )
+                    else:
+                        self.sync_os_data_from_mdb(nro, ano, origem)
+                        self.update_mysql(mdb_rec, origem)
+                        self._mark_baseline(code, self._payload_hash(mdb_rec))
+                        self._cycle_stats["upd_m2y"] += 1
 
-                self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
+                    self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
+                except Exception as e:
+                    self._cycle_stats["row_errors"] += 1
+                    self._svc_log.warning(
+                        "[UPDATE] falha CodStatus=%s dir=%s: %s — ciclo segue",
+                        code,
+                        direction,
+                        e,
+                    )
 
             self._hb.mark_progress("deletes")
             if excluidos:
                 for code in excluidos:
                     and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
-                    if and_:
+                    if not and_:
+                        continue
+                    try:
                         self.delete_mysql(code, and_)
                         self._forget_baseline(code)
                         self._cycle_stats["del_y"] += 1
@@ -2464,6 +2501,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         )
                         self.ensure_mysql_ultimo_status_from_mdb(
                             and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
+                        )
+                    except Exception as e:
+                        self._cycle_stats["row_errors"] += 1
+                        self._svc_log.warning(
+                            "[DEL_Y] falha CodStatus=%s: %s — ciclo segue", code, e
                         )
 
             if excluidos_mysql and SYNC_ALLOW_MDB_DELETE:
@@ -2502,8 +2544,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                             and_["AnoProtocoloLink"],
                         )
                     except Exception as e:
+                        self._cycle_stats["row_errors"] += 1
                         self._svc_log.warning(
-                            "[BI] falha DELETE MDB CodStatus=%s: %s", code, e
+                            "[BI] falha DELETE MDB CodStatus=%s: %s — ciclo segue",
+                            code,
+                            e,
                         )
 
             # Exclusão segura de OS (Protocolos/Detalhes + andamentos)

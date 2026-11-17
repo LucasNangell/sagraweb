@@ -1,20 +1,17 @@
 """
 SAGRA — Monitor de divergência MDB ↔ MySQL (somente leitura)
 ============================================================
-Compara COUNT(CodStatus) de tabandamento (últimos 10 dias) nos MDBs
-OS Atual + Papelaria Atual versus MySQL.
+Compara COUNT(CodStatus) de tabandamento (últimos N dias, alinhado ao sync)
+nos MDBs OS Atual + Papelaria Atual versus MySQL.
 
-Se a diferença persistir >30s → pede recuperação ao SAGRA-SystemWatchdog
-(campo recovery_request do JSON de status), que é a única autoridade sobre o
-serviço. Sem o SystemWatchdog em execução, reinicia SAGRA-SyncAndamentos
-diretamente (start/restart verificado, nunca stop às cegas).
-Se após 60s do restart a divergência continuar → grava alert=true no JSON
-lido pela API (header vermelho no sistema / painel setor).
+Lag operacional (contagens avançando / gap fechando) é esperado: o sync cura
+sozinho. Este monitor **não reinicia** o Sync por divergência de COUNT.
 
-Divergência só conta com o sync Running, heartbeat fresco há mais de 90s e
-fora do lock de manutenção: sync parado é assunto do SAGRA-SystemWatchdog.
+Se as contagens ficam congeladas e desiguais por tempo suficiente → amostra
+CodStatus só-MDB/só-MySQL e grava alert=true (API alerta o admin).
 
-Nunca altera dados em Access nem MySQL (apenas SELECT/COUNT).
+Sync parado / heartbeat morto continua sendo responsabilidade do
+SAGRA-SystemWatchdog. Nunca altera dados em Access nem MySQL (SELECT/COUNT).
 """
 
 from __future__ import annotations
@@ -27,12 +24,11 @@ import signal
 import sys
 import threading
 import time
-import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # Bootstrap de path
@@ -63,14 +59,23 @@ SYNC_LOG_MAX_BYTES = int(os.getenv("SYNC_LOG_MAX_BYTES", str(10 * 1024 * 1024)))
 SYNC_LOG_BACKUP_COUNT = int(os.getenv("SYNC_LOG_BACKUP_COUNT", "5"))
 
 MONITOR_POLL_SECONDS = float(os.getenv("MONITOR_SYNC_POLL_SECONDS", "10"))
-MONITOR_DAYS = int(os.getenv("MONITOR_SYNC_DAYS", "10"))
+# Default 15 = dias_monitoramento do sync (evita falso positivo na borda da janela).
+MONITOR_DAYS = int(os.getenv("MONITOR_SYNC_DAYS", "15"))
+# Tempo com contagens congeladas (sem progresso de cura) antes de virar candidato a stuck.
 MONITOR_DIVERGE_SECONDS = float(os.getenv("MONITOR_SYNC_DIVERGE_SECONDS", "30"))
-# Divergência contínua acima deste limite pede recuperação mesmo com o MySQL
-# avançando (contagens que nunca se igualam por chegada constante de registros).
-MONITOR_DIVERGE_MAX_SECONDS = float(os.getenv("MONITOR_SYNC_DIVERGE_MAX_SECONDS", "300"))
+# Tempo sem progresso de cura com COUNT desigual → alerta admin (sem restart).
+MONITOR_STUCK_SECONDS = float(
+    os.getenv(
+        "MONITOR_SYNC_STUCK_SECONDS",
+        os.getenv("MONITOR_SYNC_DIVERGE_MAX_SECONDS", "300"),
+    )
+)
+# Alias legado (runbooks/testes antigos).
+MONITOR_DIVERGE_MAX_SECONDS = MONITOR_STUCK_SECONDS
 MONITOR_ALERT_AFTER_RESTART_SECONDS = float(
     os.getenv("MONITOR_SYNC_ALERT_AFTER_RESTART_SECONDS", "60")
 )
+MONITOR_SAMPLE_LIMIT = int(os.getenv("MONITOR_SYNC_SAMPLE_LIMIT", "20"))
 MONITOR_CONNECT_TIMEOUT = int(os.getenv("MONITOR_SYNC_CONNECT_TIMEOUT", "30"))
 MONITOR_QUERY_TIMEOUT = int(os.getenv("MONITOR_SYNC_QUERY_TIMEOUT", "60"))
 MONITOR_SYNC_READY_GRACE_SECONDS = float(
@@ -85,11 +90,13 @@ STATUS_FILENAME = "sync_divergencia_monitor.json"
 HEARTBEAT_FILENAME = "sync_heartbeat.json"
 STATUS_PHASE_IDLE = "idle"
 STATUS_PHASE_DIVERGED = "diverged"
-STATUS_PHASE_RESTARTED = "restarted"
+STATUS_PHASE_STUCK_CANDIDATE = "stuck_candidate"
 STATUS_PHASE_ALERTING = "alerting"
 STATUS_PHASE_READ_ERROR = "read_error"
 STATUS_PHASE_WAITING_SYNC = "waiting_sync"
 STATUS_PHASE_MAINTENANCE = "maintenance"
+# Legado: episódios antigos / JSON; não é mais emitido pela máquina de estados.
+STATUS_PHASE_RESTARTED = "restarted"
 
 
 # ===========================================================================
@@ -101,30 +108,59 @@ STATUS_PHASE_MAINTENANCE = "maintenance"
 class MonitorState:
     phase: str = STATUS_PHASE_IDLE
     first_diverged_mono: Optional[float] = None
-    restarted_mono: Optional[float] = None
+    stuck_since_mono: Optional[float] = None
     alert_active: bool = False
+    # Últimas contagens observadas (para detectar progresso de cura).
+    last_seen_mdb: Optional[int] = None
+    last_seen_mysql: Optional[int] = None
+    # Campos legados mantidos para testes/JSON antigos (sempre False/None na nova máquina).
+    restarted_mono: Optional[float] = None
     restart_done_this_episode: bool = False
-    # Contagens no início da janela atual e início da divergência contínua.
     diverged_mdb: Optional[int] = None
     diverged_mysql: Optional[int] = None
     episode_origin_mono: Optional[float] = None
 
 
+def _healing_progress(
+    prev_mdb: Optional[int],
+    prev_mysql: Optional[int],
+    mdb_total: Optional[int],
+    mysql_total: Optional[int],
+) -> bool:
+    """True se o gap fecha ou o lado atrasado avança (lag saudável sob carga)."""
+    if None in (prev_mdb, prev_mysql, mdb_total, mysql_total):
+        return False
+    prev_delta = abs(prev_mdb - prev_mysql)
+    new_delta = abs(mdb_total - mysql_total)
+    if new_delta < prev_delta:
+        return True
+    if prev_mdb > prev_mysql:
+        return mysql_total > prev_mysql
+    if prev_mysql > prev_mdb:
+        return mdb_total > prev_mdb or mysql_total < prev_mysql
+    return False
+
+
 def _mysql_caught_up(
     state: MonitorState, mdb_total: Optional[int], mysql_total: Optional[int]
 ) -> bool:
-    """MySQL alcançou a contagem do MDB vista no início da janela: o sync avança."""
-    if None in (state.diverged_mdb, state.diverged_mysql, mdb_total, mysql_total):
+    """Compat: MySQL alcançou a contagem do MDB vista no início da janela."""
+    baseline_mdb = state.diverged_mdb if state.diverged_mdb is not None else state.last_seen_mdb
+    baseline_mysql = (
+        state.diverged_mysql if state.diverged_mysql is not None else state.last_seen_mysql
+    )
+    if None in (baseline_mdb, baseline_mysql, mdb_total, mysql_total):
         return False
-    if state.diverged_mdb > state.diverged_mysql:
-        return mysql_total >= state.diverged_mdb
-    return mysql_total <= state.diverged_mdb
+    if baseline_mdb > baseline_mysql:
+        return mysql_total >= baseline_mdb
+    return mysql_total <= baseline_mdb
 
 
 @dataclass
 class TickResult:
     state: MonitorState
-    should_restart: bool = False
+    should_restart: bool = False  # sempre False — restart por COUNT foi descontinuado
+    should_sample: bool = False
 
 
 def tick_monitor(
@@ -136,7 +172,8 @@ def tick_monitor(
     alert_after_restart_seconds: float = MONITOR_ALERT_AFTER_RESTART_SECONDS,
     mdb_total: Optional[int] = None,
     mysql_total: Optional[int] = None,
-    diverge_max_seconds: float = MONITOR_DIVERGE_MAX_SECONDS,
+    diverge_max_seconds: float = MONITOR_STUCK_SECONDS,
+    stuck_seconds: Optional[float] = None,
 ) -> TickResult:
     """
     Avança a máquina de estados.
@@ -144,113 +181,98 @@ def tick_monitor(
     counts_equal:
       - True  → contagens iguais (recupera)
       - False → divergente
-      - None  → falha de leitura (não reinicia / não alerta dados)
+      - None  → falha de leitura (não alerta dados)
 
-    Com mdb_total/mysql_total, a janela de divergência recomeça sempre que o
-    MySQL alcança a contagem do MDB do início da janela (sync com atraso, mas
-    avançando). Divergência contínua por diverge_max_seconds pede recuperação
-    mesmo assim.
+    Lag com progresso de cura (gap fechando / lado atrasado avançando) permanece
+    em phase=diverged sem alerta e sem restart. Contagens congeladas e desiguais
+    por stuck_seconds → alert=true + should_sample (admin), sem pedir restart.
+
+    alert_after_restart_seconds é ignorado (legado). diverge_max_seconds é alias
+    de stuck_seconds quando stuck_seconds não é passado.
     """
+    del alert_after_restart_seconds  # legado
+    stuck_limit = diverge_max_seconds if stuck_seconds is None else stuck_seconds
+
     if counts_equal is None:
-        # Mantém episódio em curso; só marca fase de erro de leitura se estava idle.
         if state.phase == STATUS_PHASE_IDLE:
             return TickResult(state=replace(state, phase=STATUS_PHASE_READ_ERROR))
         return TickResult(state=state)
 
     if counts_equal:
-        return TickResult(
-            state=MonitorState(
-                phase=STATUS_PHASE_IDLE,
-                first_diverged_mono=None,
-                restarted_mono=None,
-                alert_active=False,
-                restart_done_this_episode=False,
-            )
-        )
+        return TickResult(state=MonitorState(phase=STATUS_PHASE_IDLE))
 
-    # Divergente
+    # Divergente — primeira observação (já inicia o relógio de stuck).
     if state.first_diverged_mono is None:
         return TickResult(
             state=MonitorState(
                 phase=STATUS_PHASE_DIVERGED,
                 first_diverged_mono=now_mono,
+                stuck_since_mono=now_mono,
+                last_seen_mdb=mdb_total,
+                last_seen_mysql=mysql_total,
                 diverged_mdb=mdb_total,
                 diverged_mysql=mysql_total,
                 episode_origin_mono=now_mono,
             )
         )
 
-    origin = (
-        state.first_diverged_mono
-        if state.episode_origin_mono is None
-        else state.episode_origin_mono
+    healing = _healing_progress(
+        state.last_seen_mdb, state.last_seen_mysql, mdb_total, mysql_total
     )
-    max_exceeded = now_mono - origin >= diverge_max_seconds
-
-    if _mysql_caught_up(state, mdb_total, mysql_total):
-        # Sync avançando: nova janela; alerta e pedido anterior deixam de valer.
-        if not max_exceeded:
-            return TickResult(
-                state=MonitorState(
-                    phase=STATUS_PHASE_DIVERGED,
-                    first_diverged_mono=now_mono,
-                    diverged_mdb=mdb_total,
-                    diverged_mysql=mysql_total,
-                    episode_origin_mono=origin,
-                )
-            )
-        state = replace(
-            state,
-            first_diverged_mono=now_mono,
-            diverged_mdb=mdb_total,
-            diverged_mysql=mysql_total,
-            restarted_mono=None,
-            alert_active=False,
-            restart_done_this_episode=False,
-        )
-
-    elapsed_diverge = now_mono - state.first_diverged_mono
-    window = {
-        "first_diverged_mono": state.first_diverged_mono,
-        "diverged_mdb": state.diverged_mdb,
-        "diverged_mysql": state.diverged_mysql,
-    }
-
-    if not state.restart_done_this_episode and (
-        elapsed_diverge >= diverge_seconds or max_exceeded
-    ):
+    if healing:
         return TickResult(
             state=MonitorState(
-                phase=STATUS_PHASE_RESTARTED,
-                restarted_mono=now_mono,
-                restart_done_this_episode=True,
-                # O limite de divergência contínua volta a contar do pedido.
-                episode_origin_mono=now_mono,
-                **window,
+                phase=STATUS_PHASE_DIVERGED,
+                first_diverged_mono=state.first_diverged_mono,
+                stuck_since_mono=now_mono,  # novo gap sob carga: relógio recomeça
+                alert_active=False,
+                last_seen_mdb=mdb_total,
+                last_seen_mysql=mysql_total,
+                diverged_mdb=mdb_total,
+                diverged_mysql=mysql_total,
+                episode_origin_mono=state.episode_origin_mono or state.first_diverged_mono,
+            )
+        )
+
+    stuck_since = (
+        state.stuck_since_mono
+        if state.stuck_since_mono is not None
+        else state.first_diverged_mono
+    )
+    elapsed_stuck = now_mono - stuck_since
+
+    base = MonitorState(
+        first_diverged_mono=state.first_diverged_mono,
+        stuck_since_mono=stuck_since,
+        last_seen_mdb=mdb_total if mdb_total is not None else state.last_seen_mdb,
+        last_seen_mysql=mysql_total if mysql_total is not None else state.last_seen_mysql,
+        diverged_mdb=state.diverged_mdb,
+        diverged_mysql=state.diverged_mysql,
+        episode_origin_mono=state.episode_origin_mono or state.first_diverged_mono,
+    )
+
+    if elapsed_stuck >= stuck_limit:
+        return TickResult(
+            state=replace(
+                base,
+                phase=STATUS_PHASE_ALERTING,
+                alert_active=True,
             ),
-            should_restart=True,
+            should_sample=True,
         )
 
-    if state.restart_done_this_episode and state.restarted_mono is not None:
-        elapsed_after = now_mono - state.restarted_mono
-        alerting = elapsed_after >= alert_after_restart_seconds
+    if elapsed_stuck >= diverge_seconds:
         return TickResult(
-            state=MonitorState(
-                phase=STATUS_PHASE_ALERTING if alerting else STATUS_PHASE_RESTARTED,
-                restarted_mono=state.restarted_mono,
-                alert_active=alerting,
-                restart_done_this_episode=True,
-                episode_origin_mono=origin,
-                **window,
-            )
+            state=replace(
+                base,
+                phase=STATUS_PHASE_STUCK_CANDIDATE,
+                alert_active=False,
+            ),
+            should_sample=True,
         )
 
     return TickResult(
-        state=MonitorState(
-            phase=STATUS_PHASE_DIVERGED,
-            episode_origin_mono=origin,
-            **window,
-        )
+        state=replace(base, phase=STATUS_PHASE_DIVERGED, alert_active=False)
     )
 
 
@@ -308,11 +330,10 @@ def sync_gate_reason(
 
 def hold_episode(state: MonitorState, now_mono: float) -> MonitorState:
     """
-    Sync indisponível: o episódio não avança. Sem restart pendente, recomeça do
-    zero; com restart já feito, a janela de alerta volta a contar do retorno.
+    Sync indisponível: o episódio de divergência de dados não avança.
+    Reinicia do zero ao retornar (watchdog cuida de processo morto).
     """
-    if state.restart_done_this_episode:
-        return replace(state, restarted_mono=now_mono)
+    del state, now_mono
     return MonitorState()
 
 
@@ -425,6 +446,22 @@ WHERE `Data` >= %s
 
 _COUNT_SQL_MDB = """
 SELECT COUNT(*) AS cnt
+FROM tabandamento
+WHERE Data >= ?
+  AND CodStatus IS NOT NULL
+  AND AnoProtocoloLink >= 2024
+"""
+
+_CODES_SQL_MYSQL = """
+SELECT CodStatus AS code
+FROM `{table}`
+WHERE `Data` >= %s
+  AND CodStatus IS NOT NULL
+  AND AnoProtocoloLink >= 2024
+"""
+
+_CODES_SQL_MDB = """
+SELECT CodStatus AS code
 FROM tabandamento
 WHERE Data >= ?
   AND CodStatus IS NOT NULL
@@ -594,46 +631,76 @@ class MdbCountSession:
                 _log_mdb_access_hint(path, _resolve_mdb_path(path), self.log)
             return None
 
+    def _run_count(self, conn, data_limite: datetime) -> int:
+        cursor = conn.cursor()
+        cursor.execute(_COUNT_SQL_MDB, (data_limite,))
+        row = cursor.fetchone()
+        cursor.close()
+        return int(row[0] if row else 0)
+
+    def _run_codes(self, conn, data_limite: datetime) -> Set[str]:
+        cursor = conn.cursor()
+        cursor.execute(_CODES_SQL_MDB, (data_limite,))
+        codes: Set[str] = set()
+        for row in cursor.fetchall() or []:
+            value = row[0] if row else None
+            if value is not None and str(value).strip():
+                codes.add(str(value).strip())
+        cursor.close()
+        return codes
+
+    def _invalidate(self, which: str) -> None:
+        if which == "os":
+            try:
+                if self._os:
+                    self._os.close()
+            except Exception:
+                pass
+            self._os = None
+            self._os_path = ""
+        else:
+            try:
+                if self._pap:
+                    self._pap.close()
+            except Exception:
+                pass
+            self._pap = None
+            self._pap_path = ""
+
     def count(self, which: str, path: str, data_limite: datetime) -> Optional[int]:
         conn = self._get(which, path)
         if conn is None:
             return None
         try:
-            cursor = conn.cursor()
-            cursor.execute(_COUNT_SQL_MDB, (data_limite,))
-            row = cursor.fetchone()
-            cursor.close()
-            return int(row[0] if row else 0)
+            return self._run_count(conn, data_limite)
         except Exception as exc:
             self.log.warning("Falha COUNT MDB %s: %s — reconectando", which, exc)
-            if which == "os":
-                try:
-                    if self._os:
-                        self._os.close()
-                except Exception:
-                    pass
-                self._os = None
-                self._os_path = ""
-            else:
-                try:
-                    if self._pap:
-                        self._pap.close()
-                except Exception:
-                    pass
-                self._pap = None
-                self._pap_path = ""
-            # Uma retentativa imediata
+            self._invalidate(which)
             conn2 = self._get(which, path)
             if conn2 is None:
                 return None
             try:
-                cursor = conn2.cursor()
-                cursor.execute(_COUNT_SQL_MDB, (data_limite,))
-                row = cursor.fetchone()
-                cursor.close()
-                return int(row[0] if row else 0)
+                return self._run_count(conn2, data_limite)
             except Exception as exc2:
                 self.log.warning("Falha COUNT MDB %s (retry): %s", which, exc2)
+                return None
+
+    def codes(self, which: str, path: str, data_limite: datetime) -> Optional[Set[str]]:
+        conn = self._get(which, path)
+        if conn is None:
+            return None
+        try:
+            return self._run_codes(conn, data_limite)
+        except Exception as exc:
+            self.log.warning("Falha CODES MDB %s: %s — reconectando", which, exc)
+            self._invalidate(which)
+            conn2 = self._get(which, path)
+            if conn2 is None:
+                return None
+            try:
+                return self._run_codes(conn2, data_limite)
+            except Exception as exc2:
+                self.log.warning("Falha CODES MDB %s (retry): %s", which, exc2)
                 return None
 
 
@@ -657,6 +724,91 @@ def fetch_counts(
     if os_c is None or pap_c is None:
         return os_c, pap_c, None, my_c
     return os_c, pap_c, os_c + pap_c, my_c
+
+
+def list_mysql_codes(
+    mysql_cfg: Dict[str, Any], data_limite: datetime, log: logging.Logger
+) -> Optional[Set[str]]:
+    import mysql.connector
+
+    conn = None
+    try:
+        conn = mysql.connector.connect(
+            host=mysql_cfg["host"],
+            port=int(mysql_cfg.get("port") or 3306),
+            user=mysql_cfg["user"],
+            password=mysql_cfg.get("password") or "",
+            database=mysql_cfg["database"],
+            connection_timeout=MONITOR_CONNECT_TIMEOUT,
+        )
+        cursor = conn.cursor(dictionary=True)
+        table = resolve_andamento_table(cursor)
+        cursor.execute(_CODES_SQL_MYSQL.format(table=table), (data_limite,))
+        codes: Set[str] = set()
+        for row in cursor.fetchall() or []:
+            value = row["code"] if isinstance(row, dict) else row[0]
+            if value is not None and str(value).strip():
+                codes.add(str(value).strip())
+        cursor.close()
+        return codes
+    except Exception as exc:
+        log.warning("Falha CODES MySQL: %s", exc)
+        return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def sample_code_divergence(
+    log: logging.Logger,
+    mdb_session: MdbCountSession,
+    *,
+    limit: int = MONITOR_SAMPLE_LIMIT,
+) -> Dict[str, Any]:
+    """
+    Amostra read-only de CodStatus presentes só de um lado.
+    Não classifica motivo de negócio (tombstone etc.) — só identifica a delta.
+    """
+    from config_manager import config_manager
+
+    empty = {
+        "only_mdb": [],
+        "only_mysql": [],
+        "only_mdb_count": 0,
+        "only_mysql_count": 0,
+        "sample_ok": False,
+        "direction": None,
+    }
+    paths = config_manager.get_mdb_paths()
+    mysql_cfg = config_manager.get_mysql_config()
+    limite = _data_limite()
+    os_codes = mdb_session.codes("os", paths.get("os_atual") or "", limite)
+    pap_codes = mdb_session.codes("pap", paths.get("papelaria") or "", limite)
+    mysql_codes = list_mysql_codes(mysql_cfg, limite, log)
+    if os_codes is None or pap_codes is None or mysql_codes is None:
+        return empty
+    mdb_codes = os_codes | pap_codes
+    only_mdb = sorted(mdb_codes - mysql_codes)
+    only_mysql = sorted(mysql_codes - mdb_codes)
+    if only_mdb and not only_mysql:
+        direction = "mdb_ahead"
+    elif only_mysql and not only_mdb:
+        direction = "mysql_ahead"
+    elif only_mdb or only_mysql:
+        direction = "both"
+    else:
+        direction = "count_only"
+    return {
+        "only_mdb": only_mdb[: max(0, limit)],
+        "only_mysql": only_mysql[: max(0, limit)],
+        "only_mdb_count": len(only_mdb),
+        "only_mysql_count": len(only_mysql),
+        "sample_ok": True,
+        "direction": direction,
+    }
 
 
 # ===========================================================================
@@ -710,7 +862,7 @@ class MonitorLoop:
         self.heartbeat_path = os.path.join(os.path.dirname(status.path), HEARTBEAT_FILENAME)
         self._last_gate: Optional[str] = None
         self._sync_status: Optional[str] = None
-        self._recovery_request: Optional[Dict[str, str]] = None
+        self._last_sample: Optional[Dict[str, Any]] = None
 
     def request_stop(self, *_args) -> None:
         self.log.info("Sinal de parada recebido")
@@ -736,32 +888,6 @@ class MonitorLoop:
             now_epoch=now_epoch,
         )
 
-    def _dispatch_recovery(self, mdb_total: Optional[int], mysql_c: Optional[int]) -> None:
-        reason = f"divergencia persistente mdb={mdb_total} mysql={mysql_c}"
-        watchdog_status = swd.query_windows_service(SYSTEM_WATCHDOG_SERVICE_NAME).get("status")
-        if watchdog_status == "Running":
-            self._recovery_request = {
-                "id": uuid.uuid4().hex,
-                "requested_at": datetime.now(timezone.utc).isoformat(),
-                "reason": reason,
-            }
-            self.log.warning(
-                "%s - pedido de recuperacao %s enviado ao %s",
-                reason,
-                self._recovery_request["id"],
-                SYSTEM_WATCHDOG_SERVICE_NAME,
-            )
-            return
-        self.log.warning(
-            "%s - %s indisponivel (status=%s); reinicio direto de %s",
-            reason,
-            SYSTEM_WATCHDOG_SERVICE_NAME,
-            watchdog_status,
-            SYNC_ANDAMENTOS_SERVICE_NAME,
-        )
-        if not restart_sync_andamentos(self.log):
-            self.log.error("Restart do sync falhou; episódio segue sem novo restart")
-
     def run_once(self, now_mono: Optional[float] = None) -> TickResult:
         now = time.monotonic() if now_mono is None else now_mono
         os_c, pap_c, mdb_total, mysql_c = fetch_counts(self.log, self._mdb)
@@ -777,23 +903,32 @@ class MonitorLoop:
         if gate:
             self.state = hold_episode(self.state, now)
             result = TickResult(state=self.state)
+            self._last_sample = None
         else:
             result = tick_monitor(
                 self.state,
                 counts_equal=equal,
                 now_mono=now,
                 diverge_seconds=MONITOR_DIVERGE_SECONDS,
-                alert_after_restart_seconds=MONITOR_ALERT_AFTER_RESTART_SECONDS,
                 mdb_total=mdb_total,
                 mysql_total=mysql_c,
-                diverge_max_seconds=MONITOR_DIVERGE_MAX_SECONDS,
+                diverge_max_seconds=MONITOR_STUCK_SECONDS,
             )
             self.state = result.state
+            if equal is True:
+                self._last_sample = None
+            elif result.should_sample:
+                try:
+                    self._last_sample = sample_code_divergence(self.log, self._mdb)
+                except Exception as exc:
+                    self.log.warning("Falha ao amostrar CodStatus: %s", exc)
+                    self._last_sample = None
 
-        if result.should_restart:
-            self._dispatch_recovery(mdb_total, mysql_c)
-        if not self.state.restart_done_this_episode:
-            self._recovery_request = None
+        direction = None
+        if mdb_total is not None and mysql_c is not None and mdb_total != mysql_c:
+            direction = "mdb_ahead" if mdb_total > mysql_c else "mysql_ahead"
+        if self._last_sample and self._last_sample.get("direction"):
+            direction = self._last_sample.get("direction")
 
         payload = {
             "phase": gate or self.state.phase,
@@ -806,10 +941,13 @@ class MonitorLoop:
             "count_mysql": mysql_c,
             "days": MONITOR_DAYS,
             "read_ok": equal is not None,
-            "restart_done_this_episode": self.state.restart_done_this_episode,
+            "direction": direction,
+            "sample": self._last_sample,
+            "restart_done_this_episode": False,
             "service_target": SYNC_ANDAMENTOS_SERVICE_NAME,
             "sync_service_status": self._sync_status,
-            "recovery_request": self._recovery_request,
+            # Legado: nunca mais pedimos restart por COUNT (watchdog ignora se aparecer).
+            "recovery_request": None,
         }
         try:
             self.status.write(payload)
@@ -825,23 +963,26 @@ class MonitorLoop:
                 pap_c,
             )
         elif gate is None and equal is False:
+            sample = self._last_sample or {}
             self.log.warning(
-                "DIVERGENTE mdb=%s mysql=%s phase=%s alert=%s",
+                "DIVERGENTE mdb=%s mysql=%s phase=%s alert=%s only_mdb=%s only_mysql=%s",
                 mdb_total,
                 mysql_c,
                 self.state.phase,
                 self.state.alert_active,
+                sample.get("only_mdb_count"),
+                sample.get("only_mysql_count"),
             )
         return result
 
     def run(self) -> int:
         self.log.info(
-            "Monitor iniciado (dias=%s poll=%ss diverge=%ss diverge_max=%ss alert_after=%ss)",
+            "Monitor iniciado (dias=%s poll=%ss grace=%ss stuck=%ss sample_limit=%s; sem restart por COUNT)",
             MONITOR_DAYS,
             MONITOR_POLL_SECONDS,
             MONITOR_DIVERGE_SECONDS,
-            MONITOR_DIVERGE_MAX_SECONDS,
-            MONITOR_ALERT_AFTER_RESTART_SECONDS,
+            MONITOR_STUCK_SECONDS,
+            MONITOR_SAMPLE_LIMIT,
         )
         try:
             while not self._stop.is_set():

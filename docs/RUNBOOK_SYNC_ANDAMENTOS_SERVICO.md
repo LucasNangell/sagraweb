@@ -21,8 +21,9 @@ Cada falha tem **um** responsável. Os demais componentes não agem sobre ela.
 | Processo do Sync morre (crash, exit 17, exit 18) | NSSM | Relança em segundos (`AppExit Restart`, `AppThrottle` 45 s) |
 | Sync `Stopped` sem lock de manutenção | SystemWatchdog | `nssm start` após 3 checagens de 20 s; verifica `Running` e reaplica start se preciso |
 | Sync `Running` com heartbeat parado | SystemWatchdog | `nssm restart` com cooldown 180 s; 3 ações/15 min → circuit breaker 15 min |
-| Divergência MDB × MySQL com Sync saudável | Monitor **detecta**, SystemWatchdog **age** | Monitor grava `recovery_request` em `sync_divergencia_monitor.json`; o SystemWatchdog consome uma vez |
-| Divergência com SystemWatchdog fora do ar | Monitor | Restart direto via nssm (nunca `sc stop`), 1× por episódio |
+| Lag MDB × MySQL com Sync saudável (contagens avançando) | Sync (auto-cura) | Monitor só observa (`phase=diverged`); **não** reinicia |
+| Divergência travada (COUNT congelado / mesmos CodStatus) | Monitor **alerta** admin | `alert=true` + amostra CodStatus; API `DATA_STUCK`; Sync segue ciclando |
+| Pedido legado `recovery_request` de COUNT com heartbeat OK | SystemWatchdog | Ignora (`data_dependency`); não consome circuit breaker |
 | Sync parado ou em transição, ou < 90 s após o start | Ninguém (monitor espera) | Monitor publica `phase=waiting_sync` e não pede ação |
 | Deploy / manutenção (lock em `shared\run\system-watchdog.maintenance`) | Ninguém | SystemWatchdog e monitor ignoram; lock expira em 30 min |
 | Erros `-1812`/`HY001` contínuos no MDB | O próprio Sync | A cada 5 erros descarta conexões MDB; após 120 s de sequência (e ≥ 10 min de vida) sai com 18 |
@@ -258,16 +259,17 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
 
 Serviço complementar **`SAGRA-MonitorSyncAndamentos`** (`monitor_sync_andamentos_service.py`):
 
-- Compara `COUNT(CodStatus)` de `tabandamento` dos últimos **10 dias** (MDB OS + Papelaria vs MySQL).
-- **Não altera** nenhum banco (apenas `SELECT`/`COUNT`).
-- Só conta divergência com o Sync `Running`, heartbeat fresco (< 60 s), > 90 s após o start
+- Compara `COUNT(CodStatus)` de `tabandamento` dos últimos **15 dias** por padrão
+  (`MONITOR_SYNC_DAYS`, alinhado ao `dias_monitoramento` do sync; MDB OS + Papelaria vs MySQL).
+- **Não altera** nenhum banco (apenas `SELECT`/`COUNT`/amostra de CodStatus).
+- Só avalia divergência com o Sync `Running`, heartbeat fresco (< 60 s), > 90 s após o start
   e sem lock de manutenção; fora disso publica `phase=waiting_sync` ou `maintenance`.
-- Divergência persistente **>30s** → grava `recovery_request` no JSON e o SystemWatchdog
-  reinicia o Sync (1× por episódio, com cooldown/circuit breaker). Se o SystemWatchdog não
-  estiver `Running`, o monitor reinicia direto via nssm. Nunca usa `sc stop`.
-- Se após **60s** do restart a divergência continuar → `alert=true` no JSON; a API
-  (`GET /api/sync-andamentos/service-status`) faz OR no `alert` e o header do sistema /
-  painel setor fica vermelho.
+- **Lag saudável** (contagens avançando / gap fechando, típico MDB=MySQL+1 sob carga):
+  `phase=diverged`, **sem** `alert`, **sem** restart. O sync cura sozinho (MDB→MySQL).
+- **Divergência travada** (mesmas contagens desiguais sem progresso por ~30 s →
+  `stuck_candidate`; por ~300 s → `alert=true` + amostra `only_mdb`/`only_mysql` no JSON).
+  A API sobe `DATA_STUCK` para o admin. **Não** pede restart do Sync por COUNT.
+- Processo morto (serviço parado / heartbeat stale) é exclusivo do **SAGRA-SystemWatchdog**.
 - Status com `checked_at` mais antigo que 5 min **não** mantém o alerta de dados.
 - A API lê o mesmo `logs\sync\sync_divergencia_monitor.json` (junction `shared\logs`
   ou `SYNC_LOG_DIR` alinhado ao AppDirectory do monitor).

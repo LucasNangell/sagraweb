@@ -45,8 +45,18 @@ export type SyncServiceCard = {
   alert?: boolean;
   alert_reasons?: SyncAlertReason[];
   data_stale?: boolean;
+  data_lagging?: boolean;
   mdb_count?: number | null;
   mysql_count?: number | null;
+  direction?: string | null;
+  sample?: {
+    only_mdb?: string[];
+    only_mysql?: string[];
+    only_mdb_count?: number;
+    only_mysql_count?: number;
+    sample_ok?: boolean;
+    direction?: string | null;
+  } | null;
   heartbeat?: SyncHeartbeat;
   watchdog?: SyncWatchdogSummary;
 };
@@ -65,11 +75,14 @@ export type SyncAdminStatus = {
   };
   divergencia: {
     data_stale: boolean;
+    data_lagging?: boolean;
     mdb_count: number | null;
     mysql_count: number | null;
     checked_at: string | null;
     status_fresh: boolean;
     phase: string | null;
+    direction?: string | null;
+    sample?: Record<string, unknown> | null;
   };
   policies: SyncPolicyRow[];
   pending_counts: Record<string, number>;

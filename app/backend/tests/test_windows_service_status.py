@@ -310,14 +310,30 @@ class TestConsolidatedAlert:
         assert payload["alert_reasons"] == ["CIRCUIT_OPEN"]
         assert "last_action_detail" not in payload["watchdog"]
 
-    def test_reasons_combine_scm_and_divergence(self):
+    def test_reasons_combine_scm_and_stuck(self):
         payload = build_sync_andamentos_service_status(
             is_development=False,
             query_result={**RUNNING, "status": "Stopped"},
             divergencia={"data_stale": True, "mdb_count": 2, "mysql_count": 1},
             watchdog={"alert_reasons": ["SYNC_DOWN"]},
         )
-        assert payload["alert_reasons"] == ["SCM_NOT_RUNNING", "DATA_DIVERGENCE", "SYNC_DOWN"]
+        assert payload["alert_reasons"] == ["SCM_NOT_RUNNING", "DATA_STUCK", "SYNC_DOWN"]
+
+    def test_lagging_does_not_raise_alert_alone(self):
+        payload = build_sync_andamentos_service_status(
+            is_development=False,
+            query_result=RUNNING,
+            divergencia={
+                "data_stale": False,
+                "data_lagging": True,
+                "mdb_count": 10,
+                "mysql_count": 9,
+            },
+            watchdog={"alert_reasons": []},
+        )
+        assert payload["alert"] is False
+        assert payload["data_lagging"] is True
+        assert payload["alert_reasons"] == []
 
     def test_watchdog_reasons_ignored_in_development(self):
         payload = build_sync_andamentos_service_status(

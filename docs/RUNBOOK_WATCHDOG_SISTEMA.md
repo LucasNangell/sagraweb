@@ -22,7 +22,12 @@ corrige falhas de MySQL, rede ou DFS.
 | Sync `Running`, heartbeat mais velho que 180 s | reinicia o Sync |
 | `phase=mdb_unavailable` com `last_cycle_at` fresco | registra dependência externa; não reinicia |
 | `phase=mdb_unavailable` com ciclo stale | reinicia o Sync (processo travado) |
+| `recovery_request` de divergência de COUNT (legado) com heartbeat saudável | `data_dependency`; **não** reinicia nem consome circuit breaker |
 | deploy/manutenção ativa | não executa recuperação |
+
+Lag de contagem MDB↔MySQL **não** é falha de processo: o monitor alerta `DATA_STUCK`
+quando a delta congela; o sync reconcilia linhas sozinho. Circuit breaker protege só
+restarts por processo (API/Sync mortos).
 
 Defaults de proteção:
 

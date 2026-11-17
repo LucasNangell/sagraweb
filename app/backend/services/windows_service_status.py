@@ -29,7 +29,9 @@ SYSTEM_WATCHDOG_STATUS_STALE_SECONDS = int(
 SYNC_DOWN_ALERT_SECONDS = int(os.getenv("SYNC_DOWN_ALERT_SECONDS", "300"))
 
 ALERT_SCM_NOT_RUNNING = "SCM_NOT_RUNNING"
-ALERT_DATA_DIVERGENCE = "DATA_DIVERGENCE"
+ALERT_DATA_DIVERGENCE = "DATA_DIVERGENCE"  # legado / alias de DATA_STUCK
+ALERT_DATA_STUCK = "DATA_STUCK"
+ALERT_DATA_LAGGING = "DATA_LAGGING"
 ALERT_SYNC_DOWN = "SYNC_DOWN"
 ALERT_CIRCUIT_OPEN = "CIRCUIT_OPEN"
 ALERT_RECOVERY_FAILED = "RECOVERY_FAILED"
@@ -173,11 +175,14 @@ def read_divergencia_monitor_status(
     """
     empty = {
         "data_stale": False,
+        "data_lagging": False,
         "mdb_count": None,
         "mysql_count": None,
         "checked_at": None,
         "status_fresh": False,
         "phase": None,
+        "direction": None,
+        "sample": None,
     }
     status_path = path or (resolve_sync_log_dir() / DIVERGENCIA_STATUS_FILENAME)
     if not status_path.is_file():
@@ -201,14 +206,26 @@ def read_divergencia_monitor_status(
 
     alert_flag = bool(data.get("alert"))
     data_stale = bool(fresh and alert_flag)
+    phase = data.get("phase")
+    diverged = bool(data.get("diverged"))
+    data_lagging = bool(
+        fresh
+        and diverged
+        and not alert_flag
+        and phase in ("diverged", "stuck_candidate")
+    )
+    sample = data.get("sample") if isinstance(data.get("sample"), dict) else None
 
     return {
         "data_stale": data_stale,
+        "data_lagging": data_lagging,
         "mdb_count": data.get("count_mdb"),
         "mysql_count": data.get("count_mysql"),
         "checked_at": data.get("checked_at") or data.get("written_at"),
         "status_fresh": fresh,
-        "phase": data.get("phase"),
+        "phase": phase,
+        "direction": data.get("direction"),
+        "sample": sample,
     }
 
 
@@ -413,14 +430,18 @@ def build_sync_andamentos_service_status(
 
     div = divergencia if divergencia is not None else read_divergencia_monitor_status()
     data_stale = bool(div.get("data_stale"))
+    data_lagging = bool(div.get("data_lagging"))
 
     wd = watchdog if watchdog is not None else read_system_watchdog_sync_status()
     reasons = []
     if scm_alert:
         reasons.append(ALERT_SCM_NOT_RUNNING)
-    # Divergência de dados alerta também em development (é sinal do monitor, não do SCM).
+    # Divergência travada alerta também em development (sinal do monitor, não do SCM).
     if data_stale:
-        reasons.append(ALERT_DATA_DIVERGENCE)
+        reasons.append(ALERT_DATA_STUCK)
+    elif data_lagging:
+        # Informativo: sync ainda curando; não sobe alert "vermelho" sozinho.
+        pass
     if not is_development:
         reasons.extend(r for r in wd.get("alert_reasons") or [] if r not in reasons)
 
@@ -433,8 +454,11 @@ def build_sync_andamentos_service_status(
         "alert": bool(reasons),
         "alert_reasons": reasons,
         "data_stale": data_stale,
+        "data_lagging": data_lagging,
         "mdb_count": div.get("mdb_count"),
         "mysql_count": div.get("mysql_count"),
+        "direction": div.get("direction"),
+        "sample": div.get("sample"),
         "watchdog": {key: wd.get(key) for key in _WATCHDOG_PUBLIC_FIELDS},
     }
 

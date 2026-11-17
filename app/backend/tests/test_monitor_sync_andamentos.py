@@ -21,7 +21,6 @@ class TestTickMonitor:
         assert result.should_restart is False
         assert result.state.phase == mon.STATUS_PHASE_IDLE
         assert result.state.alert_active is False
-        assert result.state.restart_done_this_episode is False
 
     def test_first_diverge_sets_timer(self):
         result = mon.tick_monitor(
@@ -29,62 +28,54 @@ class TestTickMonitor:
             counts_equal=False,
             now_mono=50.0,
             diverge_seconds=30.0,
+            mdb_total=10,
+            mysql_total=9,
         )
         assert result.should_restart is False
         assert result.state.phase == mon.STATUS_PHASE_DIVERGED
         assert result.state.first_diverged_mono == 50.0
+        assert result.state.last_seen_mdb == 10
 
-    def test_restart_after_diverge_window(self):
+    def test_frozen_counts_become_stuck_candidate(self):
         state = mon.MonitorState(
             phase=mon.STATUS_PHASE_DIVERGED,
             first_diverged_mono=0.0,
+            last_seen_mdb=10,
+            last_seen_mysql=9,
         )
         result = mon.tick_monitor(
             state,
             counts_equal=False,
             now_mono=30.0,
             diverge_seconds=30.0,
-            alert_after_restart_seconds=60.0,
+            stuck_seconds=300.0,
+            mdb_total=10,
+            mysql_total=9,
         )
-        assert result.should_restart is True
-        assert result.state.phase == mon.STATUS_PHASE_RESTARTED
-        assert result.state.restart_done_this_episode is True
-        assert result.state.restarted_mono == 30.0
+        assert result.should_restart is False
+        assert result.should_sample is True
+        assert result.state.phase == mon.STATUS_PHASE_STUCK_CANDIDATE
         assert result.state.alert_active is False
 
-    def test_no_second_restart_same_episode(self):
+    def test_frozen_counts_alert_after_stuck_window(self):
         state = mon.MonitorState(
-            phase=mon.STATUS_PHASE_RESTARTED,
+            phase=mon.STATUS_PHASE_STUCK_CANDIDATE,
             first_diverged_mono=0.0,
-            restarted_mono=30.0,
-            restart_done_this_episode=True,
+            stuck_since_mono=0.0,
+            last_seen_mdb=10,
+            last_seen_mysql=9,
         )
         result = mon.tick_monitor(
             state,
             counts_equal=False,
-            now_mono=50.0,
+            now_mono=300.0,
             diverge_seconds=30.0,
-            alert_after_restart_seconds=60.0,
+            stuck_seconds=300.0,
+            mdb_total=10,
+            mysql_total=9,
         )
         assert result.should_restart is False
-        assert result.state.phase == mon.STATUS_PHASE_RESTARTED
-        assert result.state.alert_active is False
-
-    def test_alert_after_restart_window(self):
-        state = mon.MonitorState(
-            phase=mon.STATUS_PHASE_RESTARTED,
-            first_diverged_mono=0.0,
-            restarted_mono=30.0,
-            restart_done_this_episode=True,
-        )
-        result = mon.tick_monitor(
-            state,
-            counts_equal=False,
-            now_mono=90.0,
-            diverge_seconds=30.0,
-            alert_after_restart_seconds=60.0,
-        )
-        assert result.should_restart is False
+        assert result.should_sample is True
         assert result.state.phase == mon.STATUS_PHASE_ALERTING
         assert result.state.alert_active is True
 
@@ -102,9 +93,10 @@ class TestTickMonitor:
         state = mon.MonitorState(
             phase=mon.STATUS_PHASE_ALERTING,
             first_diverged_mono=0.0,
-            restarted_mono=30.0,
+            stuck_since_mono=30.0,
             alert_active=True,
-            restart_done_this_episode=True,
+            last_seen_mdb=10,
+            last_seen_mysql=9,
         )
         result = mon.tick_monitor(state, counts_equal=None, now_mono=200.0)
         assert result.state.alert_active is True
@@ -114,44 +106,70 @@ class TestTickMonitor:
         state = mon.MonitorState(
             phase=mon.STATUS_PHASE_ALERTING,
             first_diverged_mono=0.0,
-            restarted_mono=30.0,
+            stuck_since_mono=30.0,
             alert_active=True,
-            restart_done_this_episode=True,
+            last_seen_mdb=10,
+            last_seen_mysql=9,
         )
         result = mon.tick_monitor(state, counts_equal=True, now_mono=500.0)
         assert result.state.phase == mon.STATUS_PHASE_IDLE
         assert result.state.alert_active is False
         assert result.should_restart is False
 
-    def test_full_episode_timeline(self):
+    def test_full_stuck_timeline_without_restart(self):
         state = mon.MonitorState()
-        # t=0 diverge
-        r = mon.tick_monitor(state, counts_equal=False, now_mono=0.0, diverge_seconds=30, alert_after_restart_seconds=60)
+        r = mon.tick_monitor(
+            state,
+            counts_equal=False,
+            now_mono=0.0,
+            diverge_seconds=30,
+            stuck_seconds=90,
+            mdb_total=10,
+            mysql_total=9,
+        )
         state = r.state
         assert r.should_restart is False
-        # t=29 still waiting
-        r = mon.tick_monitor(state, counts_equal=False, now_mono=29.0, diverge_seconds=30, alert_after_restart_seconds=60)
+        r = mon.tick_monitor(
+            state,
+            counts_equal=False,
+            now_mono=29.0,
+            diverge_seconds=30,
+            stuck_seconds=90,
+            mdb_total=10,
+            mysql_total=9,
+        )
         state = r.state
         assert r.should_restart is False
-        # t=30 restart
-        r = mon.tick_monitor(state, counts_equal=False, now_mono=30.0, diverge_seconds=30, alert_after_restart_seconds=60)
-        state = r.state
-        assert r.should_restart is True
-        # t=89 still waiting recovery
-        r = mon.tick_monitor(state, counts_equal=False, now_mono=89.0, diverge_seconds=30, alert_after_restart_seconds=60)
+        assert state.phase == mon.STATUS_PHASE_DIVERGED
+        r = mon.tick_monitor(
+            state,
+            counts_equal=False,
+            now_mono=30.0,
+            diverge_seconds=30,
+            stuck_seconds=90,
+            mdb_total=10,
+            mysql_total=9,
+        )
         state = r.state
         assert r.should_restart is False
-        assert state.alert_active is False
-        # t=90 alert
-        r = mon.tick_monitor(state, counts_equal=False, now_mono=90.0, diverge_seconds=30, alert_after_restart_seconds=60)
+        assert state.phase == mon.STATUS_PHASE_STUCK_CANDIDATE
+        r = mon.tick_monitor(
+            state,
+            counts_equal=False,
+            now_mono=90.0,
+            diverge_seconds=30,
+            stuck_seconds=90,
+            mdb_total=10,
+            mysql_total=9,
+        )
         assert r.state.alert_active is True
         assert r.should_restart is False
+        assert r.should_sample is True
 
 
 def _tick_counts(state, mdb, mysql, now, **kwargs):
     kwargs.setdefault("diverge_seconds", 30.0)
-    kwargs.setdefault("alert_after_restart_seconds", 60.0)
-    kwargs.setdefault("diverge_max_seconds", 300.0)
+    kwargs.setdefault("stuck_seconds", 300.0)
     return mon.tick_monitor(
         state,
         counts_equal=mdb == mysql,
@@ -164,48 +182,55 @@ def _tick_counts(state, mdb, mysql, now, **kwargs):
 
 class TestDivergenceProgress:
     def test_lagging_but_advancing_sync_is_not_restarted(self):
-        # Sequência de 06/10/2026 11:28–11:29: MySQL sempre um atrás, mas avançando.
         timeline = [(0, 649, 648), (10, 649, 648), (21, 650, 649), (32, 651, 649), (42, 651, 650)]
         state = mon.MonitorState()
         for now, mdb, mysql in timeline:
             r = _tick_counts(state, mdb, mysql, float(now))
             state = r.state
             assert r.should_restart is False, (now, mdb, mysql)
+            assert r.state.alert_active is False, (now, mdb, mysql)
         assert state.phase == mon.STATUS_PHASE_DIVERGED
 
-    def test_stuck_mysql_count_still_requests_recovery(self):
+    def test_stuck_mysql_count_alerts_without_restart(self):
         state = mon.MonitorState()
         r = _tick_counts(state, 650, 649, 0.0)
-        r = _tick_counts(r.state, 651, 649, 15.0)
+        r = _tick_counts(r.state, 650, 649, 15.0)
         assert r.should_restart is False
-        r = _tick_counts(r.state, 652, 649, 30.0)
-        assert r.should_restart is True
-        assert r.state.restart_done_this_episode is True
+        r = _tick_counts(r.state, 650, 649, 30.0)
+        assert r.should_restart is False
+        assert r.state.phase == mon.STATUS_PHASE_STUCK_CANDIDATE
+        r = _tick_counts(r.state, 650, 649, 300.0)
+        assert r.should_restart is False
+        assert r.state.alert_active is True
+        assert r.should_sample is True
 
-    def test_continuous_divergence_requests_recovery_after_max(self):
+    def test_continuous_divergence_does_not_request_recovery(self):
         state = mon.MonitorState()
         mdb, mysql = 100, 99
         restarts = []
+        alerts = []
         for now in range(0, 310, 10):
             r = _tick_counts(state, mdb, mysql, float(now))
             state = r.state
             if r.should_restart:
                 restarts.append(now)
+            if r.state.alert_active:
+                alerts.append(now)
             # A cada ciclo o MySQL alcança o alvo anterior, mas chega um novo registro.
             mdb, mysql = mdb + 1, mdb
-        assert restarts == [300]
+        assert restarts == []
+        assert alerts == []
+        assert state.phase == mon.STATUS_PHASE_DIVERGED
 
-    def test_progress_after_recovery_clears_alert_and_restart_flag(self):
+    def test_healing_clears_alert(self):
         state = mon.MonitorState()
         r = _tick_counts(state, 10, 9, 0.0)
         r = _tick_counts(r.state, 10, 9, 30.0)
-        assert r.should_restart is True
-        r = _tick_counts(r.state, 10, 9, 90.0)
+        r = _tick_counts(r.state, 10, 9, 300.0)
         assert r.state.alert_active is True
-        r = _tick_counts(r.state, 11, 10, 100.0)
+        r = _tick_counts(r.state, 11, 10, 310.0)
         assert r.should_restart is False
         assert r.state.alert_active is False
-        assert r.state.restart_done_this_episode is False
         assert r.state.phase == mon.STATUS_PHASE_DIVERGED
 
     def test_mysql_extra_rows_progress_when_count_drops_to_mdb(self):
@@ -214,7 +239,19 @@ class TestDivergenceProgress:
         r = _tick_counts(r.state, 654, 655, 20.0)
         r = _tick_counts(r.state, 655, 654, 25.0)
         assert r.should_restart is False
-        assert r.state.first_diverged_mono == 25.0
+        assert r.state.alert_active is False
+        assert r.state.phase == mon.STATUS_PHASE_DIVERGED
+
+
+class TestHealingProgress:
+    def test_gap_closing(self):
+        assert mon._healing_progress(10, 8, 10, 9) is True
+
+    def test_mysql_catchup_with_new_mdb_row(self):
+        assert mon._healing_progress(100, 99, 101, 100) is True
+
+    def test_mdb_growing_mysql_frozen_is_not_healing(self):
+        assert mon._healing_progress(100, 99, 101, 99) is False
 
 
 NOW = 1_000_000.0
@@ -277,23 +314,15 @@ class TestSyncGate:
 
 
 class TestHoldEpisode:
-    def test_without_restart_resets_episode(self):
-        state = mon.MonitorState(phase=mon.STATUS_PHASE_DIVERGED, first_diverged_mono=1.0)
-        assert mon.hold_episode(state, 50.0) == mon.MonitorState()
-
-    def test_after_restart_slides_alert_window(self):
+    def test_hold_resets_episode(self):
         state = mon.MonitorState(
-            phase=mon.STATUS_PHASE_RESTARTED,
-            first_diverged_mono=0.0,
-            restarted_mono=30.0,
-            restart_done_this_episode=True,
+            phase=mon.STATUS_PHASE_ALERTING,
+            first_diverged_mono=1.0,
+            alert_active=True,
+            last_seen_mdb=10,
+            last_seen_mysql=9,
         )
-        held = mon.hold_episode(state, 200.0)
-        assert held.restart_done_this_episode is True
-        assert held.restarted_mono == 200.0
-        r = mon.tick_monitor(held, counts_equal=False, now_mono=230.0, alert_after_restart_seconds=60)
-        assert r.should_restart is False
-        assert r.state.alert_active is False
+        assert mon.hold_episode(state, 50.0) == mon.MonitorState()
 
 
 def test_read_sync_heartbeat_info(tmp_path: Path):
@@ -367,6 +396,18 @@ def _make_loop(
     monkeypatch.setattr(mon, "MdbCountSession", _FakeMdbSession)
     current_counts = {"value": counts}
     monkeypatch.setattr(mon, "fetch_counts", lambda _log, _mdb: current_counts["value"])
+    monkeypatch.setattr(
+        mon,
+        "sample_code_divergence",
+        lambda _log, _mdb, **_kw: {
+            "only_mdb": ["A1"],
+            "only_mysql": [],
+            "only_mdb_count": 1,
+            "only_mysql_count": 0,
+            "sample_ok": True,
+            "direction": "mdb_ahead",
+        },
+    )
 
     def query(name):
         status = watchdog_status if name == mon.SYSTEM_WATCHDOG_SERVICE_NAME else sync_status
@@ -420,28 +461,29 @@ def test_loop_respects_maintenance_lock(tmp_path: Path, monkeypatch):
     assert _status(tmp_path)["phase"] == mon.STATUS_PHASE_MAINTENANCE
 
 
-def test_loop_without_system_watchdog_restarts_directly(tmp_path: Path, monkeypatch):
+def test_loop_never_restarts_on_count_divergence(tmp_path: Path, monkeypatch):
     loop, restarts = _make_loop(tmp_path, monkeypatch, sync_status="Running")
     loop.run_once(now_mono=0.0)
     loop.run_once(now_mono=31.0)
-    assert restarts == [1]
-    assert _status(tmp_path)["phase"] == mon.STATUS_PHASE_RESTARTED
+    loop.run_once(now_mono=300.0)
+    assert restarts == []
     assert _status(tmp_path)["recovery_request"] is None
+    assert _status(tmp_path)["alert"] is True
+    assert _status(tmp_path)["sample"]["only_mdb"] == ["A1"]
 
 
-def test_loop_with_system_watchdog_only_requests_recovery(tmp_path: Path, monkeypatch):
+def test_loop_with_system_watchdog_still_does_not_request_recovery(
+    tmp_path: Path, monkeypatch
+):
     loop, restarts = _make_loop(
         tmp_path, monkeypatch, sync_status="Running", watchdog_status="Running"
     )
     loop.run_once(now_mono=0.0)
     loop.run_once(now_mono=31.0)
-    request = _status(tmp_path)["recovery_request"]
     assert restarts == []
-    assert request and request["id"] and "mdb=15 mysql=14" in request["reason"]
-
-    loop.run_once(now_mono=45.0)
-    assert _status(tmp_path)["recovery_request"]["id"] == request["id"]
+    assert _status(tmp_path)["recovery_request"] is None
 
     loop.set_counts((10, 5, 15, 15))
     loop.run_once(now_mono=60.0)
-    assert _status(tmp_path)["recovery_request"] is None
+    assert _status(tmp_path)["alert"] is False
+    assert _status(tmp_path)["phase"] == mon.STATUS_PHASE_IDLE

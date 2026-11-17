@@ -4,6 +4,7 @@ import { Box, Eye, LayoutGrid, Loader2, Plus, Printer, Tag } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchPapelariaAdminModelos } from "@/api/adminSystem";
+import { fetchImposicaoStatus } from "@/api/imposicaoPerfil";
 import { groupPapelariaModelosByProduto } from "@/features/configuracoes/groupPapelariaModelosByProduto";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
@@ -14,10 +15,10 @@ import {
   ConfigSectionHeader,
 } from "./ConfigSectionLayout";
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
-import { PapelariaModeloImposicaoPanel } from "./PapelariaModeloImposicaoPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
 import { PapelariaModeloPreviewPanel } from "./PapelariaModeloPreviewPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
+import { PerfilImposicaoPanel } from "./PerfilImposicaoPanel";
 
 type InnerTab = "dados" | "mockup" | "preview" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
@@ -26,7 +27,7 @@ const INNER_TABS: { id: InnerTab; label: string; icon: typeof Tag }[] = [
   { id: "dados", label: "Dados", icon: Tag },
   { id: "mockup", label: "Mockup 3D", icon: Box },
   { id: "preview", label: "Prévia", icon: Eye },
-  { id: "imposicao", label: "Imposição", icon: LayoutGrid },
+  { id: "imposicao", label: "Imposição (produto)", icon: LayoutGrid },
 ];
 
 function modeloChipLabel(modelo: PapelariaAdminModelRecord): string {
@@ -45,9 +46,15 @@ export function PapelariaProdutosAdminSection() {
   const [selectedModeloId, setSelectedModeloId] = useState<number | null>(null);
   const [innerTab, setInnerTab] = useState<InnerTab>("dados");
   const [mode, setMode] = useState<WorkspaceMode>("browse");
+  const imposicaoStatusQuery = useQuery({
+    queryKey: ["admin", "imposicao-status"],
+    queryFn: fetchImposicaoStatus,
+    staleTime: 30_000,
+  });
 
   const modelos = modelosQuery.data ?? [];
   const groups = useMemo(() => groupPapelariaModelosByProduto(modelos), [modelos]);
+  const nomesProdutos = useMemo(() => groups.map((g) => g.produto), [groups]);
 
   const selectedGroup = useMemo(
     () => groups.find((g) => g.produto === selectedProduto) ?? null,
@@ -132,7 +139,10 @@ export function PapelariaProdutosAdminSection() {
                         )}
                         onClick={() => selectProduto(g.produto)}
                       >
-                        <span className="font-medium text-slate-800">{g.produto}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-medium text-slate-800">{g.produto}</span>
+                          <ImposicaoBadges status={imposicaoStatusQuery.data?.[g.produto]} />
+                        </span>
                         <span className="mt-0.5 block text-[10px] text-slate-500">
                           {g.modelos.length} modelo{g.modelos.length === 1 ? "" : "s"}
                           {g.comMockup > 0 ? ` · ${g.comMockup} mockup` : ""}
@@ -285,9 +295,11 @@ export function PapelariaProdutosAdminSection() {
                       />
                     ) : null}
                     {innerTab === "imposicao" ? (
-                      <PapelariaModeloImposicaoPanel
-                        key={selectedModelo.id}
+                      <PerfilImposicaoPanel
+                        key={selectedGroup.produto}
+                        produto={selectedGroup.produto}
                         modelo={selectedModelo}
+                        produtos={nomesProdutos}
                       />
                     ) : null}
                   </div>
@@ -298,5 +310,34 @@ export function PapelariaProdutosAdminSection() {
         </div>
       </ConfigSectionBody>
     </ConfigSection>
+  );
+}
+
+function ImposicaoBadges({
+  status,
+}: {
+  status?: Partial<Record<"digital" | "offset", { existe: boolean; ativo: boolean }>>;
+}) {
+  if (!status) return null;
+  const items = (["digital", "offset"] as const).filter((v) => status[v]?.existe);
+  if (!items.length) return null;
+  return (
+    <span className="inline-flex gap-0.5">
+      {items.map((v) => {
+        const ativo = Boolean(status[v]?.ativo);
+        return (
+          <span
+            key={v}
+            className={cn(
+              "rounded px-1 text-[9px] font-bold leading-4",
+              ativo ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800",
+            )}
+            title={`Imposição ${v === "digital" ? "Digital" : "Offset"}: ${ativo ? "perfil em uso" : "rascunho"}`}
+          >
+            {v === "digital" ? "D" : "O"}
+          </span>
+        );
+      })}
+    </span>
   );
 }

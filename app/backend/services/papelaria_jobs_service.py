@@ -505,6 +505,20 @@ def _prepare_pre_impresso_jdf_config(
     from services import papelaria_jdf_service as jdf_svc
     from services import papelaria_imposicao_juntada_service as juntada_svc
 
+    v2_meta = dados.get("imposicao_v2") if isinstance(dados, dict) else None
+    if isinstance(v2_meta, dict) and isinstance(v2_meta.get("perfil"), dict):
+        # Perfil v2: posições, rotação e marcas vêm do perfil salvo no job.
+        from services import papelaria_imposicao_v2_service as imposicao_v2_svc
+
+        return imposicao_v2_svc.preparar_config_pipeline(
+            perfil=v2_meta["perfil"],
+            dados=dados,
+            ano=ano,
+            nro=nro,
+            sefoc_dir=sefoc_dir,
+            gang_pdf_path=gang_pdf_path,
+        )
+
     cfg = dict(config or {})
     slots_info = dados.get("juntada_slots") if isinstance(dados, dict) else None
     n_slots = 0
@@ -790,11 +804,60 @@ def create_imposicao_job(
         raise LookupError("Modelo não encontrado ou inativo.")
 
     produto_job = (modelo.get("produto") or os_row.get("produto") or "").strip() or "Papelaria"
+
+    # Perfil v2 aprovado para a variante → caminho genérico (sem regras por produto).
+    from services import papelaria_imposicao_perfil_store as perfil_store
+
+    perfis_ativos = {
+        v: reg
+        for v in ("digital", "offset")
+        if (reg := perfil_store.get_perfil_ativo(produto_job, v))
+    }
+    var_v2: Optional[str] = None
+    if variante:
+        var_req = produto_imp_svc.normalize_variante(variante)
+        if var_req in perfis_ativos:
+            var_v2 = var_req
+    if var_v2:
+        from services import papelaria_imposicao_v2_service as imposicao_v2_svc
+
+        if imposicao_config is not None:
+            logger.warning(
+                "imposicao_config ignorado: %s/%s usa o perfil v2 aprovado (%s).",
+                nro,
+                ano,
+                var_v2,
+            )
+        return imposicao_v2_svc.create_imposicao_job_v2(
+            ano=ano,
+            nro=nro,
+            solicitado_por=solicitado_por,
+            modelo=modelo,
+            produto=produto_job,
+            variante=var_v2,
+            registro=perfis_ativos[var_v2],
+            juntada_os=juntada_os,
+        )
+
     opcoes = produto_imp_svc.resolve_imposicao_opcoes(
         produto=produto_job,
         modelo_imposicao_config_json=modelo.get("imposicao_config_json"),
     )
     disponiveis = list(opcoes.get("variantes_disponiveis") or [])
+    if not variante and not disponiveis and len(perfis_ativos) == 1:
+        from services import papelaria_imposicao_v2_service as imposicao_v2_svc
+
+        (only_var, only_reg), = perfis_ativos.items()
+        return imposicao_v2_svc.create_imposicao_job_v2(
+            ano=ano,
+            nro=nro,
+            solicitado_por=solicitado_por,
+            modelo=modelo,
+            produto=produto_job,
+            variante=only_var,
+            registro=only_reg,
+            juntada_os=juntada_os,
+        )
     if not disponiveis:
         raise ValueError(
             "Nenhuma imposição configurada para este produto/modelo. "
@@ -3564,10 +3627,14 @@ def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
-    destino_offset = (
-        str(dados.get("imposicao_destino") or "").strip().lower() == "offset"
-        or bool(dados.get("usar_pre_impresso"))
-    )
+    if isinstance(dados.get("imposicao_v2"), dict):
+        # Perfil v2: o destino do PDF é configurado no perfil.
+        destino_offset = str(dados.get("imposicao_destino") or "").strip().lower() == "offset"
+    else:
+        destino_offset = (
+            str(dados.get("imposicao_destino") or "").strip().lower() == "offset"
+            or bool(dados.get("usar_pre_impresso"))
+        )
 
     if destino_offset:
         dest_name = build_imposicao_offset_pdf_name(ano=ano, nro=nro, config=config)

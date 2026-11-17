@@ -257,9 +257,13 @@ def classify_email(
     names = list(attachment_names or [])
 
     if _PROVA_SUBJECT_RE.search(subject_text):
-        if _APPROVAL_RE.search(body_text) and _PONTO_RE.search(body_text):
+        # Aprovação e alteração valem só no texto novo. A citação (a partir de
+        # «De:») traz o ponto de quem enviou a prova e a palavra «alteração»
+        # do modelo, e não pode sozinha disparar o recebimento.
+        reply_text = truncate_body_before_reply_header(body_text)
+        if _APPROVAL_RE.search(reply_text) and _PONTO_RE.search(reply_text):
             return "prova_aprovacao"
-        if _ALTER_RE.search(body_text):
+        if _ALTER_RE.search(reply_text):
             return "prova_alteracao"
         return None
 

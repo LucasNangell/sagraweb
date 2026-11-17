@@ -1,0 +1,38 @@
+---
+description: SPA React e pacotes workspace @sagra
+globs:
+  - "apps/web/**/*"
+  - "packages/**/*"
+alwaysApply: false
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Frontend React
+
+## Stack confirmada
+
+React 19, Vite 6, TypeScript 5.7, Tailwind 4, TanStack Router/Query, Vitest 3, Zod, Zustand, PWA (`vite-plugin-pwa`).
+
+## Convenções
+
+- Bootstrap: `apps/web/src/main.tsx`; rotas em `src/routes/`.
+- Alias `@` → `src/`; env carregado de `config/` via `vite.config.ts` (`envDir`).
+- Dev proxy: `/api` → `http://127.0.0.1:${PORT || VITE_API_PORT || 8001}`; produção também `/sagra/api`.
+- WebSocket: `/api/ws`, `/ws` — ver proxy em `vite.config.ts`.
+- Pacotes workspace: `@sagra/ui`, `@sagra/api-types` em `packages/`.
+- Vite/Vitest apontam aliases de `@sagra/ui` e `@sagra/api-types` diretamente para fontes em `packages/`.
+- `packages/api-types` generate ainda é placeholder — não assumir geração automática de tipos.
+
+## Build
+
+- `pnpm --filter @sagra/web build` → `apps/web/dist/`; empacotamento copia para `deploy/release/app/frontend/`.
+- `VITE_BASE_PATH` controla base path (produção intranet: `/sagra/`).
+
+## Lint
+
+ESLint pendente (Fase 0) — scripts `lint` são stubs. Validar com `pnpm typecheck` e `pnpm test:frontend`.
+
+## Referências
+
+`apps/web/package.json`, `apps/web/vite.config.ts`, `apps/web/vitest.config.ts`.

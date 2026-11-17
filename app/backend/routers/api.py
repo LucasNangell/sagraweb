@@ -22,6 +22,7 @@ from routers import (
     pre_analise_routes,
     auxiliar_routes,
     papelaria_routes,
+    papelaria_imposicao_routes,
     papelaria_worker_routes,
     credenciais_depol_routes,
     manipular_imagem_routes,
@@ -982,6 +983,7 @@ app.include_router(analise_routes.router, prefix="/api")
 app.include_router(pre_analise_routes.router, prefix="/api")
 app.include_router(auxiliar_routes.router, prefix="/api")
 app.include_router(papelaria_routes.router, prefix="/api")
+app.include_router(papelaria_imposicao_routes.router, prefix="/api")
 app.include_router(papelaria_worker_routes.router, prefix="/api")
 app.include_router(settings_routes.router, prefix="/api")
 app.include_router(ip_admin_routes.router)  # Já tem /api no próprio router

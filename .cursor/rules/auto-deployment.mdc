@@ -8,6 +8,7 @@ alwaysApply: false
 ---
 
 <!-- generated-by: bootstrap-project-rules -->
+O deploy deve ser feito sempre de maneira completa, garantindo que todas as alterações/implementações em todas as páginas sempre estejam disponíveis e atualizadas
 
 # Deploy e infraestrutura
 

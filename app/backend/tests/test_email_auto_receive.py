@@ -100,6 +100,56 @@ class TestClassifyEmail:
             is None
         )
 
+    def test_aprovado_only_ignores_quoted_ponto_and_alteracao(self):
+        body = """
+        <html><body>
+        <div>Aprovado</div>
+        <div id="divRplyFwdMsg">
+        <font><b>De:</b> P_918713 &lt;p_918713@camara.leg.br&gt;<br>
+        <b>Enviado:</b> terça-feira, 17 de novembro de 2026 14:00<br>
+        <b>Assunto:</b> Prova 01234/2026</font>
+        </div>
+        <div>
+        Clique no botão abaixo para visualizar o PDF e registrar sua aprovação
+        ou solicitação de alteração.
+        </div>
+        </body></html>
+        """
+        assert (
+            classify_email(subject="RE: Prova 01234/2026", body=body)
+            is None
+        )
+
+    def test_aprovacao_with_ponto_before_quoted_reply(self):
+        body = """
+        <html><body>
+        <div>Aprovado</div>
+        <div>P_123456</div>
+        <div id="divRplyFwdMsg">
+        <b>De:</b> P_918713 &lt;p_918713@camara.leg.br&gt;<br>
+        </div>
+        <div>solicitação de alteração</div>
+        </body></html>
+        """
+        assert (
+            classify_email(subject="RE: Prova 01234/2026", body=body)
+            == "prova_aprovacao"
+        )
+
+    def test_alteracao_in_new_text_ignores_quoted_ponto(self):
+        body = """
+        <html><body>
+        <div>Favor alterar a capa.</div>
+        <div id="divRplyFwdMsg">
+        <b>De:</b> P_918713 &lt;p_918713@camara.leg.br&gt;<br>
+        </div>
+        </body></html>
+        """
+        assert (
+            classify_email(subject="RE: Prova 01234/2026", body=body)
+            == "prova_alteracao"
+        )
+
 
 class TestBodyAndObs:
     def test_strip_blank_lines_and_html(self):

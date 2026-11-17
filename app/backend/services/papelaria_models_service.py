@@ -635,9 +635,19 @@ def _tem_imposicao_disponivel(
             produto=produto or "",
             modelo_imposicao_config_json=modelo_imposicao_config_json,
         )
-        return bool(opcoes.get("variantes_disponiveis"))
+        if opcoes.get("variantes_disponiveis"):
+            return True
     except Exception:
-        return bool(modelo_imposicao_config_json)
+        if modelo_imposicao_config_json:
+            return True
+    # Perfil v2 aprovado (Configurações → Papelaria → Imposição).
+    try:
+        from services import papelaria_imposicao_perfil_store as perfil_store
+
+        nome = str(produto or "").strip().lower()
+        return bool(nome) and nome in perfil_store.produtos_com_perfil_ativo()
+    except Exception:
+        return False
 
 
 def _models_select_columns() -> str:

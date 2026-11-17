@@ -26,8 +26,8 @@ max_retries: 3
 kill_corel_on_timeout: false
 
 load_balance_enabled: true
-max_cpu_percent: 75
-max_memory_percent: 80
+max_cpu_percent: 85
+max_memory_percent: 90
 prevent_sleep: true
 
 auto_update_enabled: true

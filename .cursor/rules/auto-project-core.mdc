@@ -36,3 +36,6 @@ Sistema corporativo de Ordens de Serviço (OS) para Câmara/SEFOC. Monorepo híb
 ## Referências canônicas
 
 `package.json`, `pnpm-workspace.yaml`, `apps/web/vite.config.ts`, `app/backend/routers/api.py`, `pytest.ini`, `GUIA_DEPLOY_RELEASES_SAGRA.md`.
+
+## Banco de dados
+Sempre que houver alterações na estrutura do banco de dados elas devem ser replicadas tanto no banco local (DEV) quanto no banco de produção (10.1.1.73)

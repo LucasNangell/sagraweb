@@ -13,14 +13,13 @@ import {
   discardPapelariaJobProva,
   fetchPapelariaCdrPath,
   fetchPapelariaCorelModelo,
-  fetchPapelariaImposicaoOpcoes,
   fetchPapelariaJob,
   fetchPapelariaJobsForOs,
   fetchPapelariaOsContext,
   finalizarCorelPapelariaOs,
   gerarProvaCdrExistentePapelariaOs,
-  type PapelariaImposicaoOpcoes,
 } from "@/api/papelaria";
+import { fetchImposicaoVariantesOs } from "@/api/imposicaoPerfil";
 import { fetchDeputadoLookup } from "@/api/auxLookups";
 import { emailProofFileUrl } from "@/api/email";
 import { fetchOsFolderBrowse } from "@/api/os";
@@ -35,9 +34,12 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
 import { PapelariaActionBar } from "./PapelariaActionBar";
-import { PapelariaImposicaoOsModal } from "./PapelariaImposicaoOsModal";
+import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
-import type { PapelariaImposicaoConfig } from "@/features/papelaria/imposicao";
+import type {
+  ImposicaoVariante,
+  ImposicaoVariantesResponse,
+} from "@/features/papelaria/imposicao/perfil/types";
 import {
   mergeDadosWithDynamicLayout,
   applyPreviewTemplate,
@@ -189,7 +191,7 @@ export function PapelariaCorelPanel({
   );
   const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
   const [imposicaoOpcoes, setImposicaoOpcoes] =
-    useState<PapelariaImposicaoOpcoes | null>(null);
+    useState<ImposicaoVariantesResponse | null>(null);
   const [imposicaoOpcoesLoading, setImposicaoOpcoesLoading] = useState(false);
   const [imposicaoModalError, setImposicaoModalError] = useState<string | null>(
     null,
@@ -964,7 +966,7 @@ export function PapelariaCorelPanel({
     setImposicaoModalError(null);
     setImposicaoOpcoesLoading(true);
     try {
-      const opcoes = await fetchPapelariaImposicaoOpcoes(
+      const opcoes = await fetchImposicaoVariantesOs(
         anoNum,
         nroNum,
         selectedModelId,
@@ -991,8 +993,7 @@ export function PapelariaCorelPanel({
   };
 
   const runImposicao = (payload?: {
-    variante: "digital" | "offset";
-    imposicao_config: PapelariaImposicaoConfig;
+    variante: ImposicaoVariante;
     juntada_os?: Array<{ ano: number; nro: number }>;
   }) => {
     if (!selectedModelId) {
@@ -1010,7 +1011,6 @@ export function PapelariaCorelPanel({
         nro: nroNum,
         modelo_id: selectedModelId,
         variante: payload.variante,
-        imposicao_config: payload.imposicao_config,
         juntada_os: payload.juntada_os,
       },
       {
@@ -1747,8 +1747,11 @@ export function PapelariaCorelPanel({
         }}
       />
 
-      <PapelariaImposicaoOsModal
+      <PapelariaImposicaoVarianteDialog
         open={imposicaoModalOpen}
+        ano={anoNum}
+        nro={nroNum}
+        modeloId={selectedModelId ?? null}
         opcoes={imposicaoOpcoes}
         loading={imposicaoOpcoesLoading}
         submitting={imposicaoMutation.isPending}

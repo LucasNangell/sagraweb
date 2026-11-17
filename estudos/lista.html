@@ -1,0 +1,69 @@
+<style>
+    .pk:where(#press-to-001), .pk:where(#press-to-001) *{ box-sizing: border-box; }
+    .pk:where(#press-to-001){
+      width: min(100%, 530px);
+      min-width: 0;
+      margin-inline: auto;
+      padding: var(--space);
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+      border-radius: var(--radius);
+      box-shadow: 0 14px 34px #0002;
+      font: 13px/1.42 system-ui, sans-serif;
+      overflow-wrap: anywhere;
+    }
+    .pk:where(#press-to-001) [hidden]{ display: none !important; }
+    .pk:where(#press-to-001) small{ color: var(--muted); font-size: .82em; }
+    .pk:where(#press-to-001) .pk-head{ display: flex; align-items: flex-start; gap: 9px; margin-bottom: calc(var(--space) * .78); }
+    .pk:where(#press-to-001) .pk-head > span{ display: grid; gap: 2px; }
+    .pk:where(#press-to-001) .pk-head strong{ font-size: 1.06em; }
+    .pk:where(#press-to-001) .pk-mark{ flex: none; width: 26px; height: 26px; border-radius: max(3px, calc(var(--radius) * .43)); display: grid; place-items: center; background: var(--tint); color: var(--accent); font-style: normal; font-size: 14px; }
+    .pk:where(#press-to-001) .pk-main{ display: grid; gap: 8px; justify-items: stretch; min-width: 0; }
+    .pk:where(#press-to-001) .pk-main > .pk-btn{ justify-self: start; }
+    .pk:where(#press-to-001) .pk-btn{
+      min-height: 29px;
+      padding: .48em .72em;
+      border: 1px solid transparent;
+      border-radius: max(3px, calc(var(--radius) * .51));
+      color: var(--on-accent);
+      background: var(--accent);
+      font: 650 .91em/1.2 system-ui, sans-serif;
+      cursor: pointer;
+      transition: background var(--time), box-shadow var(--time), transform var(--time);
+    }
+    .pk:where(#press-to-001) .pk-btn:hover{ filter: brightness(1.11); }
+    .pk:where(#press-to-001) .pk-btn:active{ transform: translateY(1px); }
+    .pk:where(#press-to-001) .pk-btn:disabled{ opacity: .48; cursor: not-allowed; }
+    .pk:where(#press-to-001) .pk-btn:focus-visible, .pk:where(#press-to-001) [tabindex]:focus-visible{
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    .pk:where(#press-to-001) .pk-icon{ padding: .23em .44em; min-width: 28px; min-height: 28px; font-size: 1.12em; }
+    @media (prefers-reduced-motion: reduce){
+    .pk:where(#press-to-001), .pk:where(#press-to-001) *, .pk:where(#press-to-001) *::before, .pk:where(#press-to-001) *::after{ animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+    .pk:where(#press-to-001) .pk-toast{ display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-radius: max(3px,calc(var(--radius) * .55)); background: var(--tint); border-left: 3px solid var(--accent); animation: pk-enter var(--time); }
+    @keyframes pk-enter{ from { opacity: 0; transform: translateY(8px) scale(.97); } }
+    @media(prefers-reduced-motion:reduce){#press-to-001,#press-to-001 *,#press-to-001 *::before,#press-to-001 *::after{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+    </style>
+    
+    <section class="pk" id="press-to-001" data-press-template="to-001" data-variant="0" style="--accent:#b9f472; --secondary:#6fc7a7; --surface:#1d2724; --ink:#eef6e8; --stage:#101815; --radius:14px; --space:13px; --time:190ms; --on-accent:#101414; --scheme:dark; --tint:color-mix(in srgb,var(--accent) 17%,var(--surface)); --muted:color-mix(in srgb,var(--ink) 74%,var(--surface)); font-size:13px">
+      <div class="pk-main">
+        <div class="pk-toast" role="status"><span>✓ Alterações salvas</span></div>
+      </div>
+    </section>
+    
+    <script>
+    (root => {
+      if (!root) return;
+    const q = selector => root.querySelector(selector);
+    const on = (element, event, handler) => element?.addEventListener(event, handler);
+    ((root,{q, on}) => {
+        const toast=q('.pk-toast');
+        let timer;
+        on(q('[data-notify]'),'click',()=>{clearTimeout(timer);toast.hidden=false;timer=setTimeout(()=>toast.hidden=true,4500);});
+        on(q('[data-close]'),'click',()=>{clearTimeout(timer);toast.hidden=true;});
+      })(root, {q, on});
+    })(document.querySelector("[data-press-template=\"to-001\"]"));
+    </script>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Catálogo Edição 119 Cards OS - Setor Moderno + Entradas Operacionais</title>
+    <title>Catálogo Edição 119 Cards OS - Setor Moderno + Ações Sobrepostas</title>
     <!-- Importação de Fontes: Inter (400, 500, 600, 700, 800, 900) + Fontes das Seções 6 a 10 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1077,19 +1077,32 @@
 
 
         /* ==========================================================================================
-           SEÇÃO 13: MODELOS 118 E 119 - ANIMAÇÕES DE ENTRADA COM OVERLAY ("ANALISAR" & "DAR PROSSEGIMENTO")
+           SEÇÃO 13: MODELOS 118 E 119 - OVERLAYS DE AÇÃO ("ANALISAR" COM LUPA & "DAR PROSSEGIMENTO")
            ========================================================================================== */
 
         /* Wrapper com espaço superior para a badge flutuante sobre o card */
         .action-overlay-col {
             container-type: inline-size;
             display: flex;
-            padding-top: 24px;
+            padding-top: 22px;
             position: relative;
+            width: 100%;
+            min-width: 0;
+        }
+
+        /* Mantém 118–120 com a mesma largura (e portanto as mesmas fontes em cqi) */
+        .setor-modern-grid.action-overlays-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        @media (max-width: 980px) {
+            .setor-modern-grid.action-overlays-grid {
+                grid-template-columns: 1fr;
+                max-width: 420px;
+            }
         }
 
         /* -------------------------------------------------------------------------
-           MODELO 118: ENTRADA + INSPEÇÃO "ANALISAR" COM LUPA
+           MODELO 118: CARD "ANALISAR" + LUPA QUE PASSA SOBRE O CARD
            ------------------------------------------------------------------------- */
         .card-analisar-lupa {
             background: linear-gradient(145deg, #162032, #0c1322);
@@ -1097,44 +1110,9 @@
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.18);
             position: relative;
             overflow: visible;
-            transform-origin: center bottom;
-            animation: cardAnalisarEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
         }
 
-        /* Animação de Entrada e Saída do Card 118 */
-        @keyframes cardAnalisarEntrance {
-            0% {
-                opacity: 0;
-                transform: translateY(40px) scale(0.82);
-                filter: blur(12px) brightness(0.4);
-            }
-            10% {
-                opacity: 1;
-                transform: translateY(-4px) scale(1.02);
-                filter: blur(0px) brightness(1.35);
-                border-color: #00ffcc;
-                box-shadow: 0 18px 40px rgba(0, 255, 204, 0.35);
-            }
-            16%, 84% {
-                opacity: 1;
-                transform: translateY(0px) scale(1);
-                filter: blur(0px) brightness(1);
-                border-color: #38bdf8;
-                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.18);
-            }
-            92% {
-                opacity: 0.6;
-                transform: translateY(-8px) scale(0.96);
-                filter: blur(4px);
-            }
-            100% {
-                opacity: 0;
-                transform: translateY(35px) scale(0.82);
-                filter: blur(12px);
-            }
-        }
-
-        /* Badge Superior Animada "ANALISAR" (Surge com pop elástico logo após o card) */
+        /* Badge Superior Animada "ANALISAR" */
         .overlay-badge-analisar {
             position: absolute;
             top: -16px;
@@ -1157,31 +1135,8 @@
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            animation: analisarBadgeEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite,
+            animation: analisarBadgePulse calc(2.4s * var(--speed-multiplier)) ease-in-out infinite,
                        goldSweep calc(3s * var(--speed-multiplier)) linear infinite;
-        }
-
-        @keyframes analisarBadgeEntrance {
-            0%, 10% {
-                opacity: 0;
-                transform: translateX(-50%) translateY(-22px) scale(0.4);
-            }
-            18% {
-                opacity: 1;
-                transform: translateX(-50%) translateY(2px) scale(1.1);
-            }
-            24%, 45%, 65%, 82% {
-                opacity: 1;
-                transform: translateX(-50%) translateY(0px) scale(1);
-            }
-            35%, 55%, 74% {
-                opacity: 1;
-                transform: translateX(-50%) translateY(-3px) scale(1.05);
-            }
-            90%, 100% {
-                opacity: 0;
-                transform: translateX(-50%) translateY(-18px) scale(0.5);
-            }
         }
 
         .overlay-badge-analisar .pulse-dot {
@@ -1197,7 +1152,12 @@
             100% { transform: scale(1.25); opacity: 1; }
         }
 
-        /* Lupa Realista que Entra, Inspeciona o Card e Sai */
+        @keyframes analisarBadgePulse {
+            0%, 100% { transform: translateX(-50%) translateY(0) scale(1); }
+            50% { transform: translateX(-50%) translateY(-3px) scale(1.06); box-shadow: 0 10px 26px rgba(56, 189, 248, 0.9), 0 0 18px rgba(0, 255, 204, 0.8); }
+        }
+
+        /* Lupa Realista que Passa Sobre o Card (Lente de Vidro + Aro + Cabo) */
         .magnifier-rig {
             position: absolute;
             top: 18%;
@@ -1206,7 +1166,7 @@
             height: clamp(68px, 22cqi, 96px);
             z-index: 35;
             pointer-events: none;
-            animation: magnifierEntranceAndScan calc(6s * var(--speed-multiplier)) ease-in-out infinite;
+            animation: magnifierScanPath calc(5s * var(--speed-multiplier)) ease-in-out infinite;
         }
 
         /* Lente com Efeito Óptico de Brilho e Zoom */
@@ -1269,48 +1229,37 @@
             box-shadow: 4px 6px 14px rgba(0, 0, 0, 0.8);
         }
 
-        /* Trajetória de Entrada, Varredura e Saída da Lupa */
-        @keyframes magnifierEntranceAndScan {
-            0%, 12% {
-                opacity: 0;
-                left: -22%;
-                top: -20%;
-                transform: rotate(-35deg) scale(1.4);
-            }
-            22% {
-                opacity: 1;
-                left: 6%;
-                top: 8%;
-                transform: rotate(-8deg) scale(1);
-            }
-            42% {
-                opacity: 1;
-                left: 65%;
+        /* Trajetória de Inspeção da Lupa sobre o Card */
+        @keyframes magnifierScanPath {
+            0% {
+                left: 4%;
                 top: 6%;
-                transform: rotate(10deg) scale(1.08);
+                transform: rotate(-10deg) scale(0.95);
             }
-            62% {
-                opacity: 1;
-                left: 55%;
+            25% {
+                left: 66%;
+                top: 4%;
+                transform: rotate(8deg) scale(1.08);
+            }
+            50% {
+                left: 58%;
                 top: 42%;
-                transform: rotate(-5deg) scale(1);
+                transform: rotate(-6deg) scale(1);
             }
-            78% {
-                opacity: 1;
-                left: 14%;
+            75% {
+                left: 12%;
                 top: 38%;
-                transform: rotate(12deg) scale(1.05);
+                transform: rotate(12deg) scale(1.06);
             }
-            88%, 100% {
-                opacity: 0;
-                left: 95%;
-                top: -20%;
-                transform: rotate(30deg) scale(0.5);
+            100% {
+                left: 4%;
+                top: 6%;
+                transform: rotate(-10deg) scale(0.95);
             }
         }
 
         /* -------------------------------------------------------------------------
-           MODELO 119: ENTRADA + AVANÇO "DAR PROSSEGIMENTO" (SEM CARIMBO & LINHAS LENTAS)
+           MODELO 119: CARD "DAR PROSSEGIMENTO" (FLUXO DE AVANÇO DINÂMICO)
            ------------------------------------------------------------------------- */
         .card-prosseguimento {
             background: linear-gradient(135deg, #062c21 0%, #091926 55%, #0c1322 100%);
@@ -1318,42 +1267,9 @@
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(16, 185, 129, 0.25);
             position: relative;
             overflow: visible;
-            animation: cardProsseguirEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
         }
 
-        /* Animação de Entrada Propulsora pela Esquerda e Disparo de Avanço pela Direita */
-        @keyframes cardProsseguirEntrance {
-            0% {
-                opacity: 0;
-                transform: translateX(-110px) skewX(-14deg) scale(0.9);
-                filter: blur(10px);
-            }
-            12% {
-                opacity: 1;
-                transform: translateX(8px) skewX(3deg) scale(1.02);
-                filter: blur(0px) brightness(1.3);
-                border-color: #6ee7b7;
-                box-shadow: -15px 0 35px rgba(16, 185, 129, 0.5);
-            }
-            18%, 82% {
-                opacity: 1;
-                transform: translateX(0px) skewX(0deg) scale(1);
-                filter: blur(0px) brightness(1);
-                border-color: #10b981;
-                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(16, 185, 129, 0.25);
-            }
-            88% {
-                opacity: 1;
-                transform: translateX(-10px) scale(0.98);
-            }
-            98%, 100% {
-                opacity: 0;
-                transform: translateX(120px) skewX(-16deg) scale(0.92);
-                filter: blur(10px);
-            }
-        }
-
-        /* Varredura de Linhas Diagonais no Fundo Interno (Velocidade bastante reduzida: 12s) */
+        /* Varredura de Setas de Avanço no Fundo Interno do Card */
         .prosseguimento-bg-stream {
             position: absolute;
             inset: 0;
@@ -1370,12 +1286,12 @@
                 -55deg,
                 transparent 0px,
                 transparent 28px,
-                rgba(16, 185, 129, 0.08) 28px,
-                rgba(56, 189, 248, 0.12) 42px,
+                rgba(16, 185, 129, 0.09) 28px,
+                rgba(56, 189, 248, 0.14) 42px,
                 transparent 42px
             );
             background-size: 200% 100%;
-            animation: streamForward calc(12s * var(--speed-multiplier)) linear infinite;
+            animation: streamForward calc(2.2s * var(--speed-multiplier)) linear infinite;
         }
         @keyframes streamForward {
             0% { background-position: 200% 0; }
@@ -1390,7 +1306,7 @@
             z-index: 5;
         }
 
-        /* Faixa/Pílula Animada Sobreposta "DAR PROSSEGIMENTO" (Entra deslizando após a chegada do card) */
+        /* Faixa/Pílula Animada Sobreposta "DAR PROSSEGIMENTO" */
         .overlay-badge-prosseguir {
             position: absolute;
             top: -16px;
@@ -1413,32 +1329,13 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            animation: prosseguirBadgeEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite,
-                       goldSweep calc(4s * var(--speed-multiplier)) linear infinite;
+            animation: prosseguirPulse calc(2s * var(--speed-multiplier)) ease-in-out infinite,
+                       goldSweep calc(2.5s * var(--speed-multiplier)) linear infinite;
         }
 
-        @keyframes prosseguirBadgeEntrance {
-            0%, 12% {
-                opacity: 0;
-                transform: translateX(-90%) scale(0.5);
-            }
-            20% {
-                opacity: 1;
-                transform: translateX(-46%) scale(1.08);
-            }
-            26%, 46%, 66%, 80% {
-                opacity: 1;
-                transform: translateX(-50%) scale(1);
-            }
-            36%, 56%, 74% {
-                opacity: 1;
-                transform: translateX(-47%) scale(1.04);
-                box-shadow: 0 8px 25px rgba(16, 185, 129, 0.95), 0 0 20px rgba(167, 243, 208, 0.8);
-            }
-            90%, 100% {
-                opacity: 0;
-                transform: translateX(10%) scale(0.6);
-            }
+        @keyframes prosseguirPulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-48%) scale(1.05); box-shadow: 0 8px 25px rgba(16, 185, 129, 0.95), 0 0 20px rgba(167, 243, 208, 0.8); }
         }
 
         /* Chevrons Animados de Avanço (>>>) */
@@ -1450,14 +1347,302 @@
         }
         .chevron-arrows span {
             display: inline-block;
-            animation: chevronPush calc(1.2s * var(--speed-multiplier)) infinite;
+            animation: chevronPush calc(1s * var(--speed-multiplier)) infinite;
         }
-        .chevron-arrows span:nth-child(2) { animation-delay: 0.18s; }
-        .chevron-arrows span:nth-child(3) { animation-delay: 0.36s; }
+        .chevron-arrows span:nth-child(2) { animation-delay: 0.15s; }
+        .chevron-arrows span:nth-child(3) { animation-delay: 0.3s; }
 
         @keyframes chevronPush {
             0%, 100% { opacity: 0.3; transform: translateX(-2px); }
             50% { opacity: 1; transform: translateX(3px); }
+        }
+
+        /* Selo Translúcido Central de Fluxo Contínuo sobre o Card */
+        .prosseguir-watermark-stamp {
+            position: absolute;
+            top: 52%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-6deg);
+            border: 2px dashed rgba(52, 211, 153, 0.45);
+            background: rgba(2, 44, 34, 0.72);
+            backdrop-filter: blur(3px);
+            color: #6ee7b7;
+            font-weight: 800;
+            font-size: clamp(11px, 3.8cqi, 16px);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            padding: 4px 14px;
+            border-radius: 8px;
+            z-index: 25;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            animation: stampFloatForward calc(2.6s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+
+        @keyframes stampFloatForward {
+            0%, 100% { opacity: 0.82; transform: translate(-52%, -50%) rotate(-5deg) scale(0.96); }
+            50% { opacity: 1; transform: translate(-48%, -50%) rotate(-5deg) scale(1.04); border-color: #34d399; color: #ecfdf5; box-shadow: 0 0 18px rgba(16, 185, 129, 0.55); }
+        }
+        /* -------------------------------------------------------------------------
+           MODELO 120: CARD "NOVO E-MAIL" (ENTRADA E SAÍDA + ENVELOPE SEM COBRIR TEXTO)
+           ------------------------------------------------------------------------- */
+           .card-novo-email {
+            background: linear-gradient(145deg, #2e1505 0%, #1c1124 55%, #0c1322 100%);
+            border: 1.5px solid #f59e0b;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(245, 158, 11, 0.25);
+            position: relative;
+            overflow: visible;
+            transform-origin: center center;
+            animation: emailCardInOut calc(5.2s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        /* Animação de Entrada e Saída do Card Inteiro */
+        @keyframes emailCardInOut {
+            0% {
+                opacity: 0;
+                transform: perspective(700px) translateY(35px) scale(0.82) rotateX(-18deg);
+                filter: brightness(2.2) blur(6px);
+            }
+            14% {
+                opacity: 1;
+                transform: perspective(700px) translateY(-4px) scale(1.02) rotateX(4deg);
+                filter: brightness(1.3) blur(0px);
+                border-color: #fef08a;
+                box-shadow: 0 18px 40px rgba(245, 158, 11, 0.55);
+            }
+            22%, 78% {
+                opacity: 1;
+                transform: perspective(700px) translateY(0) scale(1) rotateX(0deg);
+                filter: brightness(1) blur(0px);
+                border-color: #f59e0b;
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(245, 158, 11, 0.25);
+            }
+            86% {
+                opacity: 1;
+                transform: perspective(700px) translateX(-10px) scale(0.97);
+                border-color: #fef08a;
+            }
+            100% {
+                opacity: 0;
+                transform: perspective(700px) translateX(110px) scale(0.75) skewX(-12deg);
+                filter: brightness(2) blur(8px);
+            }
+        }
+
+        /* Brilho de Fundo Interno Sutil */
+        .email-bg-waves {
+            position: absolute;
+            inset: 0;
+            border-radius: 13px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .email-bg-waves::before {
+            content: '';
+            position: absolute;
+            inset: -50%;
+            background: radial-gradient(
+                circle at 85% 20%,
+                rgba(245, 158, 11, 0.2) 0%,
+                rgba(236, 72, 153, 0.08) 35%,
+                transparent 65%
+            );
+            animation: emailRadarGlow calc(2.6s * var(--speed-multiplier)) ease-in-out infinite alternate;
+        }
+        @keyframes emailRadarGlow {
+            0% { transform: scale(0.85); opacity: 0.4; }
+            100% { transform: scale(1.15); opacity: 1; }
+        }
+
+        /* Garante leitura limpa dos textos acima do fundo */
+        .card-novo-email .setor-modern-card-top,
+        .card-novo-email .setor-modern-situation,
+        .card-novo-email .setor-modern-card-meta {
+            position: relative;
+            z-index: 5;
+        }
+
+        /* Badge Superior "NOVO E-MAIL" — tipografia alinhada aos modelos 118/119 */
+        .overlay-badge-email {
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(90deg, #d97706, #f59e0b, #fef08a, #f59e0b, #d97706);
+            background-size: 250% 100%;
+            color: #1c0f02;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-weight: 800;
+            font-size: clamp(11px, 3.6cqi, 15px);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            padding: 5px 18px;
+            border-radius: 999px;
+            border: 1.5px solid #fef3c7;
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.7), 0 0 14px rgba(254, 240, 138, 0.5);
+            z-index: 40;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            animation: emailBadgeInOut calc(5.2s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite,
+                       goldSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+        }
+
+        @keyframes emailBadgeInOut {
+            0%, 8% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-22px) scale(0.4);
+            }
+            18% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(2px) scale(1.1);
+            }
+            26%, 50%, 74% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0px) scale(1);
+            }
+            38%, 62% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(-3px) scale(1.06);
+                box-shadow: 0 10px 26px rgba(245, 158, 11, 0.95), 0 0 20px rgba(254, 240, 138, 0.8);
+            }
+            84%, 100% {
+                opacity: 0;
+                transform: translateX(-10%) translateY(-18px) scale(0.5);
+            }
+        }
+
+        /* Ponto Vermelho Pulsante na Pílula */
+        .email-unread-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 0 2px #fef3c7, 0 0 8px #ef4444;
+            animation: dotPing calc(1s * var(--speed-multiplier)) infinite alternate;
+        }
+
+        /* Envelope 3D com Entrada Voando e Saída Rápida (Posicionado na Borda Direita p/ Não Tapar o Texto) */
+        .email-envelope-rig {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            width: clamp(46px, 14cqi, 62px);
+            height: clamp(32px, 10cqi, 44px);
+            z-index: 35;
+            pointer-events: none;
+            animation: envelopeFlyInOut calc(5.2s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        @keyframes envelopeFlyInOut {
+            0%, 10% {
+                opacity: 0;
+                transform: translate(-180px, -45px) rotate(-35deg) scale(0.3);
+                filter: blur(4px);
+            }
+            22% {
+                opacity: 1;
+                transform: translate(-6px, 4px) rotate(12deg) scale(1.12);
+                filter: blur(0px);
+            }
+            32%, 72% {
+                opacity: 1;
+                transform: translate(0px, 0px) rotate(-8deg) scale(1);
+            }
+            52% {
+                opacity: 1;
+                transform: translate(-4px, -5px) rotate(6deg) scale(1.05);
+            }
+            80% {
+                opacity: 1;
+                transform: translate(-12px, 2px) rotate(-14deg) scale(0.95);
+            }
+            94%, 100% {
+                opacity: 0;
+                transform: translate(140px, -40px) rotate(30deg) scale(0.3);
+                filter: blur(4px);
+            }
+        }
+
+        .email-envelope-body {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ffffff 0%, #fef3c7 60%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 6px;
+            box-shadow: 
+                0 10px 20px rgba(0, 0, 0, 0.75),
+                0 0 16px rgba(245, 158, 11, 0.55);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Aba Superior do Envelope */
+        .email-envelope-body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 58%;
+            background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+            clip-path: polygon(0 0, 100% 0, 50% 100%);
+            z-index: 2;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+        }
+
+        /* Dobras Inferiores do Envelope */
+        .email-envelope-body::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 65%;
+            background: linear-gradient(180deg, transparent 0%, rgba(217, 119, 6, 0.22) 100%);
+            clip-path: polygon(0 100%, 50% 25%, 100% 100%);
+            z-index: 1;
+        }
+
+        /* Contador "1" Vermelho no Canto do Envelope */
+        .email-notification-pill {
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            color: #ffffff;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-size: 10px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.8);
+            z-index: 4;
+            animation: badgePopAlert calc(1s * var(--speed-multiplier)) ease-in-out infinite alternate;
+        }
+
+        /* Conteúdo do card 120 herda a tipografia padrão do setor-moderno */
+        .card-novo-email .setor-modern-card-top h3,
+        .card-novo-email .setor-modern-situation,
+        .card-novo-email .setor-modern-card-author,
+        .card-novo-email .setor-modern-timer-value,
+        .card-novo-email .setor-modern-timer-label {
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        }
+
+        @keyframes badgePopAlert {
+            0% { transform: scale(0.9); }
+            100% { transform: scale(1.18); }
         }
 
     </style>
@@ -1466,7 +1651,7 @@
 
     <div class="catalog-header">
         <h1>Catálogo Master 119 Cards OS</h1>
-        <p>Coleção completa de 119 modelos de UI, incluindo o <code>ModernQueueCard</code>, OVNI e as Entradas Operacionais <strong>Analisar (Lupa)</strong> e <strong>Dar Prosseguimento</strong>.</p>
+        <p>Coleção completa de 119 modelos de UI, incluindo o <code>ModernQueueCard</code>, OVNI e os novos cards <strong>Analisar (Lupa)</strong> e <strong>Dar Prosseguimento</strong>.</p>
     </div>
 
     <!-- Barra Flutuante de Controle Global -->
@@ -2111,20 +2296,20 @@
 
 
         <!-- =========================================================================================
-             SEÇÃO 13: MODELOS 118 E 119 - ANIMAÇÕES DE ENTRADA OPERACIONAIS ("ANALISAR" & "DAR PROSSEGIMENTO")
+             SEÇÃO 13: MODELOS 118, 119 E 120 - OVERLAYS DE AÇÃO
              ========================================================================================= -->
         <div class="section-header">
             <h2 class="section-title">
-                13. Entradas Operacionais em Loop: "Analisar" com Lupa & "Dar Prosseguimento" (Modelos 118 e 119)
-                <span class="badge-action">Entradas em Loop + Ação</span>
+                13. Overlays de Ação Operacional: Analisar, Dar Prosseguimento &amp; Novo E-mail (Modelos 118–120)
+                <span class="badge-action">Novo • Action Overlays</span>
             </h2>
         </div>
 
-        <div class="setor-modern-root setor-modern-grid">
+        <div class="setor-modern-root setor-modern-grid action-overlays-grid">
 
-            <!-- 118. Entrada + Inspeção "Analisar" com Lupa Passando Sobre o Card -->
+            <!-- 118. Card "Analisar" + Lupa Passando Sobre o Card -->
             <div class="action-overlay-col">
-                <article class="setor-modern-card card-analisar-lupa" aria-label="OS 1482/26 - Entrada e Ação: Analisar">
+                <article class="setor-modern-card card-analisar-lupa" aria-label="OS 1482/26 - Ação: Analisar">
                     
                     <!-- Texto Animado "Analisar" Sobre o Card -->
                     <div class="overlay-badge-analisar">
@@ -2132,7 +2317,7 @@
                         🔍 Analisar
                     </div>
 
-                    <!-- Lupa que Entra, Passa Sobre o Card e Sai -->
+                    <!-- Lupa que Passa Sobre o Card -->
                     <div class="magnifier-rig">
                         <div class="magnifier-lens"></div>
                         <div class="magnifier-handle"></div>
@@ -2159,17 +2344,22 @@
                 </article>
             </div>
 
-            <!-- 119. Entrada Propulsora + "Dar Prosseguimento" Sobre o Card -->
+            <!-- 119. Card "Dar Prosseguimento" Sobre o Card -->
             <div class="action-overlay-col">
-                <article class="setor-modern-card card-prosseguimento" aria-label="OS 1485/26 - Entrada e Ação: Dar Prosseguimento">
+                <article class="setor-modern-card card-prosseguimento" aria-label="OS 1485/26 - Ação: Dar Prosseguimento">
                     
-                    <!-- Feixes de Avanço Internos (Movimento Suave e Lento de 12s) -->
+                    <!-- Feixes de Avanço Internos -->
                     <div class="prosseguimento-bg-stream"></div>
 
-                    <!-- Texto Animado "Dar Prosseguimento" que Surge no Topo do Card -->
+                    <!-- Texto Animado "Dar Prosseguimento" no Topo do Card -->
                     <div class="overlay-badge-prosseguir">
                         Dar prosseguimento
                         <span class="chevron-arrows"><span>›</span><span>›</span><span>›</span></span>
+                    </div>
+
+                    <!-- Selo Central Animado "Dar Prosseguimento" Sobre o Card -->
+                    <div class="prosseguir-watermark-stamp">
+                        Dar prosseguimento »
                     </div>
 
                     <div class="setor-modern-card-top">
@@ -2193,9 +2383,50 @@
                 </article>
             </div>
 
+            <!-- 120. Card "Novo E-mail" (Com Entrada/Saída e Sem Badge Central sobre os Textos) -->
+            <div class="action-overlay-col">
+                <article class="setor-modern-card card-novo-email" aria-label="OS 1489/26 - Ação: Novo e-mail">
+                    
+                    <!-- Brilho de Fundo Interno -->
+                    <div class="email-bg-waves"></div>
+
+                    <!-- Pílula Animada "Novo e-mail" no Topo do Card -->
+                    <div class="overlay-badge-email">
+                        <span class="email-unread-dot"></span>
+                        ✉️ Novo e-mail
+                    </div>
+
+                    <!-- Envelope 3D com Voo de Entrada e Saída -->
+                    <div class="email-envelope-rig">
+                        <div class="email-envelope-body"></div>
+                        <span class="email-notification-pill">1</span>
+                    </div>
+
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1489/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[120 • E-mail]</span> Mensagem do Solicitante
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            João Lucas
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="195">00:03:15</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
         </div>
 
     </div>
+
 
     <!-- SCRIPTS DE CONTROLE, INSPEÇÃO E CRONÔMETRO EM TEMPO REAL (TABULAR-NUMS) -->
     <script>

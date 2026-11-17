@@ -1,0 +1,38 @@
+---
+description: Contexto essencial do monorepo SAGRA Web
+alwaysApply: true
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# SAGRA Web — contexto essencial
+
+Sistema corporativo de Ordens de Serviço (OS) para Câmara/SEFOC. Monorepo híbrido: workspace **pnpm** (`apps/*`, `packages/*`) + backend Python fora do workspace Node.
+
+## Layout
+
+- **Frontend ativo:** `apps/web/` — React 19, Vite 6, TanStack Router/Query.
+- **Pacotes:** `packages/ui/`, `packages/api-types/` (`@sagra/*`).
+- **API:** `app/backend/` — FastAPI; entry `routers.api:app`.
+- **Serviços auxiliares:** `app/services/` (sync, monitor).
+- **Worker Windows:** `worker/papelaria_worker/` (CorelDRAW COM).
+- **Letreiro independente:** `widget_letreiro/` — WPF .NET 10 e painel React em `admin-web/`, fora do workspace pnpm; ver `auto-letreiro.mdc`.
+- **Build estático:** `apps/web/dist/`; empacotado em `deploy/release/app/frontend/`. Não editar builds manualmente.
+- **Config runtime:** `config/` — `.env`, `config.json` (gitignored; usar templates).
+
+## Não editar sem tarefa explícita
+
+`node_modules/`, `dist/`, `build/`, `deploy/release/`, `backups/`, `portfolio-imports/`, `__pycache__/`, logs e caches.
+
+## Comandos confirmados (raiz)
+
+- `pnpm install` — deps Node do workspace.
+- `postinstall` materializa `@sagra/*` via `scripts/materialize-workspace-packages.mjs`; `.npmrc` usa linker hoisted no Windows.
+- `pnpm dev` — Vite em `apps/web` (:5173).
+- `iniciar-servidor.bat` — API (:8001) + Vite; modos `restart`, `api-only`, `unificado`.
+- `pnpm test` — pytest + vitest.
+- `pnpm package:release` — empacota release em `deploy/release/`.
+
+## Referências canônicas
+
+`package.json`, `pnpm-workspace.yaml`, `apps/web/vite.config.ts`, `app/backend/routers/api.py`, `pytest.ini`, `GUIA_DEPLOY_RELEASES_SAGRA.md`.

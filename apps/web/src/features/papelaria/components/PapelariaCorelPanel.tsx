@@ -1436,7 +1436,7 @@ export function PapelariaCorelPanel({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-            <div className="min-h-0 shrink-0 space-y-2 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
               {modelos.length === 0 ? (
                 <p className="p-4 text-center text-xs text-neutral-500">
                   Importe a planilha de modelos ou verifique o produto da OS.
@@ -1520,7 +1520,7 @@ export function PapelariaCorelPanel({
             </div>
 
             {selectedModelId !== null ? (
-              <div className="mt-2 flex min-h-[7rem] min-w-0 flex-1 flex-col">
+              <div className="mt-2 flex h-28 min-w-0 shrink-0 flex-col">
                 <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
                   Observações
                 </label>

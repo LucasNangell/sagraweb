@@ -38,6 +38,31 @@ function opcoes(over: Partial<ImposicaoVariantesResponse> = {}): ImposicaoVarian
 describe("PapelariaImposicaoVarianteDialog", () => {
   beforeEach(() => previaMock.mockReset());
 
+  it("mostra o aviso quando o PDF da OS só tem a frente e continua permitindo gerar", () => {
+    const onConfirm = vi.fn();
+    const base = opcoes();
+    render(
+      <PapelariaImposicaoVarianteDialog
+        open
+        ano={2026}
+        nro={6001}
+        modeloId={7}
+        opcoes={{
+          ...base,
+          variantes: {
+            ...base.variantes,
+            offset: { ...base.variantes.offset, aviso: "O PDF da OS tem 1 página: será gerado só frente." },
+          },
+        }}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    expect(screen.getByTestId("imposicao-variante-offset-aviso")).toHaveTextContent("só frente");
+    fireEvent.click(screen.getByTestId("imposicao-variante-offset"));
+    expect(onConfirm).toHaveBeenCalledWith({ variante: "offset", juntada_os: [] });
+  });
+
   it("pergunta só Offset ou Digital e gera direto quando não há juntada", () => {
     const onConfirm = vi.fn();
     render(

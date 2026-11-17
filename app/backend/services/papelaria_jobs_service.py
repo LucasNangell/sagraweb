@@ -1224,6 +1224,15 @@ def resend_imposicao_jdf(
         base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
     base_pdf_name = os.path.basename(base_pdf_path)
 
+    if isinstance(dados.get("imposicao_v2"), dict) and not usar_pre and not sem_imposicao:
+        # Perfil v2: refaz o ajuste ao número de páginas do PDF atual.
+        from services import papelaria_imposicao_v2_service as imposicao_v2_svc
+
+        dados = dict(dados)
+        readaptada = imposicao_v2_svc.config_para_reenvio(dados, base_pdf_path=base_pdf_path)
+        if readaptada is not None:
+            config = readaptada
+
     if usar_pre and not sem_imposicao:
         config, base_pdf_path = _prepare_pre_impresso_jdf_config(
             config=config,

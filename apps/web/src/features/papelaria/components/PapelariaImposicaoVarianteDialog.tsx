@@ -189,6 +189,14 @@ export function PapelariaImposicaoVarianteDialog({
                           PDF em {info.destino_pdf === "offset" ? "Offset" : "Digital"}
                           {info.fonte === "configuracao_antiga" ? " · configuração antiga" : ""}
                         </span>
+                        {info.aviso ? (
+                          <span
+                            className="text-[11px] font-medium text-amber-700"
+                            data-testid={`imposicao-variante-${v.id}-aviso`}
+                          >
+                            {info.aviso}
+                          </span>
+                        ) : null}
                       </>
                     ) : (
                       <span className="flex items-center gap-1 text-[11px] text-amber-700">

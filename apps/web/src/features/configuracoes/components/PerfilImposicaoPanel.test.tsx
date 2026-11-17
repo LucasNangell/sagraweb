@@ -140,3 +140,43 @@ describe("PerfilImposicaoPanel — PDF de marcas no servidor", () => {
     );
   });
 });
+
+describe("PerfilImposicaoPanel — frente e verso com PDF incompleto", () => {
+  beforeEach(() => {
+    api.fetchModelosPerfil.mockResolvedValue([]);
+    api.validarPerfil.mockResolvedValue({ erros: [], avisos: [], completo: true, perfil: null, resumo: null });
+    api.fetchPerfisProduto.mockResolvedValue({
+      produto: "Produto X",
+      digital: null,
+      offset: null,
+      configuracao_antiga: {
+        digital: { existe: true, perfil: antigo, completo_no_banco: true },
+        offset: { existe: false, perfil: null, completo_no_banco: false },
+      },
+    });
+  });
+
+  it("em frente e verso oferece gerar com menos páginas (ligado por padrão) e salva a escolha", async () => {
+    api.salvarPerfil.mockResolvedValue({
+      id: 1, produto: "Produto X", variante: "digital", perfil: antigo, ativo: false,
+      validacao: { erros: [], avisos: [], completo: true },
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /Importar da configuração atual/ }));
+    const opcao = /Gerar mesmo quando o PDF da OS vier com menos páginas/;
+    expect(screen.queryByRole("checkbox", { name: opcao })).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: /Impressão/ }), { target: { value: "frente_verso" } });
+    const toggle = screen.getByRole("checkbox", { name: opcao });
+    expect(toggle).toBeChecked();
+    expect(screen.getByText(/o JDF sai só frente/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: /^Salvar$/ }));
+    await waitFor(() =>
+      expect(api.salvarPerfil).toHaveBeenCalledWith(
+        "Produto X",
+        "digital",
+        expect.objectContaining({ faces: "frente_verso", paginas_faltantes: "erro" }),
+      ),
+    );
+  });
+});

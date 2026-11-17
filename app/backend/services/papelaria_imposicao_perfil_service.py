@@ -32,6 +32,10 @@ FONTES_ARTE = ("base_sefoc", "pre_impresso")
 ROTACAO_ARTE = ("no_jdf", "no_pdf")
 REGRAS_TIRAGEM = ("iguais", "proporcional_mdc", "livre")
 DESTINOS_PDF = ("digital", "offset")
+#: O que fazer quando o PDF da OS tem menos páginas do que o perfil usa:
+#: ``adaptar`` = slots sem página ficam vazios e, sem nenhuma página no
+#: verso, o JDF sai só frente (Simplex); ``erro`` = recusa a geração.
+PAGINAS_FALTANTES = ("adaptar", "erro")
 
 #: Tolerância (mm) entre o tamanho do PDF de marcas e a folha.
 TOLERANCIA_MARCAS_MM = 0.5
@@ -47,6 +51,7 @@ def perfil_vazio() -> dict[str, Any]:
         "pagina": {"fonte": "fixa", "largura_mm": None, "altura_mm": None},
         "sangria_mm": 0.0,
         "faces": "frente",
+        "paginas_faltantes": "adaptar",
         "posicionamento": "grade",
         "grade": {
             "colunas": 1,
@@ -234,6 +239,9 @@ def normalize_perfil(data: Any) -> dict[str, Any]:
         raise ValueError("sangria_mm deve ser >= 0.")
     base["sangria_mm"] = sangria
     base["faces"] = _choice(data.get("faces"), FACES, "faces", "frente")
+    base["paginas_faltantes"] = _choice(
+        data.get("paginas_faltantes"), PAGINAS_FALTANTES, "paginas_faltantes", "adaptar"
+    )
     base["posicionamento"] = _choice(
         data.get("posicionamento"), POSICIONAMENTOS, "posicionamento", "grade"
     )
@@ -1001,6 +1009,106 @@ def compilar_config_jdf(
         "jdf_import_root": perfil["saida"]["jdf_hotfolder"],
         "imposicao_pdf_path": None,
     }
+
+
+def max_pagina_perfil(perfil: dict[str, Any]) -> int:
+    """Maior número de página do PDF que o perfil usa (frente e verso)."""
+    slots = perfil.get("slots") or {}
+    faces = ["frente", "verso"] if perfil.get("faces") == "frente_verso" else ["frente"]
+    paginas = [int(s.get("pagina") or 1) for f in faces for s in (slots.get(f) or [])]
+    return max(paginas) if paginas else 1
+
+
+def adaptar_config_a_paginas(
+    config: dict[str, Any],
+    n_paginas: int,
+    *,
+    modo: str = "adaptar",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Ajusta a configuração compilada ao número real de páginas do PDF.
+
+    Células cujas páginas não existem no PDF são retiradas (o slot fica
+    vazio na folha). Se nenhuma célula do verso sobrar, o JDF passa a ser
+    só frente (Simplex), sem superfície de verso. As posições das células
+    que ficam não mudam.
+
+    Retorna ``(config_ajustada, info)``; ``info["ajustado"]`` indica se algo
+    mudou. Com ``modo="erro"`` qualquer página ausente gera ``ValueError``.
+    """
+    from services import papelaria_imposicao_config_service as cfg_svc
+
+    n = int(n_paginas)
+    if n < 1:
+        raise ValueError("O PDF da OS não tem páginas.")
+    grid = dict(config.get("grid") or {})
+    duplex = str(config.get("work_style") or "Simplex") == "Duplex"
+    frente = cfg_svc.resolve_grid_ocupadas(grid, face="frente")
+    verso = cfg_svc.resolve_grid_ocupadas(grid, face="verso") if duplex else []
+    usadas = [int(c.get("pagina") or 1) for c in frente + verso]
+    max_usada = max(usadas) if usadas else 1
+    info: dict[str, Any] = {
+        "paginas_pdf": n,
+        "paginas_perfil": max_usada,
+        "ajustado": False,
+        "so_frente": False,
+        "slots_vazios_frente": 0,
+        "slots_vazios_verso": 0,
+        "work_style": "Duplex" if duplex else "Simplex",
+    }
+    if max_usada <= n:
+        return config, info
+
+    if modo == "erro":
+        raise ValueError(
+            f"O PDF da OS tem {n} página(s), mas o perfil usa até a página "
+            f"{max_usada}. Envie o PDF completo ou, no perfil, permita gerar "
+            "com as páginas que existirem."
+        )
+
+    frente_ok = [c for c in frente if int(c.get("pagina") or 1) <= n]
+    verso_ok = [c for c in verso if int(c.get("pagina") or 1) <= n]
+    if not frente_ok:
+        paginas_frente = sorted({int(c.get("pagina") or 1) for c in frente})
+        raise ValueError(
+            f"O PDF da OS tem {n} página(s) e nenhuma delas vai na frente "
+            f"(a frente usa a(s) página(s) {', '.join(map(str, paginas_frente))})."
+        )
+    grid["ocupadas"] = frente_ok
+    novo = dict(config)
+    if duplex and verso_ok:
+        grid["ocupadas_verso"] = verso_ok
+    else:
+        grid.pop("ocupadas_verso", None)
+        novo["work_style"] = "Simplex"
+    novo["grid"] = grid
+    info.update(
+        {
+            "ajustado": True,
+            "so_frente": duplex and not verso_ok,
+            "slots_vazios_frente": len(frente) - len(frente_ok),
+            "slots_vazios_verso": len(verso) - len(verso_ok),
+            "work_style": novo["work_style"],
+        }
+    )
+    return novo, info
+
+
+def descrever_adaptacao(info: dict[str, Any]) -> str:
+    """Frase curta para log/resultado do job."""
+    if not info.get("ajustado"):
+        return ""
+    n = int(info["paginas_pdf"])
+    partes = [f"PDF com {n} página{'s' if n != 1 else ''} (perfil usa até {info['paginas_perfil']})"]
+    if info.get("so_frente"):
+        partes.append("gerado só frente")
+    vazios = int(info.get("slots_vazios_frente") or 0)
+    if vazios:
+        partes.append(f"{vazios} slot(s) da frente vazio(s)")
+    vv = int(info.get("slots_vazios_verso") or 0)
+    if vv and not info.get("so_frente"):
+        partes.append(f"{vv} slot(s) do verso vazio(s)")
+    return "; ".join(partes) + "."
 
 
 def slots_para_lote(perfil: dict[str, Any], n_slots: int) -> list[dict[str, Any]]:

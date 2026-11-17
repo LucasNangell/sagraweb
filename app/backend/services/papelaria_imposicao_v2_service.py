@@ -484,9 +484,12 @@ def create_imposicao_job_v2(
     # --- Síncrono: BaseSefoc.pdf da OS ---
     removed_digital = jobs.clear_digital_imposicao_pdfs(sefoc_dir) if destino == "digital" else []
     base_pdf_path = jobs.resolve_base_sefoc_pdf_path(ano, nro)
-    config = perfil_svc.compilar_config_jdf(perfil)
-    config = _aplicar_marcas_op(
-        config, perfil=perfil, nros=[int(nro)], sefoc_dir=sefoc_dir, ano=ano, nro=nro
+    config_base = perfil_svc.compilar_config_jdf(perfil)
+    config_base = _aplicar_marcas_op(
+        config_base, perfil=perfil, nros=[int(nro)], sefoc_dir=sefoc_dir, ano=ano, nro=nro
+    )
+    config, paginas_info = adaptar_ao_pdf(
+        config_base, perfil=perfil, base_pdf_path=base_pdf_path
     )
     artifacts = jobs._build_imposicao_jdf_artifacts(
         ano=ano,
@@ -499,7 +502,7 @@ def create_imposicao_job_v2(
         "imposicao_v2": v2_meta,
         "base_pdf": os.path.basename(base_pdf_path),
         "imposicao_config": config,
-        "imposicao_config_base": config,
+        "imposicao_config_base": config_base,
         "imposicao_variante": variante,
         "usar_pre_impresso": False,
         "imposicao_destino": destino,
@@ -508,6 +511,8 @@ def create_imposicao_job_v2(
         "jdf_name": artifacts["jdf_name"],
         "aguardando_apogee": True,
     }
+    if paginas_info is not None:
+        dados_clean["imposicao_paginas"] = paginas_info
     if removed_digital:
         dados_clean["imposicao_pdfs_removidos"] = removed_digital
     insert_params = {
@@ -550,16 +555,116 @@ def create_imposicao_job_v2(
         if removed_digital
         else ""
     )
+    adaptacao = perfil_svc.descrever_adaptacao(paginas_info or {})
     jobs.append_job_log(
         job_id,
         (
             f"JDF {variante} (perfil) enviado ao Apogee: {artifacts['jdf_name']} "
             f"({artifacts['jdf_dir']}) a partir de {os.path.basename(base_pdf_path)}.{extra}"
+            + (f" {adaptacao}" if adaptacao else "")
         ),
         "info",
     )
     jobs.broadcast_job_update(job)
     return job
+
+
+# ---------------------------------------------------------------------------
+# Páginas do PDF × páginas do perfil
+# ---------------------------------------------------------------------------
+
+
+def _contar_paginas(pdf_path: str) -> Optional[int]:
+    from services import papelaria_jdf_service as jdf_svc
+
+    try:
+        return int(jdf_svc.read_pdf_page_count(pdf_path))
+    except Exception as exc:
+        logger.warning("Não foi possível contar as páginas de %s: %s", pdf_path, exc)
+        return None
+
+
+def adaptar_ao_pdf(
+    config: dict[str, Any],
+    *,
+    perfil: dict[str, Any],
+    base_pdf_path: str,
+) -> tuple[dict[str, Any], Optional[dict[str, Any]]]:
+    """
+    Ajusta a configuração ao número de páginas do PDF da OS, conforme
+    ``perfil.paginas_faltantes``. Sem conseguir ler o PDF, segue como antes.
+    """
+    n = _contar_paginas(base_pdf_path)
+    if n is None:
+        return config, None
+    modo = str(perfil.get("paginas_faltantes") or "adaptar")
+    return perfil_svc.adaptar_config_a_paginas(config, n, modo=modo)
+
+
+def config_para_reenvio(
+    dados: dict[str, Any],
+    *,
+    base_pdf_path: str,
+) -> Optional[dict[str, Any]]:
+    """
+    Reenvio de JDF de job do perfil: refaz o ajuste às páginas com o PDF
+    atual (o BaseSefoc pode ter sido refeito com mais ou menos páginas).
+    ``None`` = usar a configuração gravada no job.
+    """
+    meta = dados.get("imposicao_v2")
+    base = dados.get("imposicao_config_base")
+    if not isinstance(meta, dict) or not isinstance(base, dict):
+        return None
+    if dados.get("usar_pre_impresso") or dados.get("pre_impresso_pipeline"):
+        return None
+    if "imposicao_paginas" not in dados:
+        return None
+    from services import papelaria_imposicao_config_service as cfg_svc
+
+    perfil = meta.get("perfil") if isinstance(meta.get("perfil"), dict) else {}
+    config = cfg_svc.validate_imposicao_config_payload(base, require_marcas_pdf=True)
+    novo, info = adaptar_ao_pdf(config, perfil=perfil, base_pdf_path=base_pdf_path)
+    if info is not None:
+        dados["imposicao_paginas"] = info
+    return novo
+
+
+def aviso_paginas_os(
+    *, ano: int, nro: int, perfil: dict[str, Any]
+) -> Optional[str]:
+    """
+    Aviso para o diálogo quando o BaseSefoc da OS tem menos páginas do que
+    o perfil usa (ex.: só frente). ``None`` quando está tudo certo ou não
+    dá para ler o PDF.
+    """
+    if perfil_svc.pipeline_para(perfil) != "sincrono":
+        return None
+    if perfil_svc.max_pagina_perfil(perfil) <= 1:
+        return None
+    from services import papelaria_jobs_service as jobs
+
+    try:
+        pdf = jobs.resolve_base_sefoc_pdf_path(ano, nro)
+    except Exception:
+        return None
+    n = _contar_paginas(pdf)
+    if n is None:
+        return None
+    try:
+        cfg = perfil_svc.compilar_config_jdf(perfil)
+        _cfg, info = perfil_svc.adaptar_config_a_paginas(
+            cfg, n, modo=str(perfil.get("paginas_faltantes") or "adaptar")
+        )
+    except ValueError as exc:
+        return str(exc)
+    except Exception:
+        return None
+    if not info.get("ajustado"):
+        return None
+    plural = "s" if n != 1 else ""
+    if info.get("so_frente"):
+        return f"O PDF da OS tem {n} página{plural}: será gerado só frente."
+    return f"O PDF da OS tem {n} página{plural}: slots sem página ficarão vazios."
 
 
 # ---------------------------------------------------------------------------
@@ -612,6 +717,7 @@ def opcoes_os(*, ano: int, nro: int, modelo: dict[str, Any]) -> dict[str, Any]:
                 "resumo": perfil_svc.resumo_perfil(perfil),
                 "destino_pdf": perfil["saida"]["destino_pdf"],
                 "erros": [e["mensagem"] for e in val["erros"]],
+                "aviso": aviso_paginas_os(ano=ano, nro=nro, perfil=perfil) if val["completo"] else None,
             }
             if perfil["juntada"]["ativo"]:
                 try:

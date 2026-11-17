@@ -24,6 +24,7 @@ export function perfilVazio(): PerfilImposicao {
     pagina: { fonte: "fixa", largura_mm: null, altura_mm: null },
     sangria_mm: 0,
     faces: "frente",
+    paginas_faltantes: "adaptar",
     posicionamento: "grade",
     grade: {
       colunas: 1,

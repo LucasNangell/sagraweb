@@ -1,4 +1,4 @@
-# Imposição de papelaria — perfil v2 (0.62.0)
+# Imposição de papelaria — perfil v2 (0.63.0)
 
 Todos os produtos de papelaria usam o mesmo formulário de imposição, em
 **Configurações → Papelaria → Produtos → aba Imposição (produto)**. Não há
@@ -61,6 +61,27 @@ da API nem de arquivos locais de quem configurou.
 Perfis que ainda usam caminho de rede (`marcas.pdf_path`) continuam
 funcionando. A tela mostra um aviso com o botão "Copiar este arquivo para o
 servidor".
+
+## PDF com menos páginas (frente e verso)
+
+Cada slot diz qual página do PDF da OS ele recebe (ex.: frente = páginas 1 e 3,
+verso = páginas 2 e 4). Na geração o sistema conta as páginas do BaseSefoc:
+
+- Com a opção **"Gerar mesmo quando o PDF da OS vier com menos páginas"**
+  (seção 2, ligada por padrão), os slots cujas páginas não existem ficam vazios.
+  As posições dos outros slots não mudam. Se nenhuma página do verso existir
+  (ex.: PDF só com a página 1), o JDF sai **só frente** (Simplex, sem superfície
+  de verso).
+- Com a opção desligada, a geração é recusada com a mensagem "O PDF da OS tem
+  N página(s), mas o perfil usa até a página M".
+- Se nenhuma página do PDF cair na frente, a geração é recusada nos dois modos.
+- O diálogo Offset/Digital avisa antes ("O PDF da OS tem 1 página: será gerado
+  só frente."). O log do job registra o ajuste, e o job guarda a configuração
+  completa (`imposicao_config_base`) e a usada (`imposicao_config`), além de
+  `imposicao_paginas`.
+- **Reenviar JDF** conta as páginas de novo. Se o BaseSefoc foi refeito com
+  todas as páginas, o reenvio volta a frente e verso.
+- Não se aplica à arte pré-impressa (o PDF combinado já tem uma página por slot).
 
 ## Banco
 

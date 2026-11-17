@@ -8,6 +8,11 @@ export type ImposicaoVariante = "digital" | "offset";
 export type Rotacao = 0 | 90 | 180 | 270;
 export type FontePagina = "fixa" | "pdf";
 export type Faces = "frente" | "frente_verso";
+/**
+ * PDF da OS com menos páginas do que o perfil usa: "adaptar" deixa os slots
+ * sem página vazios (sem páginas do verso → só frente); "erro" recusa.
+ */
+export type PaginasFaltantes = "adaptar" | "erro";
 export type Posicionamento = "grade" | "manual";
 export type Alinhamento = "centro" | "topo_esquerda";
 export type FonteArte = "base_sefoc" | "pre_impresso";
@@ -41,6 +46,7 @@ export interface PerfilImposicao {
   };
   sangria_mm: number;
   faces: Faces;
+  paginas_faltantes: PaginasFaltantes;
   posicionamento: Posicionamento;
   grade: {
     colunas: number;
@@ -198,6 +204,8 @@ export type VarianteOpcao = {
   resumo: string | null;
   destino_pdf: DestinoPdf | null;
   erros: string[];
+  /** Ex.: PDF da OS só com a frente → "será gerado só frente". */
+  aviso?: string | null;
 };
 
 export type JuntadaCandidata = {

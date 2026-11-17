@@ -244,6 +244,9 @@ export function PerfilImposicaoEditor({
     );
   const duplex = perfil.faces === "frente_verso";
   const faceAtual: Face = duplex ? face : "frente";
+  const usaVariasPaginas =
+    perfil.arte.fonte !== "pre_impresso" &&
+    (duplex || perfil.slots.frente.some((s) => s.pagina > 1));
 
   const set = <K extends keyof PerfilImposicao>(key: K, value: PerfilImposicao[K]) =>
     onChange({ ...perfil, [key]: value });
@@ -437,6 +440,18 @@ export function PerfilImposicaoEditor({
               </select>
             </label>
           </div>
+          {usaVariasPaginas ? (
+            <Toggle
+              label="Gerar mesmo quando o PDF da OS vier com menos páginas"
+              checked={(perfil.paginas_faltantes ?? "adaptar") === "adaptar"}
+              onChange={(v) => set("paginas_faltantes", v ? "adaptar" : "erro")}
+              hint={
+                duplex
+                  ? "Slots cujas páginas não existem no PDF ficam vazios. Se nenhuma página do verso existir (ex.: PDF só com a página 1), o JDF sai só frente."
+                  : "Slots cujas páginas não existem no PDF ficam vazios. Desmarcado, a geração é recusada se faltar alguma página."
+              }
+            />
+          ) : null}
           <FieldMessages items={[...errosDe("pagina"), ...errosDe("sangria_mm")]} tone="erro" />
           <FieldMessages items={avisosDe("pagina")} tone="aviso" />
         </Section>

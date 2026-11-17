@@ -112,6 +112,31 @@ def test_format_marcas_op_token():
     assert format_marcas_op_token([6220, 6221]) == "06220-06221_SM74"
 
 
+def test_bake_page_rotations_into_pdf(tmp_path: Path):
+    from services.papelaria_jdf_service import MM_TO_PT, bake_page_rotations_into_pdf
+
+    src = tmp_path / "gang.pdf"
+    dest = tmp_path / "baked.pdf"
+    doc = fitz.open()
+    doc.new_page(width=220 * MM_TO_PT, height=320 * MM_TO_PT)
+    doc.new_page(width=220 * MM_TO_PT, height=320 * MM_TO_PT)
+    doc.save(src)
+    doc.close()
+
+    bake_page_rotations_into_pdf(
+        source_pdf_path=str(src),
+        output_pdf_path=str(dest),
+        rotations=[90, 270],
+    )
+    with fitz.open(dest) as out:
+        assert out.page_count == 2
+        # Footprint 320×220 após rotação
+        assert out[0].rect.width == pytest.approx(320 * MM_TO_PT, rel=1e-3)
+        assert out[0].rect.height == pytest.approx(220 * MM_TO_PT, rel=1e-3)
+        assert out[1].rect.width == pytest.approx(320 * MM_TO_PT, rel=1e-3)
+        assert out[1].rect.height == pytest.approx(220 * MM_TO_PT, rel=1e-3)
+
+
 def test_prepare_marcas_pdf_with_ops(tmp_path: Path):
     from services.papelaria_jdf_service import (
         MARCAS_OP_PLACEHOLDER,
@@ -223,4 +248,5 @@ def test_jdf_pasta_com_marcas_e_placements(tmp_path: Path):
     assert (
         f'ClipBox="{x2:.3f} {y2:.3f} {x2 + h_pt:.3f} {y2 + w_pt:.3f}"' in xml
     )
-    assert f'TrimSize="{h_pt:.3f} {w_pt:.3f}"' in xml
+    # TrimSize = página nativa 220×320; ClipBox = footprint 320×220
+    assert f'TrimSize="{w_pt:.3f} {h_pt:.3f}"' in xml

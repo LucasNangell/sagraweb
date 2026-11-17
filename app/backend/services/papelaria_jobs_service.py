@@ -494,9 +494,13 @@ def _prepare_pre_impresso_jdf_config(
     ano: int,
     nro: int,
     sefoc_dir: str,
-) -> dict[str, Any]:
+    gang_pdf_path: str = "",
+) -> tuple[dict[str, Any], str]:
     """
-    Folha 745×605, placements absolutos e cópia do PDF de marcas com OPs.
+    Folha 745×605, placements por centro, marcas com OP e gang pré-rotacionado.
+
+    Retorna (config_para_jdf, caminho_pdf_base). O PDF base tem páginas já
+    rotacionadas (MediaBox = footprint) para o JDF usar só translação.
     """
     from services import papelaria_jdf_service as jdf_svc
     from services import papelaria_imposicao_juntada_service as juntada_svc
@@ -518,9 +522,11 @@ def _prepare_pre_impresso_jdf_config(
     rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
     ocupadas = juntada_svc.placements_pre_impresso(produto, n_slots=n_slots)
     if juntada_svc.is_pasta_avulso_familia(produto):
-        pagina = {"origem": "fixixa", **juntada_svc.PAGINA_PASTA_MM}
+        page_w = float(juntada_svc.PAGINA_PASTA_MM["largura_mm"])
+        page_h = float(juntada_svc.PAGINA_PASTA_MM["altura_mm"])
     else:
-        pagina = {"origem": "fixixa", **juntada_svc.PAGINA_TIMBRADO_MM}
+        page_w = float(juntada_svc.PAGINA_TIMBRADO_MM["largura_mm"])
+        page_h = float(juntada_svc.PAGINA_TIMBRADO_MM["altura_mm"])
 
     marcas_src = str(cfg.get("marcas_pdf_path") or "").strip()
     if not marcas_src:
@@ -538,6 +544,43 @@ def _prepare_pre_impresso_jdf_config(
         nros=nros,
     )
 
+    gang_src = os.path.normpath((gang_pdf_path or "").strip())
+    if not gang_src or not os.path.isfile(gang_src):
+        raise FileNotFoundError(
+            f"PDF ganged pré-impresso ausente: {gang_src or '(vazio)'}"
+        )
+    rotations = [int(o.get("rotacao") or 0) for o in ocupadas]
+    # Completa rotações se o gang tiver mais páginas que slots (não deve).
+    while len(rotations) < jdf_svc.read_pdf_page_count(gang_src):
+        rotations.append(0)
+    baked_path = os.path.normpath(
+        os.path.join(sefoc_dir, f"{prefix}-ImposicaoGang-Rotated.pdf")
+    )
+    baked_path = jdf_svc.bake_page_rotations_into_pdf(
+        source_pdf_path=gang_src,
+        output_pdf_path=baked_path,
+        rotations=rotations,
+    )
+
+    # Após bake: footprint vira MediaBox; JDF só translada (rotacao=0).
+    foot_w, foot_h = juntada_svc._footprint_mm(
+        page_w, page_h, rotations[0] if rotations else 0
+    )
+    ocupadas_flat: list[dict[str, Any]] = []
+    for o in ocupadas:
+        ocupadas_flat.append(
+            {
+                **o,
+                "rotacao": 0,
+                # x_mm/y_mm já são LL do footprint (calculados do centro).
+            }
+        )
+    pagina = {
+        "origem": "fixixa",
+        "largura_mm": foot_w,
+        "altura_mm": foot_h,
+    }
+
     cfg.update(
         {
             "folha_mm": dict(juntada_svc.FOLHA_PRE_IMPRESSO_MM),
@@ -546,7 +589,7 @@ def _prepare_pre_impresso_jdf_config(
                 **grid,
                 "colunas": cols,
                 "linhas": rows,
-                "ocupadas": ocupadas,
+                "ocupadas": ocupadas_flat,
             },
             "marcas_corte": True,
             "marcas_pdf_path": marcas_ready,
@@ -556,7 +599,7 @@ def _prepare_pre_impresso_jdf_config(
             or juntada_svc.DEFAULT_JDF_IMPORT_ROOT_PAPELARIA,
         }
     )
-    return cfg
+    return cfg, baked_path
 
 
 def _build_imposicao_jdf_artifacts(
@@ -1119,14 +1162,16 @@ def resend_imposicao_jdf(
     base_pdf_name = os.path.basename(base_pdf_path)
 
     if usar_pre and not sem_imposicao:
-        config = _prepare_pre_impresso_jdf_config(
+        config, base_pdf_path = _prepare_pre_impresso_jdf_config(
             config=config,
             produto=produto,
             dados=dados,
             ano=ano,
             nro=nro,
-            sefoc_dir=os.path.dirname(base_pdf_path) or ".",
+            sefoc_dir=os.path.dirname(gang_path or base_pdf_path) or ".",
+            gang_pdf_path=gang_path or base_pdf_path,
         )
+        base_pdf_name = os.path.basename(base_pdf_path)
 
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
@@ -3267,20 +3312,21 @@ def _complete_pre_impresso_imposicao_job(
     nro = int(job["nro_protocolo"])
     produto = str(job.get("produto") or "Papelaria")
     comment = str(dados.get("jdf_comment") or "").strip() or None
-    config = _prepare_pre_impresso_jdf_config(
+    config, baked_pdf = _prepare_pre_impresso_jdf_config(
         config=config,
         produto=produto,
         dados=dados,
         ano=ano,
         nro=nro,
         sefoc_dir=os.path.dirname(gang_path) or ".",
+        gang_pdf_path=gang_path,
     )
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
         nro=nro,
         produto=produto,
         config=config,
-        base_pdf_path=gang_path,
+        base_pdf_path=baked_pdf,
         comment=comment,
         descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,
         jdf_dir=str(dados.get("jdf_import_root") or "") or None,
@@ -3291,7 +3337,8 @@ def _complete_pre_impresso_imposicao_job(
             "jdf_path": artifacts["jdf_path"],
             "jdf_dir": artifacts["jdf_dir"],
             "jdf_name": artifacts["jdf_name"],
-            "base_pdf": os.path.basename(gang_path),
+            "base_pdf": os.path.basename(baked_pdf),
+            "gang_pdf_rotated": baked_pdf,
             "marcas_pdf_op": (config.get("marcas_pdf_path") or ""),
             "aguardando_apogee": True,
             "pre_impresso_pipeline": False,

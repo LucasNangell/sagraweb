@@ -317,21 +317,22 @@ def _content_objects_xml(
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
         ord_idx = max(0, int(pagina) - 1)
-        ctm, trim_w, trim_h = content_ctm_and_trim(
+        ctm, foot_w, foot_h = content_ctm_and_trim(
             x_pt=x_pt,
             y_pt=y_pt,
             page_w_pt=page_w_pt,
             page_h_pt=page_h_pt,
             rotacao=int(rotacao or 0),
         )
-        # ClipBox = footprint na folha (após rotação TrimSize troca w/h).
-        clip_x1 = x_pt + trim_w
-        clip_y1 = y_pt + trim_h
+        # TrimSize = tamanho nativo da página (espaço do conteúdo).
+        # ClipBox = footprint na folha após rotação (foot_w × foot_h).
+        clip_x1 = x_pt + foot_w
+        clip_y1 = y_pt + foot_h
         parts.append(
             f'              <ContentObject Ord="{ord_idx}"\n'
             f'                             CTM="{ctm}" '
             f'TrimCTM="{ctm}"\n'
-            f'                             TrimSize="{trim_w:.3f} {trim_h:.3f}"\n'
+            f'                             TrimSize="{page_w_pt:.3f} {page_h_pt:.3f}"\n'
             f'                             ClipBox="{x_pt:.3f} {y_pt:.3f} '
             f'{clip_x1:.3f} {clip_y1:.3f}"/>'
         )
@@ -691,6 +692,54 @@ def read_pdf_page_count(pdf_path: str) -> int:
         return int(doc.page_count)
     finally:
         doc.close()
+
+
+def bake_page_rotations_into_pdf(
+    *,
+    source_pdf_path: str,
+    output_pdf_path: str,
+    rotations: list[int],
+) -> str:
+    """
+    Gera PDF com cada página já rotacionada (CCW) e MediaBox = footprint.
+
+    Assim o JDF posiciona com CTM identidade (só translação): o Apogee mostra
+    a caixa no tamanho/orientação corretos na folha.
+    """
+    import fitz  # pymupdf
+
+    src_path = os.path.normpath((source_pdf_path or "").strip())
+    if not src_path or not os.path.isfile(src_path):
+        raise FileNotFoundError(f"PDF gang ausente: {src_path or '(vazio)'}")
+    dest = os.path.normpath(output_pdf_path)
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+
+    src = fitz.open(src_path)
+    out = fitz.open()
+    try:
+        n = src.page_count
+        if n < 1:
+            raise ValueError("PDF gang sem páginas.")
+        for i in range(n):
+            rot = int(rotations[i] if i < len(rotations) else 0) % 360
+            if rot not in (0, 90, 180, 270):
+                rot = 0
+            page = src[i]
+            w, h = float(page.rect.width), float(page.rect.height)
+            if rot in (90, 270):
+                nw, nh = h, w
+            else:
+                nw, nh = w, h
+            dst = out.new_page(width=nw, height=nh)
+            # rotate do show_pdf_page é anti-horário (igual ao JDF).
+            dst.show_pdf_page(dst.rect, src, i, rotate=rot)
+        out.save(dest, deflate=True, garbage=3)
+    finally:
+        out.close()
+        src.close()
+    if not os.path.isfile(dest):
+        raise RuntimeError(f"PDF rotacionado não persistiu: {dest}")
+    return dest
 
 
 def build_apogee_passthrough_jdf_xml(

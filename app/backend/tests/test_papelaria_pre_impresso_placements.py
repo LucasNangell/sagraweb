@@ -25,12 +25,15 @@ def test_placements_pasta_coords():
 
     slots = placements_pasta(n_slots=2)
     assert len(slots) == 2
-    assert slots[0]["x_mm"] == pytest.approx(52.46)
+    # Pasta1: 90° CCW; Superior X=x=372.46
+    assert slots[0]["x_mm"] == pytest.approx(372.46)
     assert slots[0]["y_mm"] == pytest.approx(285.0)
     assert slots[0]["rotacao"] == 90
     assert slots[0]["pagina"] == 1
+    # Pasta2: 90° CW (270); Superior X=x+320=372.46
     assert slots[1]["x_mm"] == pytest.approx(52.46)
     assert slots[1]["y_mm"] == pytest.approx(65.0)
+    assert slots[1]["rotacao"] == 270
     assert slots[1]["pagina"] == 2
 
 
@@ -41,9 +44,12 @@ def test_placements_timbrado_coords():
     assert len(slots) == 4
     assert slots[0]["x_mm"] == pytest.approx(69.528)
     assert slots[0]["y_mm"] == pytest.approx(285.0)
+    assert slots[0]["rotacao"] == 270  # CW
+    assert slots[1]["rotacao"] == 270
     assert slots[2]["x_mm"] == pytest.approx(378.525)
+    assert slots[2]["rotacao"] == 90  # CCW
     assert slots[3]["y_mm"] == pytest.approx(75.0)
-    assert all(s["rotacao"] == 90 for s in slots)
+    assert slots[3]["rotacao"] == 90
 
 
 def test_compute_content_positions_absolutos():
@@ -63,10 +69,33 @@ def test_compute_content_positions_absolutos():
         centralizar=True,
         ocupadas=ocupadas,
     )
-    assert positions[0][:2] == pytest.approx((52.46, 285.0))
+    assert positions[0][:2] == pytest.approx((372.46, 285.0))
     assert positions[0][2] == 1
     assert positions[0][3] == 90
     assert positions[1][:2] == pytest.approx((52.46, 65.0))
+    assert positions[1][3] == 270
+
+
+def test_merge_herda_marcas_pdf_do_produto():
+    from services.papelaria_produto_imposicao_service import _merge_imposicao_override
+
+    base = {
+        "folha_mm": {"largura": 745, "altura": 605},
+        "marcas_corte": True,
+        "marcas_pdf_path": r"\\share\PastaMarks.pdf",
+        "usar_pre_impresso": True,
+    }
+    override = {
+        "folha_mm": {"largura": 745, "altura": 605},
+        "marcas_corte": False,
+        "marcas_pdf_path": None,
+        "usar_pre_impresso": True,
+        "grid": {"colunas": 1, "linhas": 2},
+    }
+    merged = _merge_imposicao_override(override, base)
+    assert merged["marcas_pdf_path"] == r"\\share\PastaMarks.pdf"
+    assert merged["marcas_corte"] is True
+    assert merged["grid"]["colunas"] == 1
 
 
 def test_format_marcas_op_token():
@@ -172,10 +201,12 @@ def test_jdf_pasta_com_marcas_e_placements(tmp_path: Path):
     assert 'ContentObject Ord="0"' in xml
     assert 'ContentObject Ord="1"' in xml
     assert 'ContentObject Ord="2"' in xml
-    # CTM rot 90 usa origem (x+h, y) em pt
-    # Pasta1: x=52.46 y=285 → x_pt+h_pt, y_pt
-    x_pt = 52.46 * MM_TO_PT
-    y_pt = 285.0 * MM_TO_PT
+    # Pasta1 rot 90: CTM origem (x+h, y); Pasta2 rot 270: (x, y+w)
+    x1 = 372.46 * MM_TO_PT
+    y1 = 285.0 * MM_TO_PT
     h_pt = 320 * MM_TO_PT
-    needle = f"0 1 -1 0 {x_pt + h_pt:.3f} {y_pt:.3f}"
-    assert needle in xml
+    w_pt = 220 * MM_TO_PT
+    assert f"0 1 -1 0 {x1 + h_pt:.3f} {y1:.3f}" in xml
+    x2 = 52.46 * MM_TO_PT
+    y2 = 65.0 * MM_TO_PT
+    assert f"0 -1 1 0 {x2:.3f} {y2 + w_pt:.3f}" in xml

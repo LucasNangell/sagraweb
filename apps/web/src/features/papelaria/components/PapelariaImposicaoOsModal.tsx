@@ -164,7 +164,7 @@ export function PapelariaImposicaoOsModal({
         v === "digital" || v === "offset",
     );
     const produtoOpen = (opcoes.produto || "").trim();
-    // Pré-impresso Apogee: abrir direto em Offset (folha 656×470 / pasta 440×320).
+    // Pré-impresso Apogee: abrir direto em Offset (folha 745×605 + marcas).
     const preferOffset =
       disponiveisOpen.includes("offset") &&
       Boolean(offset?.usar_pre_impresso) &&

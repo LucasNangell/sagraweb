@@ -230,20 +230,21 @@ FOLHA_PRE_IMPRESSO_MM = {"largura": 745.0, "altura": 605.0}
 PAGINA_PASTA_MM = {"largura_mm": 220.0, "altura_mm": 320.0}
 PAGINA_TIMBRADO_MM = {"largura_mm": 210.0, "altura_mm": 297.0}
 
-# Pasta: Superior X = 372.46 → x = 372.46 − 320; Y Pasta1=285, Pasta2=65; rot 90.
+# Pasta1: 90° CCW — Superior na vertical X=x; esquerda Y=y.
+# Pasta2: 90° CW (270° CCW) — Superior na vertical X=x+h; esquerda Y=y+w.
+# Superior X comum 372.46; Pasta1 Y 285–505; Pasta2 Y 65–285.
 _PASTA_SLOTS: list[tuple[float, float, int]] = [
-    (52.46, 285.0, 90),  # Pasta1
-    (52.46, 65.0, 90),  # Pasta2
+    (372.46, 285.0, 90),  # Pasta1 (CCW)
+    (52.46, 65.0, 270),  # Pasta2 (CW) x=372.46−320
 ]
 
-# Timbrado: col. esq. Superior=366.528 → x=69.528; col. dir. x=378.525; rot 90.
-# Y = topo − 210 (Timb1 topo 495 → 285; Timb2/3 topo 285 → 75; Timb4 topo 75 → -135?
-# Plano: Timb1 y=285, Timb2 y=75, Timb3 y=285, Timb4 y=75.
+# Timbrado 1/2: 90° CW (270); 3/4: 90° CCW (90).
+# Col. esq. Superior=366.528 → x=366.528−297; col. dir. Superior=x=378.525.
 _TIMBRADO_SLOTS: list[tuple[float, float, int]] = [
-    (69.528, 285.0, 90),  # Timb1
-    (69.528, 75.0, 90),  # Timb2
-    (378.525, 285.0, 90),  # Timb3
-    (378.525, 75.0, 90),  # Timb4
+    (69.528, 285.0, 270),  # Timb1 CW
+    (69.528, 75.0, 270),  # Timb2 CW
+    (378.525, 285.0, 90),  # Timb3 CCW
+    (378.525, 75.0, 90),  # Timb4 CCW
 ]
 
 

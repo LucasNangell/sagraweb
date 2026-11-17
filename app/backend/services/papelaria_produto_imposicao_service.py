@@ -251,18 +251,36 @@ def _merge_imposicao_override(
 ) -> Optional[dict[str, Any]]:
     """
     Override do modelo sobre o padrão do produto.
-    Se o modelo liga marcas_corte mas não traz marcas_pdf_path (legado),
-    herda o caminho do produto — evita pedir de novo no modal da OS.
+
+    Campos vazios no modelo (marcas_pdf_path, jdf_import_root, etc.) herdam
+    o valor do produto — evita sumir o PDF de marcas salvo no padrão do produto.
     """
     if not override:
         return base
     if not base:
         return override
-    merged = dict(override)
-    if merged.get("marcas_corte") and not merged.get("marcas_pdf_path"):
-        path = base.get("marcas_pdf_path")
-        if path:
-            merged["marcas_pdf_path"] = path
+    merged = dict(base)
+    base_marcas_path = str(base.get("marcas_pdf_path") or "").strip()
+    override_marcas_path = str(override.get("marcas_pdf_path") or "").strip()
+    for key, value in override.items():
+        if key in ("marcas_pdf_path", "jdf_import_root", "imposicao_pdf_path"):
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+        # Modelo sem PDF de marcas próprio não desliga as marcas do produto.
+        if (
+            key == "marcas_corte"
+            and not override_marcas_path
+            and base_marcas_path
+        ):
+            continue
+        merged[key] = value
+    if merged.get("marcas_corte") and not str(merged.get("marcas_pdf_path") or "").strip():
+        if base_marcas_path:
+            merged["marcas_pdf_path"] = base["marcas_pdf_path"]
+    if base_marcas_path and not str(merged.get("marcas_pdf_path") or "").strip():
+        merged["marcas_pdf_path"] = base["marcas_pdf_path"]
+        if base.get("marcas_corte"):
+            merged["marcas_corte"] = True
     return merged
 
 

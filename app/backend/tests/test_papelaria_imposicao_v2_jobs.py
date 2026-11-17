@@ -154,9 +154,9 @@ def test_perfil_pre_impresso_enfileira_worker_com_slots(ambiente, monkeypatch, t
     perfil["pagina"] = {"fonte": "fixa", "largura_mm": 200, "altura_mm": 150}
     perfil["posicionamento"] = "manual"
     perfil["slots"]["frente"] = [
-        {"id": 1, "x_mm": 50, "y_mm": 30, "rotacao": 0, "pagina": 1},
-        {"id": 2, "x_mm": 300, "y_mm": 30, "rotacao": 0, "pagina": 1},
-        {"id": 3, "x_mm": 50, "y_mm": 220, "rotacao": 0, "pagina": 1},
+        {"id": 1, "x_mm": 150, "y_mm": 105, "rotacao": 0, "pagina": 1},
+        {"id": 2, "x_mm": 400, "y_mm": 105, "rotacao": 0, "pagina": 1},
+        {"id": 3, "x_mm": 150, "y_mm": 295, "rotacao": 0, "pagina": 1},
     ]
     perfil["arte"]["fonte"] = "pre_impresso"
     perfil["juntada"] = {
@@ -319,3 +319,139 @@ def test_rotas_admin_com_produto_com_barra(monkeypatch):
         assert r.status_code in (200, 400)
     finally:
         app.dependency_overrides.pop(papelaria_routes._require_import_access, None)
+
+
+# ---------------------------------------------------------------------------
+# PDF de marcas guardado no servidor
+# ---------------------------------------------------------------------------
+
+
+def _pdf_bytes(w_mm: float, h_mm: float) -> bytes:
+    import fitz
+
+    mm = 72.0 / 25.4
+    doc = fitz.open()
+    doc.new_page(width=w_mm * mm, height=h_mm * mm)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
+def storage_marcas(monkeypatch, tmp_path):
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    root = tmp_path / "storage_marcas"
+    root.mkdir()
+
+    def fake_dir(create=True):
+        return root
+
+    monkeypatch.setattr(marcas_svc, "storage_dir", fake_dir)
+    return root
+
+
+def test_upload_guarda_no_servidor_e_deduplica(storage_marcas):
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    data = _pdf_bytes(297, 210)
+    a = marcas_svc.salvar_upload(data, r"C:\Users\fulano\Desktop\Marcas Folha A4.pdf")
+    b = marcas_svc.salvar_upload(data, "outro nome.pdf")
+    assert a["arquivo"].startswith(a["sha256"][:16])
+    assert a["nome_original"] == "Marcas Folha A4.pdf"
+    assert a["largura_mm"] == pytest.approx(297, abs=0.05)
+    assert (storage_marcas / a["arquivo"]).is_file()
+    assert a["sha256"] == b["sha256"]
+    assert len(list(storage_marcas.glob("*.pdf"))) == 2  # nomes diferentes, mesmo conteúdo
+    with pytest.raises(ValueError, match="não é um PDF"):
+        marcas_svc.salvar_upload(b"not a pdf", "x.pdf")
+    with pytest.raises(ValueError):
+        marcas_svc.resolver_arquivo("../../config/.env")
+
+
+def test_perfil_com_arquivo_valida_tamanho_e_falta(storage_marcas):
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    meta = marcas_svc.salvar_upload(_pdf_bytes(297, 210), "m.pdf")
+    perfil = perfil_svc.perfil_from_v1(CONFIG_ANTIGA)
+    perfil["marcas"] = {"ativo": True, "arquivo": meta["arquivo"], "nome_original": "m.pdf", "carimbar_op": False}
+    val = perfil_svc.validar_perfil(perfil)
+    assert val["completo"], val["erros"]
+    assert val["perfil"]["marcas"]["pdf_path"] is None
+    (storage_marcas / meta["arquivo"]).unlink()
+    val = perfil_svc.validar_perfil(perfil)
+    assert any("não está mais no servidor" in e["mensagem"] for e in val["erros"])
+    perfil["marcas"] = {"ativo": True, "arquivo": None, "pdf_path": None}
+    val = perfil_svc.validar_perfil(perfil)
+    assert any("Envie o PDF de marcas" in e["mensagem"] for e in val["erros"])
+
+
+def test_geracao_copia_marcas_para_pasta_da_os(ambiente, monkeypatch, storage_marcas):
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    svc = ambiente["svc"]
+    meta = marcas_svc.salvar_upload(_pdf_bytes(297, 210), "Marcas A4.pdf")
+    perfil = _perfil_offset()
+    perfil["marcas"] = {"ativo": True, "arquivo": meta["arquivo"], "nome_original": "Marcas A4.pdf", "carimbar_op": False}
+    registro = {"id": 9, "perfil": perfil_svc.normalize_perfil(perfil), "ativo": True}
+    monkeypatch.setattr(
+        "services.papelaria_imposicao_perfil_store.get_perfil_ativo",
+        lambda produto, variante: registro if variante == "offset" else None,
+    )
+    job = svc.create_imposicao_job(ano=2026, nro=5954, solicitado_por="1", modelo_id=7, variante="offset")
+    copia = ambiente["sefoc"] / "05954-Teste-Marcas.pdf"
+    assert copia.is_file()
+    assert job["dados"]["imposicao_config"]["marcas_pdf_path"] == str(copia)
+    jdf = (ambiente["jdf_root"] / job["dados"]["jdf_name"]).read_text(encoding="utf-8")
+    assert "05954-Teste-Marcas.pdf" in jdf
+    assert str(storage_marcas) not in jdf  # Apogee nunca recebe o disco do servidor
+
+
+def test_comparacao_considera_mesmo_pdf_em_lugares_diferentes(tmp_path, storage_marcas):
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    data = _pdf_bytes(297, 210)
+    rede = tmp_path / "rede_marcas.pdf"
+    rede.write_bytes(data)
+    antigo = {**CONFIG_ANTIGA, "marcas_corte": True, "marcas_pdf_path": str(rede)}
+    meta = marcas_svc.importar_de_caminho(str(rede))
+    perfil = perfil_svc.perfil_from_v1(antigo)
+    perfil["marcas"] = {"ativo": True, "arquivo": meta["arquivo"], "carimbar_op": False}
+    res = perfil_svc.comparar_configs(antigo, perfil_svc.compilar_config_jdf(perfil_svc.normalize_perfil(perfil)))
+    assert res["iguais"], res["diferencas"]
+    outro = tmp_path / "outro.pdf"
+    outro.write_bytes(_pdf_bytes(300, 210))
+    res = perfil_svc.comparar_configs({**antigo, "marcas_pdf_path": str(outro)}, perfil_svc.compilar_config_jdf(perfil_svc.normalize_perfil(perfil)))
+    assert not res["iguais"]
+
+
+def test_rota_upload_e_miniatura_marcas(storage_marcas):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import papelaria_imposicao_routes, papelaria_routes
+
+    app = FastAPI()
+    app.include_router(papelaria_imposicao_routes.router, prefix="/api")
+    app.dependency_overrides[papelaria_routes._require_import_access] = lambda: type("S", (), {"ponto": "1"})()
+    client = TestClient(app)
+    r = client.post(
+        "/api/papelaria/admin/imposicao/marcas-pdf",
+        files={"file": ("Marcas 745x605.pdf", _pdf_bytes(745, 605), "application/pdf")},
+    )
+    assert r.status_code == 200, r.text
+    meta = r.json()
+    assert meta["largura_mm"] == pytest.approx(745, abs=0.05) and "path" not in meta
+    r = client.get(f"/api/papelaria/admin/imposicao/marcas-pdf/{meta['arquivo']}/thumb")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    r = client.get(f"/api/papelaria/admin/imposicao/marcas-pdf/{meta['arquivo']}")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    r = client.get(f"/api/papelaria/admin/imposicao/marcas-pdf/{meta['arquivo']}/info")
+    assert r.status_code == 200 and r.json()["existe"] is True
+    r = client.get("/api/papelaria/admin/imposicao/marcas-pdf/..%2F..%2Fsegredo.pdf/info")
+    assert r.status_code in (400, 404)
+    r = client.post(
+        "/api/papelaria/admin/imposicao/marcas-pdf",
+        files={"file": ("x.pdf", b"nao e pdf", "application/pdf")},
+    )
+    assert r.status_code == 400

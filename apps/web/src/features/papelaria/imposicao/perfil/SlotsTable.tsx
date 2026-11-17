@@ -3,8 +3,10 @@ import { Copy, Plus, Trash2 } from "lucide-react";
 
 import {
   estimarPaginaPelaGrade,
+  folhaMm,
   formatMm,
   problemasDeSlots,
+  yUsuario,
   proximoSlotId,
   resolverSlots,
   ROTACOES,
@@ -34,6 +36,9 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
   const estimate = perfil.pagina.fonte === "pdf" ? estimarPaginaPelaGrade(perfil) : null;
   const resolved = new Map(resolverSlots(perfil, face, estimate).map((s) => [s.id, s]));
   const problemas = problemasDeSlots(perfil, face, estimate);
+  const folhaH = folhaMm(perfil)?.h ?? null;
+  /** Y mostrado = a partir do canto inferior esquerdo da folha. */
+  const yTela = (y: number) => (folhaH != null ? yUsuario(y, folhaH) : y);
 
   const patch = (id: number, next: Partial<PerfilSlot>) =>
     onChange(slots.map((s) => (s.id === id ? { ...s, ...next } : s)));
@@ -43,7 +48,12 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
     const last = slots[slots.length - 1];
     const base: PerfilSlot = { id, pagina: last?.pagina ?? 1, rotacao: last?.rotacao ?? 0 };
     if (manual) {
-      onChange([...slots, { ...base, x_mm: 0, y_mm: 0 }]);
+      // Novo slot nasce no centro da folha (X/Y = centro da página).
+      const folha = folhaMm(perfil);
+      onChange([
+        ...slots,
+        { ...base, x_mm: folha ? folha.w / 2 : 0, y_mm: folha ? folha.h / 2 : 0 },
+      ]);
       onSelect(id);
       return;
     }
@@ -112,8 +122,12 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
               <th className="px-2 py-1.5 text-left font-semibold">Pág. PDF</th>
               {manual ? (
                 <>
-                  <th className="px-2 py-1.5 text-left font-semibold">X (mm)</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">Y (mm)</th>
+                  <th className="px-2 py-1.5 text-left font-semibold" title="Centro da página, a partir da borda esquerda da folha">
+                    X centro (mm)
+                  </th>
+                  <th className="px-2 py-1.5 text-left font-semibold" title="Centro da página, a partir da borda inferior da folha (Y para cima)">
+                    Y centro (mm)
+                  </th>
                 </>
               ) : (
                 <>
@@ -166,7 +180,7 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
                           step={0.1}
                           className={cellInput}
                           value={slot.x_mm ?? ""}
-                          aria-label={`X do slot ${slot.id}`}
+                          aria-label={`X do centro do slot ${slot.id}`}
                           onChange={(e) => patch(slot.id, { x_mm: num(e.target.value) })}
                         />
                       </td>
@@ -175,9 +189,12 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
                           type="number"
                           step={0.1}
                           className={cellInput}
-                          value={slot.y_mm ?? ""}
-                          aria-label={`Y do slot ${slot.id}`}
-                          onChange={(e) => patch(slot.id, { y_mm: num(e.target.value) })}
+                          value={slot.y_mm == null ? "" : yTela(slot.y_mm)}
+                          aria-label={`Y do centro do slot ${slot.id}`}
+                          onChange={(e) => {
+                            const v = num(e.target.value);
+                            patch(slot.id, { y_mm: v == null ? undefined : yTela(v) });
+                          }}
                         />
                       </td>
                     </>
@@ -233,8 +250,8 @@ export function SlotsTable({ perfil, face, selectedId, onSelect, onChange }: Pro
                     ) : prob === "sobrepoe" ? (
                       <span className="font-semibold text-amber-700">Sobrepõe</span>
                     ) : pos ? (
-                      <span className="text-emerald-700" title={`X ${formatMm(pos.x_mm)} · Y ${formatMm(pos.y_mm)} mm`}>
-                        OK{!manual ? ` · ${formatMm(pos.x_mm)}, ${formatMm(pos.y_mm)}` : ""}
+                      <span className="text-emerald-700" title={`Centro X ${formatMm(pos.cx_mm)} · Y ${formatMm(yTela(pos.cy_mm))} mm`}>
+                        OK{!manual ? ` · centro ${formatMm(pos.cx_mm)}, ${formatMm(yTela(pos.cy_mm))}` : ""}
                       </span>
                     ) : (
                       <span className="text-slate-400">—</span>

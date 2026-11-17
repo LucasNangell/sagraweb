@@ -2,8 +2,7 @@
  * Perfil de imposição v2 — mesmo formato para todos os produtos.
  *
  * Coordenadas dos slots (posicionamento manual): mm, origem no canto
- * superior esquerdo da folha, y para baixo; (x, y) = canto superior esquerdo
- * da área ocupada pelo slot já girado.
+ * superior esquerdo da folha, y para baixo; (x, y) = CENTRO da página no slot.
  */
 export type ImposicaoVariante = "digital" | "offset";
 export type Rotacao = 0 | 90 | 180 | 270;
@@ -24,7 +23,10 @@ export type PerfilSlot = {
   /** Célula da grade (posicionamento pela grade). */
   col?: number;
   row?: number;
-  /** Posição manual (topo-esquerdo, mm). */
+  /**
+   * Posição manual gravada: centro da página (mm, origem no topo-esquerdo da
+   * folha, Y para baixo). A tela mostra Y a partir de baixo (yUsuario).
+   */
   x_mm?: number;
   y_mm?: number;
 };
@@ -48,7 +50,16 @@ export interface PerfilImposicao {
     alinhamento: Alinhamento;
   };
   slots: { frente: PerfilSlot[]; verso: PerfilSlot[] };
-  marcas: { ativo: boolean; pdf_path: string | null; carimbar_op: boolean };
+  marcas: {
+    ativo: boolean;
+    /** PDF guardado no servidor (nome interno; preferido). */
+    arquivo: string | null;
+    /** Nome do arquivo como foi enviado (só para exibir). */
+    nome_original: string | null;
+    /** Alternativa: caminho de rede lido direto pelo Apogee. */
+    pdf_path: string | null;
+    carimbar_op: boolean;
+  };
   arte: { fonte: FonteArte; rotacao: RotacaoArte };
   juntada: {
     ativo: boolean;
@@ -115,6 +126,9 @@ export type ComparacaoResultado =
       disponivel: true;
       iguais: boolean;
       diferencas: Array<{ campo: string; descricao: string }>;
+      /** [largura, altura] em mm — usadas para mostrar Y a partir de baixo. */
+      folha_antigo?: [number, number];
+      folha_novo?: [number, number];
       linhas: Array<{
         face: Face;
         ordem: number;
@@ -135,6 +149,19 @@ export type PdfInfo = {
   miniatura?: boolean;
 };
 
+/** PDF de marcas guardado no servidor. */
+export type MarcasArquivo = {
+  arquivo: string;
+  nome_original?: string;
+  sha256?: string;
+  bytes?: number;
+  paginas: number | null;
+  largura_mm: number | null;
+  altura_mm: number | null;
+  existe?: boolean;
+  erro?: string | null;
+};
+
 export type ModeloPerfil = {
   id: number;
   nome: string;
@@ -153,8 +180,12 @@ export type SlotResolvido = {
   id: number;
   pagina: number;
   rotacao: Rotacao;
+  /** Canto superior esquerdo da área ocupada (para desenhar). */
   x_mm: number;
   y_mm: number;
+  /** Centro da página (o que o usuário digita no modo manual). */
+  cx_mm: number;
+  cy_mm: number;
   largura_mm: number;
   altura_mm: number;
 };

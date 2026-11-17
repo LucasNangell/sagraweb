@@ -16,6 +16,11 @@ const api = vi.hoisted(() => ({
   removerModeloPerfil: vi.fn(),
   removerPerfil: vi.fn(),
   salvarModeloPerfil: vi.fn(),
+  enviarMarcasPdf: vi.fn(),
+  importarMarcasPdf: vi.fn(),
+  fetchMarcasArquivoInfo: vi.fn(),
+  marcasPdfUrl: vi.fn((a: string) => `/marcas/${a}`),
+  marcasThumbUrl: vi.fn((a: string) => `/marcas/${a}/thumb`),
 }));
 vi.mock("@/api/imposicaoPerfil", () => api);
 vi.mock("@/api/auxLookups", () => ({ fetchSituacoes: vi.fn(async () => ["Aguard. Juntada"]) }));
@@ -44,6 +49,9 @@ antigo.slots.frente = [
 describe("PerfilImposicaoPanel", () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => "mockReset" in fn && fn.mockReset());
+    api.marcasPdfUrl.mockImplementation((a: string) => `/marcas/${a}`);
+    api.marcasThumbUrl.mockImplementation((a: string) => `/marcas/${a}/thumb`);
+    api.pdfThumbUrl.mockImplementation(() => "/thumb");
     api.fetchModelosPerfil.mockResolvedValue([]);
     api.validarPerfil.mockResolvedValue({ erros: [], avisos: [], completo: true, perfil: null, resumo: null });
     api.fetchPerfisProduto.mockResolvedValue({
@@ -80,5 +88,55 @@ describe("PerfilImposicaoPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Importar da configuração atual/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Salvar$/ }));
     await waitFor(() => expect(api.salvarPerfil).toHaveBeenCalledWith("Produto X", "digital", antigo));
+  });
+});
+
+describe("PerfilImposicaoPanel — PDF de marcas no servidor", () => {
+  beforeEach(() => {
+    api.fetchModelosPerfil.mockResolvedValue([]);
+    api.validarPerfil.mockResolvedValue({ erros: [], avisos: [], completo: true, perfil: null, resumo: null });
+    api.fetchPerfisProduto.mockResolvedValue({
+      produto: "Produto X",
+      digital: null,
+      offset: null,
+      configuracao_antiga: {
+        digital: { existe: true, perfil: antigo, completo_no_banco: true },
+        offset: { existe: false, perfil: null, completo_no_banco: false },
+      },
+    });
+  });
+
+  it("envia o PDF escolhido ao servidor e o perfil passa a usar o arquivo guardado", async () => {
+    const meta = {
+      arquivo: "0123456789abcdef_Marcas.pdf",
+      nome_original: "Marcas.pdf",
+      paginas: 1,
+      largura_mm: 297,
+      altura_mm: 210,
+    };
+    api.enviarMarcasPdf.mockResolvedValue(meta);
+    api.fetchMarcasArquivoInfo.mockResolvedValue({ ...meta, existe: true });
+    api.salvarPerfil.mockResolvedValue({
+      id: 1, produto: "Produto X", variante: "digital", perfil: antigo, ativo: false,
+      validacao: { erros: [], avisos: [], completo: true },
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /Importar da configuração atual/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Usar PDF de marcas/ }));
+    const file = new File([new Uint8Array([37, 80, 68, 70])], "Marcas.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("marcas-pdf-input"), { target: { files: [file] } });
+    await waitFor(() => expect(api.enviarMarcasPdf).toHaveBeenCalledWith(file));
+    expect(await screen.findByText("Marcas.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir" })).toHaveAttribute("href", "/marcas/0123456789abcdef_Marcas.pdf");
+    fireEvent.click(screen.getByRole("button", { name: /^Salvar$/ }));
+    await waitFor(() =>
+      expect(api.salvarPerfil).toHaveBeenCalledWith(
+        "Produto X",
+        "digital",
+        expect.objectContaining({
+          marcas: expect.objectContaining({ ativo: true, arquivo: meta.arquivo, pdf_path: null }),
+        }),
+      ),
+    );
   });
 });

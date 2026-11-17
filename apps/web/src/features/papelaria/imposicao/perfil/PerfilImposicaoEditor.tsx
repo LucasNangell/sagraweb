@@ -1,11 +1,20 @@
 import { cn } from "@sagra/ui";
-import { ChevronDown, ChevronRight, LayoutGrid, RotateCw } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  LayoutGrid,
+  Loader2,
+  RotateCw,
+  UploadCloud,
+} from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { PerfilImposicaoPreview } from "./PerfilImposicaoPreview";
 import {
   converterParaManual,
   FOLHA_PRESETS,
+  folhaMm,
   formatMm,
   gerarSlotsPelaGrade,
   REGRA_TIRAGEM_INFO,
@@ -14,6 +23,7 @@ import {
 import { SlotsTable } from "./SlotsTable";
 import type {
   Face,
+  MarcasArquivo,
   PdfInfo,
   PerfilImposicao,
   PerfilSlot,
@@ -30,6 +40,14 @@ type Props = {
   marcasInfo?: PdfInfo | null;
   marcasInfoLoading?: boolean;
   onVerificarMarcas?: (path: string) => void;
+  /** Envia o PDF de marcas ao servidor. */
+  onEnviarMarcas?: (file: File) => void;
+  /** Copia para o servidor o PDF de um caminho de rede. */
+  onImportarMarcas?: (path: string) => void;
+  marcasEnviando?: boolean;
+  /** Dados do PDF guardado no servidor (marcas.arquivo). */
+  marcasArquivoInfo?: MarcasArquivo | null;
+  marcasArquivoUrl?: string | null;
   backgroundUrl?: string | null;
   situacoes?: string[];
   produtos?: string[];
@@ -200,6 +218,11 @@ export function PerfilImposicaoEditor({
   marcasInfo,
   marcasInfoLoading,
   onVerificarMarcas,
+  onEnviarMarcas,
+  onImportarMarcas,
+  marcasEnviando,
+  marcasArquivoInfo,
+  marcasArquivoUrl,
   backgroundUrl,
   situacoes = [],
   produtos = [],
@@ -208,6 +231,17 @@ export function PerfilImposicaoEditor({
   const [face, setFace] = useState<Face>("frente");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pagGrade, setPagGrade] = useState(1);
+  const marcasFileRef = useRef<HTMLInputElement | null>(null);
+  const marcasTamanhoDiverge = (info: { largura_mm: number | null; altura_mm: number | null } | null | undefined) =>
+    Boolean(
+      info &&
+        perfil.folha.largura_mm &&
+        perfil.folha.altura_mm &&
+        info.largura_mm &&
+        info.altura_mm &&
+        (Math.abs(info.largura_mm - perfil.folha.largura_mm) > 0.5 ||
+          Math.abs(info.altura_mm - perfil.folha.altura_mm) > 0.5),
+    );
   const duplex = perfil.faces === "frente_verso";
   const faceAtual: Face = duplex ? face : "frente";
 
@@ -259,6 +293,7 @@ export function PerfilImposicaoEditor({
     });
   };
 
+  /** Recebe o novo centro da página (X/Y do modo manual). */
   const moveSlot = (id: number, x: number, y: number) => {
     setSlots(
       faceAtual,
@@ -481,7 +516,7 @@ export function PerfilImposicaoEditor({
           </div>
           <p className={hintCls}>
             Pela grade: as posições acompanham a grade e o tamanho da página. Manual: cada slot tem X/Y
-            próprio (topo-esquerdo da folha, em mm), para folhas com posições livres.
+            próprio, que é o centro da página, medido do canto inferior esquerdo da folha (mm, Y para cima).
           </p>
           <FieldMessages items={errosDe("posicionamento")} tone="erro" />
         </Section>
@@ -520,7 +555,15 @@ export function PerfilImposicaoEditor({
         <Section
           n={5}
           title="Marcas"
-          resumo={perfil.marcas.ativo ? (perfil.marcas.pdf_path ? "PDF de marcas" : "sem PDF") : "sem marcas"}
+          resumo={
+            perfil.marcas.ativo
+              ? perfil.marcas.arquivo
+                ? perfil.marcas.nome_original ?? "PDF no servidor"
+                : perfil.marcas.pdf_path
+                  ? "caminho de rede"
+                  : "sem PDF"
+              : "sem marcas"
+          }
           problems={errosDe("marcas").length}
         >
           <Toggle
@@ -533,53 +576,159 @@ export function PerfilImposicaoEditor({
           />
           {perfil.marcas.ativo ? (
             <>
-              <label className={labelCls}>
-                Caminho do PDF (UNC ou local)
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className={cn(inputCls, "font-mono")}
-                    value={perfil.marcas.pdf_path ?? ""}
-                    placeholder={"\\\\servidor\\pasta\\marcas.pdf"}
-                    onChange={(e) => set("marcas", { ...perfil.marcas, pdf_path: e.target.value || null })}
-                    onBlur={(e) => {
-                      const v = e.target.value.trim();
-                      if (v && onVerificarMarcas) onVerificarMarcas(v);
-                    }}
-                  />
+              <input
+                ref={marcasFileRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                className="hidden"
+                data-testid="marcas-pdf-input"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f && onEnviarMarcas) onEnviarMarcas(f);
+                  e.target.value = "";
+                }}
+              />
+              {perfil.marcas.arquivo ? (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <FileText className="size-5 shrink-0 text-secondary-blue" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-800">
+                      {perfil.marcas.nome_original ?? "PDF de marcas"}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-[11px]",
+                        marcasArquivoInfo && marcasArquivoInfo.existe === false
+                          ? "text-red-600"
+                          : marcasTamanhoDiverge(marcasArquivoInfo)
+                            ? "text-red-600"
+                            : "text-slate-500",
+                      )}
+                    >
+                      {marcasArquivoInfo
+                        ? marcasArquivoInfo.existe === false
+                          ? "Não encontrado no servidor — envie de novo."
+                          : `Guardado no servidor · ${formatMm(marcasArquivoInfo.largura_mm)} × ${formatMm(marcasArquivoInfo.altura_mm)} mm · ${marcasArquivoInfo.paginas ?? "?"} página${marcasArquivoInfo.paginas === 1 ? "" : "s"}`
+                        : "Guardado no servidor"}
+                    </p>
+                  </div>
+                  {marcasArquivoUrl ? (
+                    <a
+                      className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                      href={marcasArquivoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir
+                    </a>
+                  ) : null}
                   <button
                     type="button"
-                    className="sagra-btn sagra-btn--outline sagra-btn--sm"
-                    disabled={!perfil.marcas.pdf_path || marcasInfoLoading}
-                    onClick={() => perfil.marcas.pdf_path && onVerificarMarcas?.(perfil.marcas.pdf_path)}
+                    className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                    disabled={marcasEnviando}
+                    onClick={() => marcasFileRef.current?.click()}
                   >
-                    Verificar
+                    {marcasEnviando ? <Loader2 className="size-3 animate-spin" aria-hidden /> : null}
+                    Trocar arquivo
+                  </button>
+                  <button
+                    type="button"
+                    className="sagra-btn sagra-btn--delete-outline sagra-btn--xs"
+                    onClick={() =>
+                      set("marcas", { ...perfil.marcas, arquivo: null, nome_original: null })
+                    }
+                  >
+                    Remover
                   </button>
                 </div>
-              </label>
-              {marcasInfoLoading ? (
-                <p className={hintCls}>Verificando PDF…</p>
-              ) : marcasInfo ? (
-                marcasInfo.existe ? (
-                  <p
-                    className={cn(
-                      "text-[11px]",
-                      perfil.folha.largura_mm &&
-                        marcasInfo.largura_mm &&
-                        (Math.abs(marcasInfo.largura_mm - (perfil.folha.largura_mm ?? 0)) > 0.5 ||
-                          Math.abs((marcasInfo.altura_mm ?? 0) - (perfil.folha.altura_mm ?? 0)) > 0.5)
-                        ? "text-red-600"
-                        : "text-emerald-700",
-                    )}
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className="flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-600 hover:border-secondary-blue hover:text-secondary-blue disabled:opacity-60"
+                    disabled={marcasEnviando || !onEnviarMarcas}
+                    onClick={() => marcasFileRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files?.[0];
+                      if (f && onEnviarMarcas) onEnviarMarcas(f);
+                    }}
                   >
-                    ✓ {formatMm(marcasInfo.largura_mm)} × {formatMm(marcasInfo.altura_mm)} mm,{" "}
-                    {marcasInfo.paginas} página{marcasInfo.paginas === 1 ? "" : "s"}
-                    {marcasInfo.miniatura ? "" : " · sem pré-visualização (pasta não liberada)"}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-amber-700">{marcasInfo.erro}</p>
-                )
-              ) : null}
+                    {marcasEnviando ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <UploadCloud className="size-5" aria-hidden />
+                    )}
+                    <span className="font-semibold">
+                      {marcasEnviando ? "Enviando ao servidor…" : "Enviar PDF de marcas"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      Clique ou arraste o arquivo. Ele fica guardado no servidor.
+                    </span>
+                  </button>
+                  {perfil.marcas.pdf_path ? (
+                    <div className="flex flex-col gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      <span>
+                        Este perfil ainda usa um caminho de rede:{" "}
+                        <span className="break-all font-mono">{perfil.marcas.pdf_path}</span>. Copie o
+                        arquivo para o servidor para não depender dele.
+                      </span>
+                      <button
+                        type="button"
+                        className="sagra-btn sagra-btn--outline sagra-btn--xs self-start"
+                        disabled={marcasEnviando || !onImportarMarcas}
+                        onClick={() => perfil.marcas.pdf_path && onImportarMarcas?.(perfil.marcas.pdf_path)}
+                      >
+                        Copiar este arquivo para o servidor
+                      </button>
+                    </div>
+                  ) : null}
+                  <details className="text-xs text-slate-600">
+                    <summary className="cursor-pointer select-none text-[11px] text-slate-500">
+                      Usar caminho de rede (avançado)
+                    </summary>
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          className={cn(inputCls, "font-mono")}
+                          value={perfil.marcas.pdf_path ?? ""}
+                          placeholder={"\\\\servidor\\pasta\\marcas.pdf"}
+                          onChange={(e) => set("marcas", { ...perfil.marcas, pdf_path: e.target.value || null })}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v && onVerificarMarcas) onVerificarMarcas(v);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                          disabled={!perfil.marcas.pdf_path || marcasInfoLoading}
+                          onClick={() => perfil.marcas.pdf_path && onVerificarMarcas?.(perfil.marcas.pdf_path)}
+                        >
+                          Verificar
+                        </button>
+                      </div>
+                      {marcasInfoLoading ? (
+                        <p className={hintCls}>Verificando PDF…</p>
+                      ) : marcasInfo ? (
+                        marcasInfo.existe ? (
+                          <p className={cn("text-[11px]", marcasTamanhoDiverge(marcasInfo) ? "text-red-600" : "text-emerald-700")}>
+                            ✓ {formatMm(marcasInfo.largura_mm)} × {formatMm(marcasInfo.altura_mm)} mm,{" "}
+                            {marcasInfo.paginas} página{marcasInfo.paginas === 1 ? "" : "s"}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-amber-700">{marcasInfo.erro}</p>
+                        )
+                      ) : null}
+                      <span className={hintCls}>
+                        O Apogee lê o arquivo direto da rede. Prefira enviar o PDF ao servidor.
+                      </span>
+                    </div>
+                  </details>
+                </div>
+              )}
               <Toggle
                 label="Carimbar o número da OP no PDF de marcas"
                 checked={perfil.marcas.carimbar_op}
@@ -772,7 +921,8 @@ export function PerfilImposicaoEditor({
           </p>
           {selecionado ? (
             <p className="text-[11px] text-slate-600">
-              Slot {selecionado.id}: X {formatMm(selecionado.x_mm)} · Y {formatMm(selecionado.y_mm)} ·{" "}
+              Slot {selecionado.id}: centro X {formatMm(selecionado.cx_mm)} · Y{" "}
+              {formatMm((folhaMm(perfil)?.h ?? 0) - selecionado.cy_mm)} ·{" "}
               {formatMm(selecionado.largura_mm)} × {formatMm(selecionado.altura_mm)} mm
             </p>
           ) : null}

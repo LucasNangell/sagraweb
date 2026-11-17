@@ -45,21 +45,40 @@ describe("perfilUtils", () => {
     ]);
   });
 
-  it("rotação de 90° troca largura e altura ocupadas", () => {
+  it("X/Y manual é o centro da página; rotação de 90° troca a área ocupada", () => {
     const p = perfilVazio();
     p.folha = { largura_mm: 400, altura_mm: 300 };
     p.pagina = { fonte: "fixa", largura_mm: 100, altura_mm: 50 };
     p.posicionamento = "manual";
-    p.slots.frente = [{ id: 1, x_mm: 10, y_mm: 20, rotacao: 90, pagina: 1 }];
-    expect(resolverSlots(p)[0]).toMatchObject({ x_mm: 10, y_mm: 20, largura_mm: 50, altura_mm: 100 });
+    p.slots.frente = [{ id: 1, x_mm: 35, y_mm: 70, rotacao: 90, pagina: 1 }];
+    expect(resolverSlots(p)[0]).toMatchObject({
+      cx_mm: 35,
+      cy_mm: 70,
+      x_mm: 10,
+      y_mm: 20,
+      largura_mm: 50,
+      altura_mm: 100,
+    });
+  });
+
+  it("centro dentro da folha não acusa fora da folha", () => {
+    const p = perfilVazio();
+    p.folha = { largura_mm: 745, altura_mm: 605 };
+    p.pagina = { fonte: "fixa", largura_mm: 220, altura_mm: 320 };
+    p.posicionamento = "manual";
+    p.slots.frente = [
+      { id: 1, x_mm: 532.46, y_mm: 210, rotacao: 90, pagina: 1 },
+      { id: 2, x_mm: 212.46, y_mm: 430, rotacao: 270, pagina: 1 },
+    ];
+    expect(problemasDeSlots(p, "frente").size).toBe(0);
   });
 
   it("converter para manual preserva as posições calculadas", () => {
     const manual = converterParaManual(a5Duplo());
     expect(manual.posicionamento).toBe("manual");
     expect(manual.slots.frente.map((s) => [s.x_mm, s.y_mm])).toEqual([
-      [0.5, 0],
-      [148.5, 0],
+      [74.5, 105],
+      [222.5, 105],
     ]);
     expect(resolverSlots(manual)).toEqual(resolverSlots(a5Duplo()));
   });
@@ -70,9 +89,9 @@ describe("perfilUtils", () => {
     p.pagina = { fonte: "fixa", largura_mm: 100, altura_mm: 100 };
     p.posicionamento = "manual";
     p.slots.frente = [
-      { id: 1, x_mm: 0, y_mm: 0, rotacao: 0, pagina: 1 },
-      { id: 2, x_mm: 50, y_mm: 50, rotacao: 0, pagina: 1 },
-      { id: 3, x_mm: 250, y_mm: 0, rotacao: 0, pagina: 1 },
+      { id: 1, x_mm: 50, y_mm: 50, rotacao: 0, pagina: 1 },
+      { id: 2, x_mm: 100, y_mm: 100, rotacao: 0, pagina: 1 },
+      { id: 3, x_mm: 300, y_mm: 50, rotacao: 0, pagina: 1 },
     ];
     const probs = problemasDeSlots(p, "frente");
     expect(probs.get(1)).toBe("sobrepoe");
@@ -88,7 +107,7 @@ describe("perfilUtils", () => {
 
   it("resumo de uma linha", () => {
     const p = a5Duplo();
-    p.marcas = { ativo: true, pdf_path: "x.pdf", carimbar_op: false };
+    p.marcas = { ativo: true, arquivo: null, nome_original: null, pdf_path: "x.pdf", carimbar_op: false };
     expect(resumoPerfil(p)).toBe("297×210 mm · 2 slots · marcas ✓");
   });
 
@@ -97,5 +116,14 @@ describe("perfilUtils", () => {
     const p = parsePerfilJson(JSON.stringify({ versao: 2, folha: { largura_mm: 100, altura_mm: 50 } }));
     expect(p.folha).toEqual({ largura_mm: 100, altura_mm: 50 });
     expect(p.juntada.regra_tiragem).toBe("iguais");
+  });
+});
+
+describe("Y do usuário (a partir do canto inferior esquerdo)", () => {
+  it("converte nos dois sentidos sem alterar o valor gravado", async () => {
+    const { yUsuario } = await import("./perfilUtils");
+    // Folha de 605: centro gravado 210 (do topo) aparece como 395 (de baixo).
+    expect(yUsuario(210, 605)).toBe(395);
+    expect(yUsuario(yUsuario(210, 605), 605)).toBe(210);
   });
 });

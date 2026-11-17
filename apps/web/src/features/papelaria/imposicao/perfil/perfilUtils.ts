@@ -33,7 +33,7 @@ export function perfilVazio(): PerfilImposicao {
       alinhamento: "centro",
     },
     slots: { frente: [], verso: [] },
-    marcas: { ativo: false, pdf_path: null, carimbar_op: false },
+    marcas: { ativo: false, arquivo: null, nome_original: null, pdf_path: null, carimbar_op: false },
     arte: { fonte: "base_sefoc", rotacao: "no_jdf" },
     juntada: {
       ativo: false,
@@ -129,8 +129,9 @@ export function resolverSlots(
       y = folha.h - ll.y - fp.h;
     } else {
       if (slot.x_mm == null || slot.y_mm == null) continue;
-      x = slot.x_mm;
-      y = slot.y_mm;
+      // X/Y manuais = centro da página.
+      x = slot.x_mm - fp.w / 2;
+      y = slot.y_mm - fp.h / 2;
     }
     out.push({
       id: slot.id,
@@ -138,6 +139,8 @@ export function resolverSlots(
       rotacao: rot,
       x_mm: x,
       y_mm: y,
+      cx_mm: x + fp.w / 2,
+      cy_mm: y + fp.h / 2,
       largura_mm: fp.w,
       altura_mm: fp.h,
     });
@@ -167,6 +170,16 @@ export function gerarSlotsPelaGrade(perfil: PerfilImposicao, pagina = 1): Perfil
   return out;
 }
 
+/**
+ * Converte Y entre o sistema gravado (origem no topo da folha, Y para baixo)
+ * e o que o usuário vê/digita (origem no canto INFERIOR esquerdo, Y para
+ * cima). A função é a própria inversa. Só a tela usa o Y de baixo; o perfil
+ * salvo e o JDF não mudam.
+ */
+export function yUsuario(y: number, folhaAltura: number): number {
+  return arredondarMm(folhaAltura - y);
+}
+
 /** Arredonda para 0,01 mm (evita 69.49999999). */
 export function arredondarMm(n: number): number {
   return Math.round(n * 100) / 100;
@@ -174,7 +187,7 @@ export function arredondarMm(n: number): number {
 
 /**
  * Passa o perfil para posicionamento manual preservando as posições atuais
- * (cada slot recebe o x/y que a grade calculava).
+ * (cada slot recebe o centro que a grade calculava).
  */
 export function converterParaManual(perfil: PerfilImposicao): PerfilImposicao {
   if (perfil.posicionamento === "manual") return perfil;
@@ -185,8 +198,8 @@ export function converterParaManual(perfil: PerfilImposicao): PerfilImposicao {
       const pos = resolved.get(slot.id);
       return {
         ...slot,
-        x_mm: pos ? arredondarMm(pos.x_mm) : 0,
-        y_mm: pos ? arredondarMm(pos.y_mm) : 0,
+        x_mm: pos ? arredondarMm(pos.cx_mm) : 0,
+        y_mm: pos ? arredondarMm(pos.cy_mm) : 0,
       };
     });
   }

@@ -63,9 +63,9 @@ def test_slot_fora_da_folha_e_sobreposicao():
     p["pagina"] = {"fonte": "fixa", "largura_mm": 100, "altura_mm": 100}
     p["posicionamento"] = "manual"
     p["slots"]["frente"] = [
-        {"id": 1, "x_mm": 0, "y_mm": 0, "rotacao": 0, "pagina": 1},
-        {"id": 2, "x_mm": 50, "y_mm": 50, "rotacao": 0, "pagina": 1},
-        {"id": 3, "x_mm": 250, "y_mm": 0, "rotacao": 0, "pagina": 1},
+        {"id": 1, "x_mm": 50, "y_mm": 50, "rotacao": 0, "pagina": 1},
+        {"id": 2, "x_mm": 100, "y_mm": 100, "rotacao": 0, "pagina": 1},
+        {"id": 3, "x_mm": 300, "y_mm": 50, "rotacao": 0, "pagina": 1},
     ]
     val = perfil_svc.validar_perfil(p, verificar_arquivos=False)
     assert any("slots.frente.3" == e["campo"] for e in val["erros"])
@@ -133,16 +133,34 @@ def test_topo_esquerda_da_grade_bate_com_formula_do_jdf():
     assert slots[0]["largura_mm"] == 148 and slots[0]["altura_mm"] == 210
 
 
-def test_manual_compilado_converte_y_para_canto_inferior():
+def test_manual_xy_e_o_centro_da_pagina():
     p = perfil_svc.perfil_vazio()
     p["folha"] = {"largura_mm": 400, "altura_mm": 300}
     p["pagina"] = {"fonte": "fixa", "largura_mm": 100, "altura_mm": 50}
     p["posicionamento"] = "manual"
-    p["slots"]["frente"] = [{"id": 1, "x_mm": 10, "y_mm": 20, "rotacao": 90, "pagina": 1}]
-    cfg = perfil_svc.compilar_config_jdf(perfil_svc.normalize_perfil(p))
-    oc = cfg["grid"]["ocupadas"][0]
-    # Girado 90°: ocupa 50×100; y_ll = 300 − 20 − 100 = 180
+    # Centro em (35, 70): girada 90° ocupa 50×100 → canto sup. esq. (10, 20).
+    p["slots"]["frente"] = [{"id": 1, "x_mm": 35, "y_mm": 70, "rotacao": 90, "pagina": 1}]
+    norm = perfil_svc.normalize_perfil(p)
+    tela = perfil_svc.slots_topo_esquerda(norm)[0]
+    assert (tela["x_mm"], tela["y_mm"]) == (10, 20)
+    assert (tela["cx_mm"], tela["cy_mm"]) == (35, 70)
+    oc = perfil_svc.compilar_config_jdf(norm)["grid"]["ocupadas"][0]
+    # PDF: canto inferior esquerdo; y_ll = 300 − 20 − 100 = 180
     assert oc["x_mm"] == 10 and oc["y_mm"] == 180 and oc["rotacao"] == 90
+
+
+def test_centro_digitado_dentro_da_folha_nao_sai():
+    """Centro da página no meio da folha: nunca deve acusar 'fora da folha'."""
+    p = perfil_svc.perfil_vazio()
+    p["folha"] = {"largura_mm": 745, "altura_mm": 605}
+    p["pagina"] = {"fonte": "fixa", "largura_mm": 220, "altura_mm": 320}
+    p["posicionamento"] = "manual"
+    p["slots"]["frente"] = [
+        {"id": 1, "x_mm": 532.46, "y_mm": 210.0, "rotacao": 90, "pagina": 1},
+        {"id": 2, "x_mm": 212.46, "y_mm": 430.0, "rotacao": 270, "pagina": 1},
+    ]
+    val = perfil_svc.validar_perfil(p, verificar_arquivos=False)
+    assert val["completo"], val["erros"]
 
 
 # ---------------------------------------------------------------------------
@@ -287,8 +305,8 @@ def test_slot_errado_aparece_na_comparacao():
     perfil = perfil_svc.perfil_from_v1(cfg)
     perfil["posicionamento"] = "manual"
     perfil["slots"]["frente"] = [
-        {"id": 1, "x_mm": 0.5, "y_mm": 0, "rotacao": 0, "pagina": 1},
-        {"id": 2, "x_mm": 150, "y_mm": 0, "rotacao": 0, "pagina": 1},
+        {"id": 1, "x_mm": 74.5, "y_mm": 105, "rotacao": 0, "pagina": 1},
+        {"id": 2, "x_mm": 224, "y_mm": 105, "rotacao": 0, "pagina": 1},
     ]
     res = perfil_svc.comparar_configs(cfg, perfil_svc.compilar_config_jdf(perfil_svc.normalize_perfil(perfil)))
     assert not res["iguais"]
@@ -404,6 +422,7 @@ def test_pipeline_v2_igual_ao_antigo_timbrado(tmp_path):
 _ARQUIVOS_GENERICOS = [
     "app/backend/services/papelaria_imposicao_perfil_service.py",
     "app/backend/services/papelaria_imposicao_perfil_store.py",
+    "app/backend/services/papelaria_imposicao_marcas_service.py",
     "app/backend/routers/papelaria_imposicao_routes.py",
     "apps/web/src/features/papelaria/imposicao/perfil",
     "apps/web/src/features/configuracoes/components/PerfilImposicaoPanel.tsx",

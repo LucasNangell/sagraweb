@@ -22,9 +22,14 @@ import { fetchSituacoes } from "@/api/auxLookups";
 import {
   ativarPerfil,
   compararPerfil,
+  enviarMarcasPdf,
+  fetchMarcasArquivoInfo,
   fetchModelosPerfil,
   fetchPdfInfo,
   fetchPerfisProduto,
+  importarMarcasPdf,
+  marcasPdfUrl,
+  marcasThumbUrl,
   pdfThumbUrl,
   removerModeloPerfil,
   removerPerfil,
@@ -169,7 +174,22 @@ export function PerfilImposicaoPanel({
   });
   const validacao = validacaoQuery.data;
 
-  const marcasPath = draft?.marcas.ativo ? draft.marcas.pdf_path : null;
+  // Caminho de rede só é verificado quando não há PDF guardado no servidor.
+  const marcasPath = draft?.marcas.ativo && !draft.marcas.arquivo ? draft.marcas.pdf_path : null;
+  const marcasArquivo = draft?.marcas.ativo ? draft.marcas.arquivo : null;
+  const marcasArquivoQuery = useQuery({
+    queryKey: ["admin", "imposicao-marcas-arquivo", marcasArquivo],
+    queryFn: () => fetchMarcasArquivoInfo(marcasArquivo as string),
+    enabled: Boolean(marcasArquivo),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const marcasArquivoInfo = marcasArquivo
+    ? marcasArquivoQuery.data ??
+      (marcasArquivoQuery.isError
+        ? { arquivo: marcasArquivo, existe: false, paginas: null, largura_mm: null, altura_mm: null }
+        : null)
+    : null;
   useEffect(() => {
     if (!marcasPath) {
       setMarcasInfo(null);
@@ -250,6 +270,34 @@ export function PerfilImposicaoPanel({
     onError,
   });
 
+  const aplicarMarcasNoServidor = (meta: { arquivo: string; nome_original?: string }) => {
+    if (!draft) return;
+    qc.setQueryData(["admin", "imposicao-marcas-arquivo", meta.arquivo], { ...meta, existe: true });
+    setDraft({
+      ...draft,
+      marcas: {
+        ...draft.marcas,
+        ativo: true,
+        arquivo: meta.arquivo,
+        nome_original: meta.nome_original ?? null,
+        pdf_path: null,
+      },
+    });
+    setMsg({ tone: "ok", text: "PDF de marcas guardado no servidor. Salve o perfil para usar." });
+  };
+
+  const enviarMarcasMutation = useMutation({
+    mutationFn: (file: File) => enviarMarcasPdf(file),
+    onSuccess: aplicarMarcasNoServidor,
+    onError,
+  });
+
+  const importarMarcasMutation = useMutation({
+    mutationFn: (path: string) => importarMarcasPdf(path),
+    onSuccess: aplicarMarcasNoServidor,
+    onError,
+  });
+
   const modeloSaveMutation = useMutation({
     mutationFn: ({ nome, perfil }: { nome: string; perfil: PerfilImposicao }) => salvarModeloPerfil(nome, perfil),
     onSuccess: (m) => {
@@ -317,7 +365,13 @@ export function PerfilImposicaoPanel({
   const erros = validacao?.erros ?? registro?.validacao.erros ?? [];
   const avisos = validacao?.avisos ?? registro?.validacao.avisos ?? [];
   const completo = validacao ? validacao.completo : (registro?.validacao.completo ?? false);
-  const background = marcasInfo?.existe && marcasInfo.miniatura && marcasPath ? pdfThumbUrl(marcasPath) : null;
+  const background = marcasArquivo
+    ? marcasArquivoInfo && marcasArquivoInfo.existe !== false
+      ? marcasThumbUrl(marcasArquivo)
+      : null
+    : marcasInfo?.existe && marcasInfo.miniatura && marcasPath
+      ? pdfThumbUrl(marcasPath)
+      : null;
 
   const modelos = modelosQuery.data ?? [];
   const resumoAtual = useMemo(() => resumoPerfil(draft), [draft]);
@@ -439,6 +493,11 @@ export function PerfilImposicaoPanel({
             marcasInfo={marcasInfo}
             marcasInfoLoading={marcasLoading}
             onVerificarMarcas={(p) => void verificarMarcas(p)}
+            onEnviarMarcas={(f) => enviarMarcasMutation.mutate(f)}
+            onImportarMarcas={(p) => importarMarcasMutation.mutate(p)}
+            marcasEnviando={enviarMarcasMutation.isPending || importarMarcasMutation.isPending}
+            marcasArquivoInfo={marcasArquivoInfo}
+            marcasArquivoUrl={marcasArquivo ? marcasPdfUrl(marcasArquivo) : null}
             backgroundUrl={background}
             situacoes={situacoesQuery.data ?? []}
             produtos={produtos}
@@ -672,8 +731,15 @@ function ComparacaoPanel({
       </section>
     );
   }
-  const fmt = (p: { x_mm: number; y_mm: number; rotacao: number; pagina: number } | null) =>
-    p ? `${p.x_mm.toFixed(2).replace(".", ",")}, ${p.y_mm.toFixed(2).replace(".", ",")} · ${p.rotacao}° · pág. ${p.pagina}` : "—";
+  // A API devolve Y a partir do topo; a tela mostra a partir de baixo.
+  const fmt = (
+    p: { x_mm: number; y_mm: number; rotacao: number; pagina: number } | null,
+    folhaH: number | undefined,
+  ) => {
+    if (!p) return "—";
+    const y = folhaH != null ? folhaH - p.y_mm : p.y_mm;
+    return `${p.x_mm.toFixed(2).replace(".", ",")}, ${y.toFixed(2).replace(".", ",")} · ${p.rotacao}° · pág. ${p.pagina}`;
+  };
   const outras = resultado.diferencas.filter((d) => !d.campo.startsWith("slots."));
   return (
     <section
@@ -713,8 +779,8 @@ function ComparacaoPanel({
               <tr>
                 <th className="px-2 py-1">Face</th>
                 <th className="px-2 py-1">#</th>
-                <th className="px-2 py-1">Fluxo atual (X, Y mm)</th>
-                <th className="px-2 py-1">Perfil (X, Y mm)</th>
+                <th className="px-2 py-1">Fluxo atual (centro X, Y mm)</th>
+                <th className="px-2 py-1">Perfil (centro X, Y mm)</th>
                 <th className="px-2 py-1" />
               </tr>
             </thead>
@@ -723,8 +789,8 @@ function ComparacaoPanel({
                 <tr key={`${l.face}-${l.ordem}`} className="border-t border-slate-200/70">
                   <td className="px-2 py-1">{l.face}</td>
                   <td className="px-2 py-1">{l.ordem}</td>
-                  <td className="px-2 py-1 tabular-nums">{fmt(l.antigo)}</td>
-                  <td className="px-2 py-1 tabular-nums">{fmt(l.novo)}</td>
+                  <td className="px-2 py-1 tabular-nums">{fmt(l.antigo, resultado.folha_antigo?.[1])}</td>
+                  <td className="px-2 py-1 tabular-nums">{fmt(l.novo, resultado.folha_novo?.[1])}</td>
                   <td className={cn("px-2 py-1 font-semibold", l.igual ? "text-emerald-700" : "text-red-600")}>
                     {l.igual ? "igual" : "diferente"}
                   </td>
@@ -735,7 +801,7 @@ function ComparacaoPanel({
         </div>
       ) : null}
       <p className="text-[10px] text-slate-500">
-        Coordenadas a partir do canto superior esquerdo da folha. Tolerância: 0,01 pt.
+        Centro de cada página, a partir do canto inferior esquerdo da folha (Y para cima). Tolerância: 0,01 pt.
       </p>
     </section>
   );

@@ -6,9 +6,10 @@ produtos: o que antes era fixo no código para alguns produtos agora
 é configurado pelo usuário em Configurações → Papelaria → Produtos → Imposição.
 
 Coordenadas dos slots (posicionamento manual): milímetros, origem no canto
-SUPERIOR ESQUERDO da folha, y crescendo para baixo; (x, y) é o canto superior
-esquerdo da área ocupada pelo slot já girado. A conversão para o sistema do
-PDF/JDF (canto inferior esquerdo) acontece só em ``slots_pdf_ll``.
+SUPERIOR ESQUERDO da folha, y crescendo para baixo; (x, y) é o CENTRO da
+página no slot (o centro não muda com a rotação). A conversão para o sistema
+do PDF/JDF (canto inferior esquerdo da área ocupada) acontece só em
+``slots_topo_esquerda``/``compilar_config_jdf``.
 
 O perfil é "compilado" para o formato de configuração já aceito pelo gerador
 de JDF (``compilar_config_jdf``), para que geração, reenvio, nomes de arquivo
@@ -55,7 +56,15 @@ def perfil_vazio() -> dict[str, Any]:
             "alinhamento": "centro",
         },
         "slots": {"frente": [], "verso": []},
-        "marcas": {"ativo": False, "pdf_path": None, "carimbar_op": False},
+        "marcas": {
+            "ativo": False,
+            # PDF guardado no servidor (nome em storage/papelaria_imposicao_marcas).
+            "arquivo": None,
+            "nome_original": None,
+            # Alternativa: caminho de rede (UNC) lido direto pelo Apogee.
+            "pdf_path": None,
+            "carimbar_op": False,
+        },
         "arte": {"fonte": "base_sefoc", "rotacao": "no_jdf"},
         "juntada": {
             "ativo": False,
@@ -260,9 +269,17 @@ def normalize_perfil(data: Any) -> dict[str, Any]:
     if not isinstance(marcas, dict):
         raise ValueError("marcas deve ser um objeto.")
     marcas_ativo = _bool(marcas.get("ativo"))
+    arquivo = _text(marcas.get("arquivo")) if marcas_ativo else None
+    if arquivo:
+        from services.papelaria_imposicao_marcas_service import validar_nome_arquivo
+
+        arquivo = validar_nome_arquivo(arquivo)
     base["marcas"] = {
         "ativo": marcas_ativo,
-        "pdf_path": _text(marcas.get("pdf_path")) if marcas_ativo else None,
+        "arquivo": arquivo,
+        "nome_original": _text(marcas.get("nome_original")) if arquivo else None,
+        # Com arquivo no servidor, o caminho de rede deixa de ser usado.
+        "pdf_path": None if arquivo else (_text(marcas.get("pdf_path")) if marcas_ativo else None),
         "carimbar_op": _bool(marcas.get("carimbar_op")) if marcas_ativo else False,
     }
 
@@ -330,6 +347,24 @@ def pagina_mm(perfil: dict[str, Any]) -> Optional[tuple[float, float]]:
     return float(w), float(h)
 
 
+def marcas_pdf(perfil: dict[str, Any]) -> Optional[str]:
+    """
+    Caminho do PDF de marcas para ler no servidor: arquivo guardado no
+    servidor (preferido) ou caminho de rede informado. None se não houver.
+    """
+    marcas = perfil.get("marcas") or {}
+    if not marcas.get("ativo"):
+        return None
+    if marcas.get("arquivo"):
+        from services.papelaria_imposicao_marcas_service import resolver_arquivo
+
+        try:
+            return resolver_arquivo(marcas["arquivo"])
+        except ValueError:
+            return None
+    return marcas.get("pdf_path") or None
+
+
 def folha_mm(perfil: dict[str, Any]) -> Optional[tuple[float, float]]:
     folha = perfil.get("folha") or {}
     w, h = folha.get("largura_mm"), folha.get("altura_mm")
@@ -389,9 +424,10 @@ def slots_topo_esquerda(
     page_size: Optional[tuple[float, float]] = None,
 ) -> list[dict[str, Any]]:
     """
-    Slots com posição resolvida no sistema da tela (topo-esquerdo, mm).
+    Slots com posição resolvida no sistema da tela (origem topo-esquerdo, mm).
 
-    Cada item: id, pagina, rotacao, x_mm, y_mm, largura_mm, altura_mm
+    Cada item: id, pagina, rotacao, x_mm/y_mm (canto superior esquerdo da
+    área ocupada), cx_mm/cy_mm (centro da página), largura_mm, altura_mm
     (área ocupada já girada). ``page_size`` substitui o tamanho da página
     quando ``pagina.fonte = pdf``.
     """
@@ -416,8 +452,9 @@ def slots_topo_esquerda(
         else:
             if slot.get("x_mm") is None or slot.get("y_mm") is None:
                 continue
-            x_tl = float(slot["x_mm"])
-            y_tl = float(slot["y_mm"])
+            # X/Y manuais = centro da página.
+            x_tl = float(slot["x_mm"]) - fw / 2.0
+            y_tl = float(slot["y_mm"]) - fh / 2.0
         out.append(
             {
                 "id": int(slot["id"]),
@@ -425,6 +462,8 @@ def slots_topo_esquerda(
                 "rotacao": rot,
                 "x_mm": x_tl,
                 "y_mm": y_tl,
+                "cx_mm": x_tl + fw / 2.0,
+                "cy_mm": y_tl + fh / 2.0,
                 "largura_mm": fw,
                 "altura_mm": fh,
             }
@@ -632,33 +671,52 @@ def validar_perfil(
     # Marcas
     marcas = perfil["marcas"]
     if marcas["ativo"]:
-        path = marcas["pdf_path"] or ""
-        if not path:
-            err("marcas.pdf_path", "Informe o caminho do PDF de marcas.")
-        elif not path.lower().endswith(".pdf"):
-            err("marcas.pdf_path", "O PDF de marcas deve ser um arquivo .pdf.")
-        elif verificar_arquivos:
-            info = pdf_info_reader(path)
-            if not info.get("existe"):
-                motivo = info.get("erro") or "Arquivo não encontrado."
-                if marcas["carimbar_op"]:
-                    err(
-                        "marcas.pdf_path",
-                        f"{motivo} Para carimbar a OP o servidor precisa ler o arquivo.",
-                    )
-                else:
-                    warn("marcas.pdf_path", f"{motivo} O Apogee ainda poderá lê-lo.")
-            elif folha is not None and info.get("largura_mm") and info.get("altura_mm"):
+        def conferir_tamanho(info: dict[str, Any], campo: str) -> None:
+            if folha is not None and info.get("largura_mm") and info.get("altura_mm"):
                 mw, mh = float(info["largura_mm"]), float(info["altura_mm"])
                 if (
                     abs(mw - folha[0]) > TOLERANCIA_MARCAS_MM
                     or abs(mh - folha[1]) > TOLERANCIA_MARCAS_MM
                 ):
                     err(
-                        "marcas.pdf_path",
+                        campo,
                         f"PDF de marcas tem {mw:g}×{mh:g} mm; a folha é "
                         f"{folha[0]:g}×{folha[1]:g} mm.",
                     )
+
+        if marcas.get("arquivo"):
+            if verificar_arquivos:
+                path = marcas_pdf(perfil)
+                info = pdf_info_reader(path) if path else {"existe": False}
+                if not info.get("existe"):
+                    err(
+                        "marcas.arquivo",
+                        "O PDF de marcas não está mais no servidor. Envie o arquivo de novo.",
+                    )
+                else:
+                    conferir_tamanho(info, "marcas.arquivo")
+        else:
+            path = marcas["pdf_path"] or ""
+            if not path:
+                err("marcas.arquivo", "Envie o PDF de marcas.")
+            elif not path.lower().endswith(".pdf"):
+                err("marcas.pdf_path", "O PDF de marcas deve ser um arquivo .pdf.")
+            elif verificar_arquivos:
+                info = pdf_info_reader(path)
+                if not info.get("existe"):
+                    motivo = info.get("erro") or "Arquivo não encontrado."
+                    if marcas["carimbar_op"]:
+                        err(
+                            "marcas.pdf_path",
+                            f"{motivo} Para carimbar a OP o servidor precisa ler o arquivo.",
+                        )
+                    else:
+                        warn(
+                            "marcas.pdf_path",
+                            f"{motivo} O Apogee ainda poderá lê-lo. Recomendado: enviar o PDF ao servidor.",
+                        )
+                else:
+                    conferir_tamanho(info, "marcas.pdf_path")
     elif marcas.get("carimbar_op"):
         err("marcas.carimbar_op", "Carimbar a OP exige PDF de marcas.")
 
@@ -858,7 +916,8 @@ def compilar_config_jdf(
     de JDF (``validate_imposicao_config_payload``/``build_apogee_jdf_xml``).
 
     Posicionamento pela grade → células da grade (mesma conta de sempre).
-    Posicionamento manual → células com ``x_mm``/``y_mm`` absolutos no
+    Posicionamento manual (X/Y = centro da página) → células com
+    ``x_mm``/``y_mm`` absolutos no
     sistema do PDF (canto inferior esquerdo da área ocupada).
     """
     folha = folha_mm(perfil)
@@ -895,13 +954,16 @@ def compilar_config_jdf(
             out = []
             for slot, (c, r) in zip(slots, cells):
                 rot = int(slot.get("rotacao") or 0)
-                _fw, fh = footprint_mm(pw, ph, rot)
+                fw, fh = footprint_mm(pw, ph, rot)
+                # Centro (topo-esquerdo) → canto inferior esquerdo da área ocupada.
+                x_tl = float(slot["x_mm"]) - fw / 2.0
+                y_tl = float(slot["y_mm"]) - fh / 2.0
                 entry: dict[str, Any] = {
                     "col": c,
                     "row": r,
                     "pagina": int(slot.get("pagina") or 1),
-                    "x_mm": round(float(slot["x_mm"]), 4),
-                    "y_mm": round(topo_para_pdf_ll(float(slot["y_mm"]), fh, folha_h), 4),
+                    "x_mm": round(x_tl, 4),
+                    "y_mm": round(topo_para_pdf_ll(y_tl, fh, folha_h), 4),
                 }
                 if rot:
                     entry["rotacao"] = rot
@@ -930,7 +992,9 @@ def compilar_config_jdf(
         },
         "sangria_mm": float(perfil["sangria_mm"]),
         "marcas_corte": bool(marcas["ativo"]),
-        "marcas_pdf_path": marcas["pdf_path"] if marcas["ativo"] else None,
+        # Arquivo do servidor: caminho local da API (na geração é copiado para
+        # a pasta da OS antes de ir ao JDF). Caminho de rede: usado como está.
+        "marcas_pdf_path": marcas_pdf(perfil) if marcas["ativo"] else None,
         "centralizar_na_folha": grade["alinhamento"] == "centro",
         "work_style": "Duplex" if perfil["faces"] == "frente_verso" else "Simplex",
         "usar_pre_impresso": perfil["arte"]["fonte"] == "pre_impresso",
@@ -1016,7 +1080,7 @@ def perfil_from_v1(cfg: Any) -> dict[str, Any]:
             ordered = sorted(items, key=lambda o: (o["pagina"], o["row"], o["col"]))
             for i, o in enumerate(ordered, start=1):
                 rot = int(o.get("rotacao") or 0)
-                _fw, fh = footprint_mm(pw, ph, rot)
+                fw, fh = footprint_mm(pw, ph, rot)
                 if o.get("x_mm") is not None:
                     x_tl = float(o["x_mm"])
                     y_tl = pdf_ll_para_topo(float(o["y_mm"]), fh, folha_h)
@@ -1030,8 +1094,9 @@ def perfil_from_v1(cfg: Any) -> dict[str, Any]:
                         "id": i,
                         "col": int(o["col"]),
                         "row": int(o["row"]),
-                        "x_mm": round(x_tl, 4),
-                        "y_mm": round(y_tl, 4),
+                        # Perfil guarda o centro da página.
+                        "x_mm": round(x_tl + fw / 2.0, 4),
+                        "y_mm": round(y_tl + fh / 2.0, 4),
                         "rotacao": rot,
                         "pagina": int(o["pagina"]),
                     }
@@ -1157,9 +1222,24 @@ def comparar_configs(
             )
     if a["work_style"] != b["work_style"]:
         diffs.append({"campo": "faces", "descricao": f"Faces: {a['work_style']} → {b['work_style']}"})
+    avisos: list[str] = []
+    pa_m, pb_m = a.get("marcas_pdf_path") or None, b.get("marcas_pdf_path") or None
+    if pa_m and pb_m and str(pa_m).lower() != str(pb_m).lower():
+        # Mesmo PDF em lugares diferentes (ex.: enviado ao servidor) = igual.
+        from services.papelaria_imposicao_marcas_service import sha256_arquivo
+
+        ha, hb = sha256_arquivo(str(pa_m)), sha256_arquivo(str(pb_m))
+        if ha and hb:
+            if ha != hb:
+                diffs.append(
+                    {"campo": "marcas_pdf_path", "descricao": "PDF de marcas: conteúdo diferente do usado hoje."}
+                )
+        else:
+            avisos.append("Não foi possível ler os dois PDFs de marcas para comparar o conteúdo.")
+    elif bool(pa_m) != bool(pb_m):
+        diffs.append({"campo": "marcas_pdf_path", "descricao": f"PDF de marcas: {pa_m} → {pb_m}"})
     for campo, rot in (
         ("marcas_corte", "Marcas"),
-        ("marcas_pdf_path", "PDF de marcas"),
         ("usar_pre_impresso", "Arte pré-impressa"),
     ):
         va, vb = a[campo] or None, b[campo] or None
@@ -1173,10 +1253,11 @@ def comparar_configs(
 
     def para_tela(pos: tuple, folha_h: float, pw: float, ph: float) -> dict[str, Any]:
         x, y, pagina, rot = pos[0], pos[1], pos[2], (pos[3] if len(pos) > 3 else 0)
-        _fw, fh = footprint_mm(pw, ph, rot)
+        fw, fh = footprint_mm(pw, ph, rot)
+        # Centro da página, origem no canto superior esquerdo (como a tela).
         return {
-            "x_mm": round(float(x), 3),
-            "y_mm": round(pdf_ll_para_topo(float(y), fh, folha_h), 3),
+            "x_mm": round(float(x) + fw / 2.0, 3),
+            "y_mm": round(pdf_ll_para_topo(float(y), fh, folha_h) + fh / 2.0, 3),
             "pagina": int(pagina),
             "rotacao": int(rot),
         }
@@ -1204,4 +1285,12 @@ def comparar_configs(
                         "descricao": f"{face.capitalize()} · posição {i + 1}: {pa} → {pb}",
                     }
                 )
-    return {"iguais": not diffs, "diferencas": diffs, "linhas": linhas}
+    return {
+        "iguais": not diffs,
+        "diferencas": diffs,
+        "avisos": avisos,
+        "linhas": linhas,
+        # Alturas das folhas: a tela converte Y para "a partir de baixo".
+        "folha_antigo": [a["folha"][0], a["folha"][1]],
+        "folha_novo": [b["folha"][0], b["folha"][1]],
+    }

@@ -3,6 +3,7 @@ import type {
   ComparacaoResultado,
   ImposicaoVariante,
   ImposicaoVariantesResponse,
+  MarcasArquivo,
   ModeloPerfil,
   PdfInfo,
   PerfilImposicao,
@@ -102,6 +103,39 @@ export async function fetchPdfInfo(path: string): Promise<PdfInfo> {
 
 export function pdfThumbUrl(path: string): string {
   return apiUrl(`/papelaria/admin/imposicao/pdf-thumb?${new URLSearchParams({ path })}`);
+}
+
+/** Envia o PDF de marcas para o servidor (fica guardado lá). */
+export async function enviarMarcasPdf(file: File): Promise<MarcasArquivo> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return apiFetch<MarcasArquivo>("/papelaria/admin/imposicao/marcas-pdf", {
+    method: "POST",
+    body: form,
+  });
+}
+
+/** Copia para o servidor um PDF referenciado hoje por caminho de rede. */
+export async function importarMarcasPdf(path: string): Promise<MarcasArquivo> {
+  return apiFetch<MarcasArquivo>("/papelaria/admin/imposicao/marcas-pdf/importar", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ path }),
+  });
+}
+
+export async function fetchMarcasArquivoInfo(arquivo: string): Promise<MarcasArquivo> {
+  return apiFetch<MarcasArquivo>(
+    `/papelaria/admin/imposicao/marcas-pdf/${encodeURIComponent(arquivo)}/info`,
+  );
+}
+
+export function marcasPdfUrl(arquivo: string): string {
+  return apiUrl(`/papelaria/admin/imposicao/marcas-pdf/${encodeURIComponent(arquivo)}`);
+}
+
+export function marcasThumbUrl(arquivo: string): string {
+  return apiUrl(`/papelaria/admin/imposicao/marcas-pdf/${encodeURIComponent(arquivo)}/thumb`);
 }
 
 export async function fetchModelosPerfil(): Promise<ModeloPerfil[]> {

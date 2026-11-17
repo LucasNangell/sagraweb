@@ -1,4 +1,4 @@
-# Imposição de papelaria — perfil v2 (0.61.0)
+# Imposição de papelaria — perfil v2 (0.62.0)
 
 Todos os produtos de papelaria usam o mesmo formulário de imposição, em
 **Configurações → Papelaria → Produtos → aba Imposição (produto)**. Não há
@@ -35,10 +35,32 @@ um segundo passo para escolher as OSs que entram na mesma folha.
 
 ## Coordenadas
 
-Milímetros, origem no **canto superior esquerdo da folha**, y para baixo.
-(x, y) é o canto superior esquerdo da área ocupada pelo slot já girado. A
-conversão para o sistema do PDF/JDF acontece só no backend
-(`papelaria_imposicao_perfil_service.topo_para_pdf_ll`).
+Na tela: milímetros, origem no **canto inferior esquerdo da folha**, Y para
+cima. (x, y) é o **centro da página** no slot (o centro não muda com a
+rotação).
+
+Gravado no perfil (JSON/banco): o mesmo centro, mas com Y contado a partir do
+topo da folha (`y_gravado = altura_folha − y_tela`). A conversão para a tela
+fica só no frontend (`yUsuario` em `perfilUtils.ts`). A conversão para o PDF/JDF
+(canto inferior esquerdo da área ocupada) acontece só no backend
+(`slots_topo_esquerda` / `compilar_config_jdf`). O preview desenha a partir dos
+mesmos dados gravados, então o que se vê é o que vai para o JDF.
+
+## PDF de marcas
+
+O PDF de marcas é **enviado pela tela e guardado no servidor**, em
+`storage/papelaria_imposicao_marcas` (pasta persistente entre releases). O
+perfil guarda só o nome interno do arquivo (`marcas.arquivo`), que é
+deduplicado pelo conteúdo.
+
+Na geração do JDF, esse PDF é copiado para a pasta da OS na rede
+(`NNNNN-Nome-Marcas.pdf`, ou `-Marcas-OP.pdf` quando há carimbo de OP), e o
+JDF aponta para essa cópia. Assim o Apogee nunca depende do disco do servidor
+da API nem de arquivos locais de quem configurou.
+
+Perfis que ainda usam caminho de rede (`marcas.pdf_path`) continuam
+funcionando. A tela mostra um aviso com o botão "Copiar este arquivo para o
+servidor".
 
 ## Banco
 

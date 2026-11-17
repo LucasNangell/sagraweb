@@ -8,7 +8,8 @@ import logging
 import os
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from routers.papelaria_routes import _require_import_access, _require_papelaria_access
@@ -251,10 +252,95 @@ def pdf_thumb(
         raise HTTPException(403, "Caminho fora das pastas liberadas para pré-visualização.")
     if not os.path.isfile(resolved):
         raise HTTPException(404, "PDF não encontrado.")
+    return _png_primeira_pagina(resolved)
+
+
+# --- PDFs de marcas guardados no servidor ---------------------------------------
+
+
+@router.post("/admin/imposicao/marcas-pdf")
+async def enviar_marcas_pdf(
+    file: UploadFile = File(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Recebe o PDF de marcas e guarda no servidor (não depende de caminho local)."""
+    try:
+        from services import papelaria_imposicao_marcas_service as marcas_svc
+
+        nome = file.filename or "marcas.pdf"
+        if not nome.lower().endswith(".pdf"):
+            raise ValueError("Envie um arquivo .pdf.")
+        conteudo = await file.read(marcas_svc.MAX_BYTES + 1)
+        return marcas_svc.salvar_upload(conteudo, nome)
+    except Exception as exc:
+        raise _handle(exc, "guardar o PDF de marcas")
+
+
+@router.post("/admin/imposicao/marcas-pdf/importar")
+def importar_marcas_pdf(
+    payload: PdfInfoPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Copia para o servidor um PDF hoje referenciado por caminho de rede."""
+    try:
+        from services import papelaria_imposicao_marcas_service as marcas_svc
+
+        return marcas_svc.importar_de_caminho(payload.path.strip())
+    except Exception as exc:
+        raise _handle(exc, "copiar o PDF de marcas para o servidor")
+
+
+@router.get("/admin/imposicao/marcas-pdf/{arquivo}/info")
+def info_marcas_pdf(
+    arquivo: str,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_imposicao_marcas_service as marcas_svc
+
+        return marcas_svc.info_arquivo(arquivo)
+    except Exception as exc:
+        raise _handle(exc, "ler o PDF de marcas")
+
+
+def _arquivo_marcas_path(arquivo: str) -> str:
+    from services import papelaria_imposicao_marcas_service as marcas_svc
+
+    try:
+        path = marcas_svc.resolver_arquivo(arquivo)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not os.path.isfile(path):
+        raise HTTPException(404, "PDF de marcas não encontrado no servidor.")
+    return path
+
+
+@router.get("/admin/imposicao/marcas-pdf/{arquivo}")
+def abrir_marcas_pdf(
+    arquivo: str,
+    _session: SessionData = Depends(_require_import_access),
+):
+    path = _arquivo_marcas_path(arquivo)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{os.path.basename(path)}"'},
+    )
+
+
+@router.get("/admin/imposicao/marcas-pdf/{arquivo}/thumb")
+def miniatura_marcas_pdf(
+    arquivo: str,
+    _session: SessionData = Depends(_require_import_access),
+):
+    return _png_primeira_pagina(_arquivo_marcas_path(arquivo))
+
+
+def _png_primeira_pagina(path: str) -> Response:
     try:
         import fitz  # pymupdf
 
-        with fitz.open(resolved) as doc:
+        with fitz.open(path) as doc:
             if doc.page_count < 1:
                 raise HTTPException(400, "PDF sem páginas.")
             page = doc[0]

@@ -286,26 +286,37 @@ def _aplicar_marcas_op(
     ano: int,
     nro: int,
 ) -> dict[str, Any]:
-    """Carimba os números de OP no PDF de marcas quando o perfil pede."""
+    """
+    Prepara o PDF de marcas na pasta da OS (rede), onde o Apogee lê:
+    - carimbar OP → cópia com os números das OPs;
+    - PDF guardado no servidor → cópia simples;
+    - caminho de rede informado → usado como está.
+    """
     marcas = perfil.get("marcas") or {}
     if not marcas.get("ativo"):
         return {**cfg, "marcas_corte": False, "marcas_pdf_path": None}
-    if not marcas.get("carimbar_op"):
-        return cfg
+    from services import papelaria_imposicao_marcas_service as marcas_svc
     from services import papelaria_jdf_service as jdf_svc
 
     jobs = _jobs()
-    src = str(marcas.get("pdf_path") or "").strip()
-    if not src:
-        raise ValueError("Perfil com carimbo de OP sem PDF de marcas.")
     prefix = jobs.get_os_folder_basename(ano, nro)
-    out = os.path.normpath(os.path.join(sefoc_dir, f"{prefix}-Marcas-OP.pdf"))
-    ready = jdf_svc.prepare_marcas_pdf_with_ops(
-        source_pdf_path=src,
-        output_pdf_path=out,
-        nros=nros,
-    )
-    return {**cfg, "marcas_corte": True, "marcas_pdf_path": ready}
+    if marcas.get("carimbar_op"):
+        src = perfil_svc.marcas_pdf(perfil) or ""
+        if not src:
+            raise ValueError("Perfil com carimbo de OP sem PDF de marcas.")
+        out = os.path.normpath(os.path.join(sefoc_dir, f"{prefix}-Marcas-OP.pdf"))
+        ready = jdf_svc.prepare_marcas_pdf_with_ops(
+            source_pdf_path=src,
+            output_pdf_path=out,
+            nros=nros,
+        )
+        return {**cfg, "marcas_corte": True, "marcas_pdf_path": ready}
+    if marcas.get("arquivo"):
+        dest = marcas_svc.copiar_para_pasta(
+            marcas["arquivo"], sefoc_dir, f"{prefix}-Marcas.pdf"
+        )
+        return {**cfg, "marcas_corte": True, "marcas_pdf_path": dest}
+    return cfg
 
 
 # ---------------------------------------------------------------------------

@@ -726,7 +726,7 @@ def build_imposicao_offset_pdf_name(
     nro: int,
     config: dict[str, Any],
 ) -> str:
-    """{NUMOS-NomePasta}_Offset_{N}Up_{TAMANHO-FOLHA}.pdf"""
+    """{NUMOS-NomePasta}_Offset_{N}Up[_CC]_{Largura}x{Altura}.pdf"""
     prefix = get_os_folder_basename(ano, nro)
     grid = config.get("grid") or {}
     from services.papelaria_imposicao_config_service import resolve_grid_ocupadas
@@ -734,7 +734,8 @@ def build_imposicao_offset_pdf_name(
     n_up = max(1, len(resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})))
     folha = format_folha_impressao_label(config.get("folha_mm") or {})
     safe_folha = re.sub(r"[^\w.\-]+", "-", folha).strip("-") or "Folha"
-    return f"{prefix}_Offset_{n_up}Up_{safe_folha}.pdf"
+    cc = "CC_" if bool(config.get("marcas_corte")) else ""
+    return f"{prefix}_Offset_{n_up}Up_{cc}{safe_folha}.pdf"
 
 
 def merge_pdf_pages(sources: list[str], dest_path: str) -> str:
@@ -3187,23 +3188,12 @@ def _waiting_corel_message() -> str:
 
 
 def format_folha_impressao_label(folha_mm: dict[str, Any]) -> str:
-    """Rótulo do tamanho da folha de impressão para o nome do PDF Digital."""
+    """LarguraxAltura numérico (mm) para o nome do PDF de imposição."""
     w = float(folha_mm.get("largura") or 0)
     h = float(folha_mm.get("altura") or 0)
-    known = (
-        ((210.0, 297.0), "A4"),
-        ((297.0, 210.0), "A4-Paisagem"),
-        ((148.0, 210.0), "A5"),
-        ((210.0, 148.0), "A5-Paisagem"),
-        ((420.0, 297.0), "A3"),
-        ((297.0, 420.0), "A3-Paisagem"),
-    )
-    for (ew, eh), label in known:
-        if abs(w - ew) < 1.0 and abs(h - eh) < 1.0:
-            return label
     w_s = f"{w:.0f}" if abs(w - round(w)) < 0.05 else f"{w:g}"
     h_s = f"{h:.0f}" if abs(h - round(h)) < 0.05 else f"{h:g}"
-    return f"{w_s}x{h_s}mm"
+    return f"{w_s}x{h_s}"
 
 
 def build_imposicao_digital_pdf_name(
@@ -3213,8 +3203,9 @@ def build_imposicao_digital_pdf_name(
     config: dict[str, Any],
 ) -> str:
     """
-    {NUMOS-NomePasta}_Digit_{N}Up_{TAMANHO-FOLHA}.pdf
+    {NUMOS-NomePasta}_Digit_{N}Up[_CC]_{Largura}x{Altura}.pdf
     N = colunas × linhas (repetições na folha).
+    CC = marcas de corte ativas no config.
     """
     prefix = get_os_folder_basename(ano, nro)
     grid = config.get("grid") or {}
@@ -3223,12 +3214,13 @@ def build_imposicao_digital_pdf_name(
     n_up = max(1, len(resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})))
     folha = format_folha_impressao_label(config.get("folha_mm") or {})
     safe_folha = re.sub(r"[^\w.\-]+", "-", folha).strip("-") or "Folha"
-    return f"{prefix}_Digit_{n_up}Up_{safe_folha}.pdf"
+    cc = "CC_" if bool(config.get("marcas_corte")) else ""
+    return f"{prefix}_Digit_{n_up}Up_{cc}{safe_folha}.pdf"
 
 
-# Resultado do Apogee: sufixo «Imposição» no final do nome (não ImposicaoGang).
+# Resultado do Apogee: sufixo «Apogee» (ou legado «Imposição»); não ImposicaoGang.
 _APOGEE_IMPOSICAO_EXPORT_RE = re.compile(
-    r"(?:^|[_\s-])Imposi[cç][aã]o\.pdf$",
+    r"(?:^|[_\s-])(?:Imposi[cç][aã]o|Apogee)\.pdf$",
     re.IGNORECASE,
 )
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
@@ -3279,8 +3271,8 @@ def find_imposicao_pdf_in_sefoc(
     """
     PDF de imposição do Apogee na raiz de Sefoc.
 
-    Só aceita export do Apogee (sufixo «Imposição»). Ignora artefatos internos
-    (ImposicaoGang, PreImpresso, BaseSefoc, provas).
+    Aceita export com sufixo «Apogee» (ou legado «Imposição»).
+    Ignora artefatos internos (ImposicaoGang, PreImpresso, BaseSefoc, provas).
     """
     pdfs = _list_pdfs_with_mtime(sefoc_dir)
     if not pdfs:
@@ -3294,7 +3286,7 @@ def find_imposicao_pdf_in_sefoc(
     if not candidates:
         return None
 
-    # 1) Sufixo típico do Apogee: ..._Imposição.pdf / ... Imposição.pdf
+    # 1) Sufixo típico: ..._Apogee.pdf / ..._Imposição.pdf
     marked = [
         path
         for path in candidates
@@ -3310,9 +3302,9 @@ def find_imposicao_pdf_in_sefoc(
             stem_file = os.path.splitext(os.path.basename(path))[0].lower()
             if stem_file == stem:
                 return path
-            # Stem + sufixo Imposição (com ou sem acento), ex.: Label_Imposição.pdf
+            # Stem + sufixo Apogee/Imposição, ex.: Label_Apogee.pdf
             if stem_file.startswith(f"{stem}_") and re.search(
-                r"imposi[cç][aã]o", stem_file
+                r"(?:imposi[cç][aã]o|apogee)$", stem_file, re.IGNORECASE
             ):
                 return path
 

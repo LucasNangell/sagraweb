@@ -1,39 +1,10 @@
-"""Testes — Media/@Brand no JDF e PDF de marcas na pasta da OS."""
+"""Testes — JDF sem papel (Apogee escolhe) e PDF de marcas na pasta da OS."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-
-def test_media_tem_brand_padrao_e_configuravel(monkeypatch):
-    from services import papelaria_jdf_service as jdf
-
-    monkeypatch.delenv("SAGRA_JDF_MEDIA_BRAND", raising=False)
-    xml = jdf.build_media_xml(
-        media_id="PAP_05000", descriptive_name="Folha", width_pt=100, height_pt=50
-    )
-    assert f'Brand="{jdf.DEFAULT_JDF_MEDIA_BRAND}"' in xml
-    assert 'MediaType="Paper"' in xml
-    assert "Weight=" not in xml
-
-    monkeypatch.setenv("SAGRA_JDF_MEDIA_BRAND", "Couche & Cia")
-    xml = jdf.build_media_xml(
-        media_id="PAP_05000", descriptive_name="Folha", width_pt=100, height_pt=50
-    )
-    assert 'Brand="Couche &amp; Cia"' in xml
-
-    xml = jdf.build_media_xml(
-        media_id="PAP_05000",
-        descriptive_name="Folha",
-        width_pt=100,
-        height_pt=50,
-        config={"media_marca": "Offset 180", "media_gramatura": 180},
-    )
-    assert 'Brand="Offset 180"' in xml
-    assert 'Weight="180"' in xml
 
 
 def _pdf(path: Path) -> Path:
@@ -41,7 +12,8 @@ def _pdf(path: Path) -> Path:
     return path
 
 
-def test_jdf_imposicao_e_passthrough_incluem_brand(tmp_path: Path):
+def test_jdf_nao_declara_papel(tmp_path: Path):
+    """O papel é escolhido no Apogee: o JDF não leva Media/MediaRef/MediaLink."""
     import fitz
 
     from services import papelaria_jdf_service as jdf
@@ -77,8 +49,14 @@ def test_jdf_imposicao_e_passthrough_incluem_brand(tmp_path: Path):
         "usar_pre_impresso": False,
         "jdf_import_root": None,
     }
-    assert "Brand=" in jdf.build_apogee_jdf_xml(config=config, **comum)
-    assert "Brand=" in jdf.build_apogee_passthrough_jdf_xml(n_pages=1, **comum)
+    for xml in (
+        jdf.build_apogee_jdf_xml(config=config, **comum),
+        jdf.build_apogee_passthrough_jdf_xml(n_pages=1, **comum),
+    ):
+        assert "<Media " not in xml
+        assert "MediaRef" not in xml
+        assert "MediaLink" not in xml
+        assert "Brand=" not in xml
 
 
 class TestMarcasNaPastaOs:

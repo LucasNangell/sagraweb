@@ -729,7 +729,6 @@ def _build_imposicao_jdf_artifacts(
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
             n_pages=jdf_svc.read_pdf_page_count(base_pdf_path),
-            config=config,
         )
     else:
         jdf_xml = jdf_svc.build_apogee_jdf_xml(

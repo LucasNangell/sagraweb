@@ -616,6 +616,55 @@ def _prepare_pre_impresso_jdf_config(
     return cfg, baked_path
 
 
+def _arquivo_dentro_da_pasta(path: str, pasta: str) -> bool:
+    try:
+        real_file = os.path.normcase(os.path.realpath(path))
+        real_dir = os.path.normcase(os.path.realpath(pasta))
+    except (OSError, ValueError):
+        return False
+    return os.path.dirname(real_file) == real_dir
+
+
+def ensure_marcas_pdf_na_pasta_os(
+    config: dict[str, Any],
+    *,
+    ano: int,
+    nro: int,
+    sefoc_dir: str,
+) -> dict[str, Any]:
+    """
+    O Apogee lê o PDF de marcas pelo caminho gravado no JDF; ele precisa estar
+    na pasta da OS (rede). Se a configuração aponta para outro lugar (caminho de
+    rede do modelo/produto, storage do servidor), copia como
+    ``{prefixo}-Marcas.pdf`` na pasta Sefoc da OS e devolve a config ajustada.
+    """
+    if not config.get("marcas_corte"):
+        return config
+    src = str(config.get("marcas_pdf_path") or "").strip()
+    if not src or not sefoc_dir:
+        return config
+    if _arquivo_dentro_da_pasta(src, sefoc_dir) and os.path.isfile(src):
+        return config
+    if not os.path.isfile(src):
+        raise FileNotFoundError(
+            f"PDF de marcas não encontrado pelo servidor: {src}. "
+            "Envie o PDF de marcas de novo na configuração de imposição."
+        )
+    prefix = get_os_folder_basename(ano, nro)
+    dest = os.path.normpath(os.path.join(sefoc_dir, f"{prefix}-Marcas.pdf"))
+    try:
+        os.makedirs(sefoc_dir, exist_ok=True)
+        tmp = f"{dest}.tmp"
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dest)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Não foi possível copiar o PDF de marcas para a pasta da OS ({sefoc_dir}): {exc}"
+        ) from exc
+    logger.info("PDF de marcas copiado para a pasta da OS: %s", dest)
+    return {**config, "marcas_pdf_path": dest}
+
+
 def _build_imposicao_jdf_artifacts(
     *,
     ano: int,
@@ -632,6 +681,8 @@ def _build_imposicao_jdf_artifacts(
     from services import papelaria_jdf_service as jdf_svc
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    if not sem_imposicao:
+        config = ensure_marcas_pdf_na_pasta_os(config, ano=ano, nro=nro, sefoc_dir=sefoc_dir)
     prefix = get_os_folder_basename(ano, nro)
     # Nome “humano” sem o Nr OS (já vai em JobPartID / nome do .jdf).
     label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
@@ -678,6 +729,7 @@ def _build_imposicao_jdf_artifacts(
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
             n_pages=jdf_svc.read_pdf_page_count(base_pdf_path),
+            config=config,
         )
     else:
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
@@ -3443,6 +3495,81 @@ def _complete_pre_impresso_imposicao_job(
     return updated
 
 
+# Sufixos dos PDFs auxiliares que o SAGRA grava na pasta Sefoc só para o
+# Apogee montar a imposição. BaseSefoc.pdf (arte/prova) nunca entra aqui.
+_IMPOSICAO_AUX_SUFIXOS = (
+    "-Marcas.pdf",
+    "-Marcas-OP.pdf",
+    "-ImposicaoGang.pdf",
+    "-ImposicaoGang-Rotated.pdf",
+    "-BaseSefoc-PreImpresso.pdf",
+)
+
+
+def _lote_os_do_job(job: dict[str, Any], dados: dict[str, Any]) -> list[tuple[int, int]]:
+    """Âncora + OSs juntadas (sem repetição)."""
+    out: list[tuple[int, int]] = [(int(job["ano_protocolo"]), int(job["nro_protocolo"]))]
+    for key in ("juntada_lote", "juntada_membros"):
+        for item in dados.get(key) or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                par = (int(item.get("ano")), int(item.get("nro")))
+            except (TypeError, ValueError):
+                continue
+            if par not in out:
+                out.append(par)
+    return out
+
+
+def cleanup_imposicao_intermediate_pdfs(
+    job: dict[str, Any],
+    dados: dict[str, Any],
+) -> list[str]:
+    """
+    Apaga da pasta Sefoc de cada OS do lote os PDFs auxiliares da imposição
+    (marcas, gang, gang rotacionado, pré-impresso) depois que o PDF do Apogee
+    foi movido para Digital/Offset. Só remove arquivos com os nomes gerados
+    pelo sistema (``{prefixo}{sufixo}``) diretamente na pasta Sefoc.
+    """
+    removidos: list[str] = []
+    for ano, nro in _lote_os_do_job(job, dados):
+        try:
+            sefoc = resolve_os_papelaria_dir(ano, nro, create=False)
+            prefix = get_os_folder_basename(ano, nro)
+        except Exception as exc:
+            logger.warning("Limpeza imposição: pasta da OS %s/%s indisponível: %s", nro, ano, exc)
+            continue
+        if not sefoc or not os.path.isdir(sefoc):
+            continue
+        for sufixo in _IMPOSICAO_AUX_SUFIXOS:
+            path = os.path.normpath(os.path.join(sefoc, f"{prefix}{sufixo}"))
+            if not os.path.isfile(path):
+                continue
+            try:
+                os.remove(path)
+                removidos.append(f"{int(nro):05d}/{os.path.basename(path)}")
+            except OSError as exc:
+                logger.warning("Limpeza imposição: não removeu %s: %s", path, exc)
+    return removidos
+
+
+def _registrar_limpeza_imposicao(job_id: int, job: dict[str, Any], dados: dict[str, Any]) -> None:
+    """Best effort: falha na limpeza nunca impede o PDF pronto."""
+    try:
+        removidos = cleanup_imposicao_intermediate_pdfs(job, dados)
+    except Exception as exc:  # pragma: no cover - defensivo
+        logger.warning("Limpeza dos PDFs de imposição do job %s falhou: %s", job_id, exc)
+        return
+    if removidos:
+        dados["imposicao_intermediarios_removidos"] = removidos
+        append_job_log(
+            job_id,
+            "PDFs auxiliares da imposição removidos da pasta da OS: " + ", ".join(removidos),
+            "info",
+        )
+
+
 def _finalize_imposicao_digital_pdf(
     *,
     job_id: int,
@@ -3466,6 +3593,7 @@ def _finalize_imposicao_digital_pdf(
     dados["aguardando_apogee"] = False
     dados["imposicao_pdf_origem"] = origem_name
     dados["imposicao_pdf_digital"] = rel_pdf
+    _registrar_limpeza_imposicao(job_id, job, dados)
 
     db.execute_query(
         """
@@ -3550,6 +3678,7 @@ def _finalize_imposicao_offset_pdf(
     dados["imposicao_pdf_offset"] = rel_pdf
     if copias:
         dados["imposicao_pdf_offset_copias"] = copias
+    _registrar_limpeza_imposicao(job_id, job, dados)
 
     db.execute_query(
         """

@@ -11,6 +11,9 @@ from xml.sax.saxutils import escape
 MM_TO_PT = 72.0 / 25.4
 
 DEFAULT_JDF_IMPORT_ROOT = r"\\apogee\JDFImportRoot\Papelaria"
+# Marca (Media/@Brand) do papel no JDF. O Apogee exige a marca para criar o
+# tipo de papel; sem ela recusa o ticket ("A marca da Mídia está ausente").
+DEFAULT_JDF_MEDIA_BRAND = "SagraWEB"
 
 # NamedFeatures do Hot Ticket / Export TP (Base Attribute Map MIS Export).
 _EXPORT_FEATURE = "resultexport ExportPDF_Sefoc"
@@ -43,6 +46,50 @@ def get_jdf_import_root(
 
         return os.path.normpath(default_jdf_import_root(produto))
     return os.path.normpath(DEFAULT_JDF_IMPORT_ROOT)
+
+
+def resolve_media_brand(config: dict[str, Any] | None = None) -> str:
+    """
+    Marca do papel para Media/@Brand.
+    Prioridade: config.media_marca → SAGRA_JDF_MEDIA_BRAND → padrão.
+    """
+    explicit = str((config or {}).get("media_marca") or "").strip()
+    if explicit:
+        return explicit[:120]
+    env = (os.getenv("SAGRA_JDF_MEDIA_BRAND") or "").strip()
+    if env:
+        return env[:120]
+    return DEFAULT_JDF_MEDIA_BRAND
+
+
+def _media_weight_attr(config: dict[str, Any] | None) -> str:
+    """Media/@Weight (g/m²) só quando configurado."""
+    raw = (config or {}).get("media_gramatura")
+    try:
+        weight = float(raw)
+    except (TypeError, ValueError):
+        return ""
+    if weight <= 0:
+        return ""
+    return f' Weight="{weight:g}"'
+
+
+def build_media_xml(
+    *,
+    media_id: str,
+    descriptive_name: str,
+    width_pt: float,
+    height_pt: float,
+    config: dict[str, Any] | None = None,
+) -> str:
+    """Recurso <Media> do JDF com marca (Brand) — obrigatória no Apogee."""
+    brand = escape(resolve_media_brand(config), {'"': "&quot;"})
+    return (
+        f'    <Media Class="Consumable" ID="{media_id}" MediaType="Paper" Status="Available"\n'
+        f'           Brand="{brand}" MediaUnit="Sheet"{_media_weight_attr(config)}\n'
+        f'           DescriptiveName="{escape(descriptive_name)}" '
+        f'Dimension="{width_pt:.3f} {height_pt:.3f}"/>'
+    )
 
 
 def _encode_file_url_path(posix_path: str) -> str:
@@ -591,6 +638,14 @@ def build_apogee_jdf_xml(
 {contents_back}
             </Surface>"""
 
+    media_xml = build_media_xml(
+        media_id=f"PAP_{nro5}",
+        descriptive_name="Folha imposicao",
+        width_pt=folha_w_pt,
+        height_pt=folha_h_pt,
+        config=config,
+    )
+
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -624,8 +679,7 @@ def build_apogee_jdf_xml(
       </ColorantParams>
     </ColorantControl>
 
-    <Media Class="Consumable" ID="PAP_{nro5}" MediaType="Paper" Status="Available"
-           DescriptiveName="Folha imposicao" Dimension="{folha_w_pt:.3f} {folha_h_pt:.3f}"/>
+{media_xml}
 
     <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"/>
   </ResourcePool>
@@ -757,6 +811,7 @@ def build_apogee_passthrough_jdf_xml(
     n_pages: int,
     agent_version: str = "1.0",
     timestamp: datetime | None = None,
+    config: dict[str, Any] | None = None,
 ) -> str:
     """
     Ticket Apogee para Hot Ticket com «Apogee Impose».
@@ -776,6 +831,13 @@ def build_apogee_passthrough_jdf_xml(
     page_w_pt = mm_to_pt(page_w_mm)
     page_h_pt = mm_to_pt(page_h_mm)
     n_page = max(1, int(n_pages))
+    media_xml = build_media_xml(
+        media_id=f"PAP_{nro5}",
+        descriptive_name="Pagina arte",
+        width_pt=page_w_pt,
+        height_pt=page_h_pt,
+        config=config,
+    )
 
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
@@ -837,8 +899,7 @@ def build_apogee_passthrough_jdf_xml(
       </ColorantParams>
     </ColorantControl>
 
-    <Media Class="Consumable" ID="PAP_{nro5}" MediaType="Paper" Status="Available"
-           DescriptiveName="Pagina arte" Dimension="{page_w_pt:.3f} {page_h_pt:.3f}"/>
+{media_xml}
 
     <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"/>
 

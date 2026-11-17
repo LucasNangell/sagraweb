@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 _WORKER_HEADER = "X-Sagra-Worker-Secret"
 _inspect_api_unavailable_logged = False
+_os_cdr_api_unavailable_logged = False
 
 
 class PapelariaWorkerApiError(Exception):
@@ -242,6 +243,83 @@ class PapelariaWorkerApiClient:
             {
                 "worker_id": self.worker_id,
                 "erro": erro,
+            },
+        )
+
+    # --- Retrato dos textos do .cdr da OS ---------------------------------
+
+    def claim_os_cdr_scan(self) -> Optional[dict[str, Any]]:
+        """Próxima leitura de .cdr da OS pedida pela página Papelaria."""
+        global _os_cdr_api_unavailable_logged
+        try:
+            data = self._request(
+                "POST",
+                "/papelaria/worker/os-cdr-campos/claim",
+                {"worker_id": self.worker_id},
+            )
+        except PapelariaWorkerApiError as exc:
+            if exc.status_code in (403, 404, 405):
+                if not _os_cdr_api_unavailable_logged:
+                    logger.warning(
+                        "Leitura de campos do .cdr da OS indisponível na API (HTTP %s). "
+                        "Jobs continuam; atualize o backend SAGRA.",
+                        exc.status_code,
+                    )
+                    _os_cdr_api_unavailable_logged = True
+                return None
+            raise
+        if not data:
+            return None
+        return data.get("scan")
+
+    def complete_os_cdr_scan(
+        self,
+        scan_id: int,
+        *,
+        objetos: list[dict[str, Any]],
+        mtime: float,
+        size: int,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/papelaria/worker/os-cdr-campos/{int(scan_id)}/complete",
+            {
+                "worker_id": self.worker_id,
+                "objetos": objetos,
+                "mtime": mtime,
+                "size": size,
+            },
+        )
+
+    def fail_os_cdr_scan(self, scan_id: int, erro: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/papelaria/worker/os-cdr-campos/{int(scan_id)}/fail",
+            {"worker_id": self.worker_id, "erro": (erro or "Falha")[:4000]},
+        )
+
+    def push_os_cdr_campos(
+        self,
+        *,
+        ano: int,
+        nro: int,
+        cdr_path: str,
+        objetos: list[dict[str, Any]],
+        mtime: float,
+        size: int,
+    ) -> dict[str, Any]:
+        """Envia o retrato do .cdr recém-gravado (sem nova leitura no Corel)."""
+        return self._request(
+            "POST",
+            "/papelaria/worker/os-cdr-campos/push",
+            {
+                "worker_id": self.worker_id,
+                "ano": int(ano),
+                "nro": int(nro),
+                "cdr_path": cdr_path,
+                "objetos": objetos,
+                "mtime": mtime,
+                "size": size,
             },
         )
 

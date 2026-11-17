@@ -1,6 +1,7 @@
 import { apiFetch, apiUrl } from "@/api/client";
 
 import type {
+  PapelariaAplicarCdrCamposPayload,
   PapelariaApproveProvaResponse,
   PapelariaCorelModelDetail,
   PapelariaCorelModelSummary,
@@ -9,6 +10,7 @@ import type {
   PapelariaJob,
   PapelariaModel,
   PapelariaOsContext,
+  PapelariaOsCdrCampos,
   PapelariaOsCdrPath,
   PapelariaPreviewPagesResponse,
   PapelariaPreviewPayload,
@@ -106,6 +108,33 @@ export async function fetchPapelariaCdrPath(
   return apiFetch<PapelariaOsCdrPath>(
     `/papelaria/os/${ano}/${nro}/cdr-path`,
   );
+}
+
+/** Campos (textos) do .cdr da OS — lidos do banco; worker relê se o arquivo mudou. */
+export async function fetchPapelariaOsCdrCampos(
+  ano: number,
+  nro: number,
+  options?: { arquivo?: string | null; refresh?: boolean },
+): Promise<PapelariaOsCdrCampos> {
+  const params = new URLSearchParams();
+  if (options?.arquivo) params.set("arquivo", options.arquivo);
+  if (options?.refresh) params.set("refresh", "true");
+  const qs = params.toString();
+  return apiFetch<PapelariaOsCdrCampos>(
+    `/papelaria/os/${ano}/${nro}/cdr-campos${qs ? `?${qs}` : ""}`,
+  );
+}
+
+/** Aplica textos/nomes no .cdr da OS (worker) e enfileira nova prova. */
+export async function aplicarPapelariaOsCdrCampos(
+  payload: PapelariaAplicarCdrCamposPayload,
+): Promise<PapelariaJob> {
+  const { ano, nro, ...body } = payload;
+  return apiFetch<PapelariaJob>(`/papelaria/os/${ano}/${nro}/cdr-campos/aplicar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export async function abrirCorelPapelariaOs(

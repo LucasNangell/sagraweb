@@ -1684,9 +1684,25 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
 
         obs_cli = (alt.get("observacao_cliente") or "").strip()
         campos_alterados: list[dict[str, str]] = []
+        cdr_textos_base: dict[str, str] = {}
+        if campos_alt and any(str(k).startswith("cdr:") for k in campos_alt):
+            try:
+                from services.papelaria_os_cdr_campos_service import (
+                    get_latest_snapshot_for_portal,
+                )
+
+                snap = get_latest_snapshot_for_portal(ano, nro)
+                if snap:
+                    cdr_textos_base = {c["key"]: c["texto"] for c in snap["campos"]}
+            except Exception as exc:
+                logger.warning("Retrato CDR indisponível (%s/%s): %s", nro, ano, exc)
         if campos_alt:
             for key, depois in campos_alt.items():
-                antes = job_dados_base.get(str(key), "").strip()
+                antes = (
+                    cdr_textos_base.get(str(key))
+                    if str(key) in cdr_textos_base
+                    else job_dados_base.get(str(key), "")
+                ).strip()
                 depois_s = str(depois).strip()
                 if antes != depois_s:
                     campos_alterados.append(

@@ -51,6 +51,21 @@ class PapelariaExportExistingCdrPayload(BaseModel):
     arquivo_cdr: Optional[str] = Field(None, max_length=255)
 
 
+class PapelariaCdrSemNomeEdit(BaseModel):
+    static_id: int = Field(..., ge=1)
+    pagina: int = Field(..., ge=1)
+    texto: Optional[str] = Field(None, max_length=2000)
+    nome: Optional[str] = Field(None, max_length=60)
+
+
+class PapelariaAplicarCdrCamposPayload(BaseModel):
+    modelo_id: int = Field(..., ge=1)
+    arquivo_cdr: Optional[str] = Field(None, max_length=255)
+    textos: Dict[str, str] = Field(default_factory=dict)
+    sem_nome: list[PapelariaCdrSemNomeEdit] = Field(default_factory=list)
+    lancar_andamento: bool = False
+
+
 class PapelariaImposicaoJuntadaOs(BaseModel):
     ano: int = Field(..., ge=2000, le=2100)
     nro: int = Field(..., ge=1)
@@ -872,6 +887,86 @@ def obter_caminho_cdr_os(
     except Exception as e:
         logger.exception("Erro ao resolver CDR OS %s/%s: %s", nro, ano, e)
         raise HTTPException(500, "Erro ao localizar arquivo Corel.")
+
+
+def _assert_papelaria_os(ano: int, nro: int) -> None:
+    if nro < 5000:
+        from services import papelaria_models_service as models_svc
+
+        if not models_svc.is_papelaria_os_by_product(ano, nro):
+            raise HTTPException(
+                status_code=400,
+                detail="Disponível apenas para OS >= 5000 ou com produto de papelaria configurado.",
+            )
+
+
+@router.get("/os/{ano}/{nro}/cdr-campos")
+def obter_cdr_campos_os(
+    ano: int,
+    nro: int,
+    arquivo: Optional[str] = Query(None, max_length=255),
+    refresh: bool = Query(False),
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """
+    Campos (textos) do .cdr da OS, lidos do banco. Se o arquivo mudou desde a
+    última leitura, a leitura é enfileirada no worker e o último retrato volta.
+    """
+    _assert_papelaria_os(ano, nro)
+    try:
+        from services import papelaria_os_cdr_campos_service as cdr_campos_svc
+
+        return cdr_campos_svc.get_os_cdr_campos(ano, nro, arquivo, force_refresh=refresh)
+    except Exception as e:
+        logger.exception("Erro campos CDR OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao carregar os campos do arquivo Corel.")
+
+
+@router.post("/os/{ano}/{nro}/cdr-campos/aplicar")
+def aplicar_cdr_campos_os(
+    ano: int,
+    nro: int,
+    payload: PapelariaAplicarCdrCamposPayload,
+    session: SessionData = Depends(_require_papelaria_access),
+):
+    """Aplica textos/nomes no .cdr da OS (via worker) e gera nova prova."""
+    _assert_papelaria_os(ano, nro)
+    from services import papelaria_jobs_service as jobs_svc
+    from services import papelaria_os_cdr_campos_service as cdr_campos_svc
+
+    try:
+        textos = cdr_campos_svc.sanitize_cdr_textos(payload.textos)
+        rel, edits = cdr_campos_svc.preparar_edicoes_para_job(
+            ano,
+            nro,
+            payload.arquivo_cdr,
+            textos=textos,
+            sem_nome=[item.model_dump() for item in payload.sem_nome],
+        )
+        if not edits:
+            raise ValueError("Nenhuma alteração para aplicar no Corel.")
+        if payload.lancar_andamento:
+            jobs_svc.register_preparando_prova_andamento(ano, nro, str(session.ponto))
+        return jobs_svc.create_export_existing_cdr_job(
+            ano=ano,
+            nro=nro,
+            modelo_id=payload.modelo_id,
+            dados={},
+            solicitado_por=str(session.ponto),
+            arquivo_cdr=rel,
+            cdr_edits=edits,
+        )
+    except cdr_campos_svc.StaleCdrSnapshotError as e:
+        raise HTTPException(409, str(e))
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro aplicar campos CDR OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao aplicar alterações no arquivo Corel.")
 
 
 @router.post("/os/{ano}/{nro}/abrir-corel")

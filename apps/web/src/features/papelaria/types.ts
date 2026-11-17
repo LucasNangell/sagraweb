@@ -186,3 +186,70 @@ export interface PapelariaPreviewPagesResponse {
   total_pages?: number;
   truncated?: boolean;
 }
+
+/** Campo nomeado do .cdr da OS (retrato no banco, lido pelo worker). */
+export interface PapelariaCdrCampo {
+  /** `cdr:Nome` ou `cdr:Nome@2` (texto divergente por página). */
+  key: string;
+  nome: string;
+  label: string;
+  pagina: number | null;
+  texto: string;
+  multiline: boolean;
+  alvos: Array<{ static_id: number; pagina: number }>;
+}
+
+/** Texto sem nome no .cdr — pode ser nomeado pelo técnico. */
+export interface PapelariaCdrSemNome {
+  key: string;
+  static_id: number;
+  pagina: number;
+  texto: string;
+  camada: string;
+  multiline: boolean;
+}
+
+export type PapelariaOsCdrCamposStatus =
+  | "ready"
+  | "pending"
+  | "processing"
+  | "failed"
+  | "sem_cdr"
+  | "sem_pasta";
+
+export interface PapelariaOsCdrCampos {
+  status: PapelariaOsCdrCamposStatus;
+  /** Retrato corresponde ao arquivo atual (mtime/tamanho). */
+  atualizado: boolean;
+  tem_retrato: boolean;
+  arquivo: {
+    filename: string;
+    relative_path: string;
+    mtime: number;
+    size: number | null;
+  } | null;
+  files: PapelariaOsCdrFile[];
+  campos: PapelariaCdrCampo[];
+  sem_nome: PapelariaCdrSemNome[];
+  total_objetos: number;
+  erro: string | null;
+  extraido_em: string | null;
+  solicitado_em: string | null;
+}
+
+export interface PapelariaCdrSemNomeEdit {
+  static_id: number;
+  pagina: number;
+  texto?: string;
+  nome?: string;
+}
+
+export interface PapelariaAplicarCdrCamposPayload {
+  ano: number;
+  nro: number;
+  modelo_id: number;
+  arquivo_cdr?: string;
+  textos: Record<string, string>;
+  sem_nome: PapelariaCdrSemNomeEdit[];
+  lancar_andamento?: boolean;
+}

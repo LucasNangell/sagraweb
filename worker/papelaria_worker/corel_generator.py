@@ -227,6 +227,10 @@ class GenerationResult:
     cdr_path: str
     pdf_path: str
     logs: list[str]
+    # Retrato dos textos do .cdr gravado (StaticID/página/nome/texto) — enviado
+    # à API para a página Papelaria não precisar reabrir o Corel.
+    objetos_texto: Optional[list[dict[str, Any]]] = None
+    objetos_cdr_path: Optional[str] = None
 
 
 def limpar_nome_arquivo(texto: str) -> str:
@@ -1015,6 +1019,314 @@ def inspecionar_cdr(
                 doc.Close()
             except Exception:
                 pass
+
+
+# --- Retrato dos textos do .cdr da OS (identidade por StaticID) ---
+
+CDR_TEXT_SHAPE_TYPE = 6  # cdrTextShape
+CDR_PARAGRAPH_TEXT_TYPE = 1  # cdrParagraphText
+MAX_OBJETOS_TEXTO = 400
+BACKUP_CDR_PREFIXO = "Cópia_de_segurança_de_"
+
+
+def _shape_static_id(shape: Any) -> int:
+    try:
+        return int(shape.StaticID)
+    except Exception:
+        return 0
+
+
+def _shape_tipo(shape: Any) -> int:
+    try:
+        return int(shape.Type)
+    except Exception:
+        return -1
+
+
+def _tipo_texto_shape(shape: Any) -> str:
+    try:
+        return "paragrafo" if int(shape.Text.Type) == CDR_PARAGRAPH_TEXT_TYPE else "artistico"
+    except Exception:
+        return ""
+
+
+def _camada_ignorada(layer: Any) -> bool:
+    for attr in ("IsGuidesLayer", "IsDesktopLayer", "IsGridLayer"):
+        try:
+            if bool(getattr(layer, attr)):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _sub_colecoes_shape(shape: Any) -> list[Any]:
+    """Grupos e conteúdo de PowerClip — onde textos podem estar aninhados."""
+    colecoes: list[Any] = []
+    try:
+        if shape.Shapes.Count > 0:
+            colecoes.append(shape.Shapes)
+    except Exception:
+        pass
+    try:
+        pc = shape.PowerClip
+        if pc is not None and pc.Shapes.Count > 0:
+            colecoes.append(pc.Shapes)
+    except Exception:
+        pass
+    return colecoes
+
+
+def _coletar_textos(
+    shapes: Any,
+    pagina: int,
+    camada: str,
+    out: list[dict[str, Any]],
+) -> None:
+    try:
+        total = int(shapes.Count)
+    except Exception:
+        return
+    for i in range(1, total + 1):
+        if len(out) >= MAX_OBJETOS_TEXTO:
+            return
+        try:
+            shape = shapes.Item(i)
+        except Exception:
+            continue
+        if _shape_tipo(shape) == CDR_TEXT_SHAPE_TYPE:
+            sid = _shape_static_id(shape)
+            texto = ler_texto_shape(shape)
+            if sid > 0 and texto is not None:
+                try:
+                    nome = str(shape.Name or "").strip()
+                except Exception:
+                    nome = ""
+                out.append(
+                    {
+                        "static_id": sid,
+                        "pagina": pagina,
+                        "nome": nome,
+                        "texto": texto.rstrip("\n"),
+                        "camada": camada,
+                        "tipo": _tipo_texto_shape(shape),
+                        "ordem": len(out),
+                    }
+                )
+            continue
+        for sub in _sub_colecoes_shape(shape):
+            _coletar_textos(sub, pagina, camada, out)
+
+
+def extrair_objetos_texto(doc: Any) -> list[dict[str, Any]]:
+    """
+    Lista todos os objetos de texto do documento (nomeados ou não), com o
+    ``StaticID`` do Corel como identidade estável. Não altera o documento.
+    """
+    out: list[dict[str, Any]] = []
+    try:
+        total_paginas = int(doc.Pages.Count)
+    except Exception:
+        return out
+    for p in range(1, total_paginas + 1):
+        try:
+            page = doc.Pages.Item(p)
+            total_camadas = int(page.Layers.Count)
+        except Exception:
+            continue
+        for l in range(1, total_camadas + 1):
+            try:
+                layer = page.Layers.Item(l)
+            except Exception:
+                continue
+            if _camada_ignorada(layer):
+                continue
+            try:
+                camada = str(layer.Name or "")
+            except Exception:
+                camada = ""
+            try:
+                _coletar_textos(layer.Shapes, p, camada, out)
+            except Exception:
+                continue
+            if len(out) >= MAX_OBJETOS_TEXTO:
+                return out
+    return out
+
+
+def _buscar_shape_static_id(shapes: Any, static_id: int) -> Any:
+    try:
+        total = int(shapes.Count)
+    except Exception:
+        return None
+    for i in range(1, total + 1):
+        try:
+            shape = shapes.Item(i)
+        except Exception:
+            continue
+        if _shape_static_id(shape) == static_id:
+            return shape
+        for sub in _sub_colecoes_shape(shape):
+            achado = _buscar_shape_static_id(sub, static_id)
+            if achado is not None:
+                return achado
+    return None
+
+
+def encontrar_shape_por_static_id(doc: Any, pagina: int, static_id: int) -> Any:
+    """Procura o shape na página indicada; se não achar, no documento todo."""
+    if static_id <= 0:
+        return None
+    try:
+        total_paginas = int(doc.Pages.Count)
+    except Exception:
+        return None
+    ordem = [pagina] if 1 <= pagina <= total_paginas else []
+    ordem += [p for p in range(1, total_paginas + 1) if p != pagina]
+    for p in ordem:
+        try:
+            page = doc.Pages.Item(p)
+            total_camadas = int(page.Layers.Count)
+        except Exception:
+            continue
+        for l in range(1, total_camadas + 1):
+            try:
+                achado = _buscar_shape_static_id(page.Layers.Item(l).Shapes, static_id)
+            except Exception:
+                achado = None
+            if achado is not None:
+                return achado
+    return None
+
+
+def aplicar_edicoes_cdr(
+    doc: Any,
+    edicoes: list[dict[str, Any]],
+    logs: list[str],
+) -> dict[str, int]:
+    """
+    Aplica edições por objeto: ``texto`` (novo conteúdo) e/ou ``novo_nome``
+    (nomeia o objeto no Corel, para alterações futuras e para o portal).
+    Localiza por StaticID; se não achar, pelo nome atual na página.
+    """
+    textos = 0
+    nomes = 0
+    faltando: list[str] = []
+    for edicao in edicoes or []:
+        if not isinstance(edicao, dict):
+            continue
+        try:
+            pagina = int(edicao.get("pagina") or 1)
+            static_id = int(edicao.get("static_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        nome_atual = str(edicao.get("nome_atual") or "").strip()
+        shape = encontrar_shape_por_static_id(doc, pagina, static_id)
+        if shape is None and nome_atual:
+            try:
+                page = doc.Pages.Item(pagina)
+                encontrados = encontrar_shapes_na_pagina(page, nome_atual)
+                shape = encontrados[0] if encontrados else None
+            except Exception:
+                shape = None
+        rotulo = nome_atual or f"texto #{static_id} (pág. {pagina})"
+        if shape is None:
+            faltando.append(rotulo)
+            continue
+        if "texto" in edicao and edicao.get("texto") is not None:
+            alterar_texto(shape, str(edicao["texto"]), logs)
+            textos += 1
+            logs.append(f"Texto alterado: {rotulo}.")
+        novo_nome = str(edicao.get("novo_nome") or "").strip()
+        if novo_nome:
+            try:
+                shape.Name = novo_nome
+            except Exception as exc:
+                raise CorelGenerationError(
+                    f"Não foi possível nomear o objeto {rotulo} como '{novo_nome}': {exc}"
+                ) from exc
+            nomes += 1
+            logs.append(f"Objeto {rotulo} nomeado como '{novo_nome}'.")
+    if faltando:
+        raise CorelGenerationError(
+            "Objeto(s) não encontrado(s) no Corel da OS (o arquivo foi alterado?): "
+            + ", ".join(faltando[:8])
+        )
+    logs.append(f"Edições aplicadas no Corel: {textos} texto(s), {nomes} nome(s).")
+    return {"textos": textos, "nomes": nomes}
+
+
+def _registrar_objetos_texto(
+    doc: Any,
+    meta: dict[str, Any],
+    cdr_destino: Optional[str],
+    logs: list[str],
+) -> None:
+    """Extrai o retrato de textos sem nunca derrubar o job principal."""
+    if not cdr_destino:
+        return
+    try:
+        objetos = extrair_objetos_texto(doc)
+    except Exception as exc:  # pragma: no cover - COM
+        logs.append(f"Aviso: retrato de textos do Corel não extraído: {exc}")
+        return
+    meta["objetos_texto"] = objetos
+    meta["objetos_cdr_path"] = os.path.abspath(cdr_destino)
+    logs.append(f"Retrato de textos: {len(objetos)} objeto(s).")
+
+
+def _backup_cdr_original(caminho_cdr: str, logs: list[str]) -> Optional[str]:
+    """Cópia de segurança antes de regravar o .cdr da OS (ignorada nas listagens)."""
+    destino = os.path.join(
+        os.path.dirname(caminho_cdr),
+        f"{BACKUP_CDR_PREFIXO}{os.path.basename(caminho_cdr)}",
+    )
+    try:
+        shutil.copy2(caminho_cdr, destino)
+        logs.append(f"Cópia de segurança: {os.path.basename(destino)}.")
+        return destino
+    except OSError as exc:
+        raise CorelGenerationError(
+            f"Não foi possível criar a cópia de segurança do Corel da OS: {exc}"
+        ) from exc
+
+
+def ler_objetos_texto_cdr(
+    caminho_cdr: str,
+    temp_dir: str,
+    *,
+    corel_visible: bool = False,
+) -> tuple[list[dict[str, Any]], int, float]:
+    """
+    Lê os textos do .cdr da OS a partir de cópia temporária (o original nunca é
+    aberto pelo Corel). Retorna (objetos, tamanho, mtime) do original lido.
+    """
+    if not os.path.isfile(caminho_cdr):
+        raise CorelGenerationError(f"Corel da OS não encontrado: {caminho_cdr}")
+    tamanho, mtime = _stat_arquivo(caminho_cdr)
+    scan_dir = os.path.join(temp_dir, "os_cdr_scan")
+    os.makedirs(scan_dir, exist_ok=True)
+    temp_cdr = os.path.join(scan_dir, "scan.cdr")
+    if os.path.exists(temp_cdr):
+        os.remove(temp_cdr)
+    shutil.copy2(caminho_cdr, temp_cdr)
+
+    logs: list[str] = []
+    _corel_session._ensure_com()
+    doc = None
+    try:
+        corel = _corel_session.get_application(corel_visible, force_new=False)
+        _preparar_corel_para_edicao(corel, logs)
+        doc = corel.OpenDocument(os.path.abspath(temp_cdr))
+        objetos = extrair_objetos_texto(doc)
+    finally:
+        if doc is not None:
+            _fechar_documento_sem_salvar(doc, logs)
+        try:
+            os.remove(temp_cdr)
+        except OSError:
+            pass
+    return objetos, tamanho, mtime
 
 
 # Objetos do carimbo/template que podem faltar em alguns CDR — não abortam o job.
@@ -2547,9 +2859,11 @@ def _gerar_arquivo_corel_impl(
     exclusoes: Optional[list[str]] = None,
     carimbo: Optional[dict[str, str]] = None,
     pdf_somente_primeira_pagina: bool = False,
+    result_meta: Optional[dict[str, Any]] = None,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
+    meta = result_meta if result_meta is not None else {}
 
     if not os.path.isfile(caminho_modelo):
         raise CorelGenerationError(f"Modelo não encontrado: {caminho_modelo}")
@@ -2664,6 +2978,7 @@ def _gerar_arquivo_corel_impl(
                 _sincronizar_documento_corel(corel, doc, logs, antes_de_gravar=True)
                 _garantir_camada_prova_sefoc_imprimivel(doc, logs)
                 _ativar_pagina_principal(doc, logs)
+                _registrar_objetos_texto(doc, meta, output_cdr_path, logs)
                 salvar_documento(doc, logs)
                 _fechar_documento_corel(doc, logs)
                 doc = None
@@ -2784,6 +3099,7 @@ def gerar_arquivo_corel(
             dados_norm["anexo"] = "IV"
 
     models_cache_dir = os.path.join(temp_dir, "_models_cache")
+    result_meta: dict[str, Any] = {}
     validar_acesso_job(
         caminho_modelo,
         os.path.dirname(output_cdr_path) or output_cdr_path,
@@ -2808,6 +3124,7 @@ def gerar_arquivo_corel(
             exclusoes=exclusoes,
             carimbo=carimbo,
             pdf_somente_primeira_pagina=pdf_somente_primeira_pagina,
+            result_meta=result_meta,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))
@@ -2836,6 +3153,8 @@ def gerar_arquivo_corel(
         cdr_path=output_cdr_path,
         pdf_path=output_pdf_path,
         logs=logs,
+        objetos_texto=result_meta.get("objetos_texto"),
+        objetos_cdr_path=result_meta.get("objetos_cdr_path"),
     )
 
 
@@ -2882,10 +3201,12 @@ def _exportar_prova_cdr_existente_impl(
     output_cdr_path: Optional[str] = None,
     result_meta: Optional[dict[str, Any]] = None,
     reuse_corel_session: bool = True,
+    cdr_edits: Optional[list[dict[str, Any]]] = None,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
     meta = result_meta if result_meta is not None else {}
+    edicoes = [e for e in (cdr_edits or []) if isinstance(e, dict)]
 
     if not os.path.isfile(caminho_cdr):
         raise CorelGenerationError(f"Corel da OS não encontrado: {caminho_cdr}")
@@ -2929,6 +3250,9 @@ def _exportar_prova_cdr_existente_impl(
                 logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
                 _assert_documento_e_copia_temp(doc, temp_abs, caminho_cdr, logs)
 
+                if edicoes:
+                    aplicar_edicoes_cdr(doc, edicoes, logs)
+
                 converted = False
                 if documento_tem_borda_f(doc):
                     logs.append(
@@ -2966,6 +3290,7 @@ def _exportar_prova_cdr_existente_impl(
                     _sincronizar_documento_corel(corel, doc, logs, antes_de_gravar=True)
                     _garantir_camada_prova_sefoc_imprimivel(doc, logs)
                     _ativar_pagina_principal(doc, logs)
+                    _registrar_objetos_texto(doc, meta, output_cdr_path, logs)
                     salvar_documento(doc, logs)
                     _fechar_documento_corel(doc, logs)
                     doc = None
@@ -2990,7 +3315,33 @@ def _exportar_prova_cdr_existente_impl(
                     finally:
                         _fechar_documento_corel(doc_pdf, logs)
                         doc_pdf = None
+                elif edicoes:
+                    # Edições no próprio .cdr da OS: grava a cópia temp, faz backup do
+                    # original, substitui e só então exporta o PDF (mesmo cuidado do
+                    # create: PublishToPDF não roda no documento que será gravado).
+                    _sincronizar_documento_corel(corel, doc, logs, antes_de_gravar=True)
+                    _garantir_camada_prova_sefoc_imprimivel(doc, logs)
+                    _ativar_pagina_principal(doc, logs)
+                    _registrar_objetos_texto(doc, meta, caminho_cdr, logs)
+                    salvar_documento(doc, logs)
+                    _fechar_documento_corel(doc, logs)
+                    doc = None
+
+                    _backup_cdr_original(caminho_cdr, logs)
+                    _copiar_arquivo_final(
+                        temp_cdr_path, caminho_cdr, logs, rotulo="CDR da OS (alterado)"
+                    )
+                    meta["edited_in_place"] = True
+                    os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+
+                    doc_pdf = corel.OpenDocument(os.path.abspath(temp_cdr_path))
+                    try:
+                        exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
+                    finally:
+                        _fechar_documento_corel(doc_pdf, logs)
+                        doc_pdf = None
                 else:
+                    _registrar_objetos_texto(doc, meta, caminho_cdr, logs)
                     exportar_pdf(corel, doc, temp_pdf_path, logs)
                     os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
 
@@ -3040,7 +3391,7 @@ def _exportar_prova_cdr_existente_impl(
         if reuse_corel_session:
             _release_corel_after_job(logs, completed=job_completed)
         try:
-            if _stat_arquivo(caminho_cdr) != origem_stat:
+            if not meta.get("edited_in_place") and _stat_arquivo(caminho_cdr) != origem_stat:
                 logs.append(
                     "ERRO: o Corel original da OS foi modificado na exportação."
                 )
@@ -3057,9 +3408,13 @@ def exportar_prova_de_cdr_existente(
     corel_visible: bool = False,
     job_timeout_sec: int = 300,
     job_id: Optional[int] = None,
+    cdr_edits: Optional[list[dict[str, Any]]] = None,
 ) -> GenerationResult:
     """
     Exporta PDF de prova a partir de um .cdr existente na pasta Sefoc.
+
+    Com ``cdr_edits`` o worker primeiro altera textos/nomes no próprio .cdr da
+    OS (com cópia de segurança) e exporta a prova do arquivo alterado.
 
     Se o CDR tiver padrão antigo (BordaF/BordaV), converte a arte para páginas
     Frente/Verso, grava ``output_cdr_path`` (BaseSefoc.cdr) e gera o PDF a partir
@@ -3091,6 +3446,7 @@ def exportar_prova_de_cdr_existente(
             output_cdr_path=output_cdr_path,
             result_meta=result_meta,
             reuse_corel_session=True,
+            cdr_edits=cdr_edits,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))
@@ -3122,6 +3478,8 @@ def exportar_prova_de_cdr_existente(
         cdr_path=cdr_path,
         pdf_path=output_pdf_path,
         logs=logs,
+        objetos_texto=result_meta.get("objetos_texto"),
+        objetos_cdr_path=result_meta.get("objetos_cdr_path"),
     )
 
 

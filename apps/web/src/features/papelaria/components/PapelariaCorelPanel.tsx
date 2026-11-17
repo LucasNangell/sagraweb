@@ -1,9 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ChevronDown, FileCode2, LayoutTemplate, Loader2 } from "lucide-react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
+  aplicarPapelariaOsCdrCampos,
   approvePapelariaJobProva,
   abrirCorelPapelariaOs,
   cancelPapelariaJob,
@@ -11,7 +24,7 @@ import {
   createPapelariaTimbradoA4DigitalJob,
   criarPapelariaImposicaoJob,
   discardPapelariaJobProva,
-  fetchPapelariaCdrPath,
+  fetchPapelariaOsCdrCampos,
   fetchPapelariaCorelModelo,
   fetchPapelariaJob,
   fetchPapelariaJobsForOs,
@@ -34,6 +47,15 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
 import { PapelariaActionBar } from "./PapelariaActionBar";
+import { PapelariaCdrFieldsPanel } from "./PapelariaCdrFieldsPanel";
+import { PapelariaFieldRow } from "./PapelariaFieldRow";
+import {
+  cdrCamposEmLeitura,
+  cdrDisponivel as isCdrDisponivel,
+  computeCdrAlteracoes,
+  pickCdrCampos,
+  type CdrSemNomeDraft,
+} from "../cdrCampos";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import type {
@@ -116,21 +138,13 @@ const TERMINAL_JOB_STATUSES: PapelariaJobStatus[] = [
 ];
 
 function usableCdrFiles(
-  data:
-    | {
-        filename: string;
-        files?: PapelariaOsCdrFile[];
-      }
-    | null
-    | undefined,
+  data: { files?: PapelariaOsCdrFile[] } | null | undefined,
 ): PapelariaOsCdrFile[] {
-  if (!data) return [];
-  if (data.files?.length) return data.files;
-  if (data.filename) {
-    return [{ filename: data.filename, relative_path: data.filename, mtime: 0 }];
-  }
-  return [];
+  return data?.files ?? [];
 }
+
+type FonteCampos = "cdr" | "modelo";
+type AndamentoAction = "gerar" | "digital" | "corel" | "export" | "aplicar_cdr";
 
 export function validateRequiredFields(
   fields: PapelariaField[] | undefined,
@@ -176,12 +190,20 @@ export function PapelariaCorelPanel({
     null,
   );
   const [corelEditMode, setCorelEditMode] = useState(false);
-  const [andamentoModal, setAndamentoModal] = useState<
-    "gerar" | "digital" | "corel" | "export" | null
-  >(null);
+  const [andamentoModal, setAndamentoModal] = useState<AndamentoAction | null>(null);
   const [folderGateAction, setFolderGateAction] = useState<
-    "gerar" | "digital" | "corel" | "export" | "imposicao" | null
+    AndamentoAction | "imposicao" | null
   >(null);
+  /** Fonte dos campos: arquivo Corel da OS (retrato no banco) ou modelo. null = automático. */
+  const [fonteCampos, setFonteCampos] = useState<FonteCampos | null>(null);
+  const [cdrArquivo, setCdrArquivo] = useState<string | null>(null);
+  const [cdrTextos, setCdrTextos] = useState<Record<string, string>>({});
+  const [cdrSemNome, setCdrSemNome] = useState<Record<string, CdrSemNomeDraft>>({});
+  const [cdrRefreshPending, setCdrRefreshPending] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  /** Retrato vigente quando as alterações foram enviadas; limpa o rascunho quando muda. */
+  const cdrAppliedSnapshotRef = useRef<string | null>(null);
+  const cdrClienteAppliedRef = useRef<string | null>(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
   const [exportCdrRel, setExportCdrRel] = useState<string | null>(null);
   const [cdrPickerOpen, setCdrPickerOpen] = useState(false);
@@ -229,20 +251,6 @@ export function PapelariaCorelPanel({
     retry: 1,
   });
 
-  const cdrPathQuery = useQuery({
-    queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
-    queryFn: async () => {
-      try {
-        return await fetchPapelariaCdrPath(anoNum, nroNum);
-      } catch {
-        return null;
-      }
-    },
-    enabled: contextReady,
-    staleTime: 30_000,
-    retry: false,
-  });
-
   const modelDetailQuery = useQuery({
     queryKey: queryKeys.papelaria.corelModelo(selectedModelId ?? 0),
     queryFn: () => fetchPapelariaCorelModelo(selectedModelId!),
@@ -274,6 +282,13 @@ export function PapelariaCorelPanel({
     path: authenticatedWsPath(ponto != null ? String(ponto) : null),
     enabled: hasOs,
     onMessage: (data) => {
+      if (data.type === "papelaria_cdr_campos_update") {
+        if (data.ano !== anoNum || data.nro !== nroNum) return;
+        void queryClient.invalidateQueries({
+          queryKey: ["papelaria", "cdrCampos", anoNum, nroNum],
+        });
+        return;
+      }
       if (data.type === "system_update" && data.action === "proof_responded") {
         const osNro = data.id ?? data.nro;
         if (data.ano !== anoNum || osNro !== nroNum) return;
@@ -298,6 +313,28 @@ export function PapelariaCorelPanel({
     },
   });
   const papelariaWsConnected = papelariaWsStatus === "connected";
+
+  /**
+   * Campos do .cdr da OS: só banco na API; o worker relê o Corel apenas quando o
+   * arquivo muda. Enquanto a leitura está na fila, consulta espaçada (WS avisa).
+   */
+  const cdrCamposQuery = useQuery({
+    queryKey: queryKeys.papelaria.cdrCampos(anoNum, nroNum, cdrArquivo),
+    queryFn: () =>
+      fetchPapelariaOsCdrCampos(anoNum, nroNum, { arquivo: cdrArquivo }),
+    enabled: contextReady,
+    staleTime: 30_000,
+    retry: 1,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) =>
+      cdrCamposEmLeitura(query.state.data)
+        ? papelariaWsConnected
+          ? 15_000
+          : 3_000
+        : false,
+  });
+  const cdrCampos = cdrCamposQuery.data;
 
   const proofFilesQuery = useEmailProofFiles(
     Number.isFinite(anoNum) ? anoNum : null,
@@ -493,6 +530,35 @@ export function PapelariaCorelPanel({
     },
     onError: (err: Error) => {
       setFormError(err.message || "Erro ao solicitar exportação de prova.");
+    },
+  });
+
+  const aplicarCdrMutation = useMutation({
+    mutationFn: aplicarPapelariaOsCdrCampos,
+    onSuccess: (job) => {
+      cdrAppliedSnapshotRef.current = cdrCampos?.extraido_em ?? "";
+      if (!job?.id) {
+        setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
+        return;
+      }
+      setActiveJobId(job.id);
+      setCorelEditMode(false);
+      setFormError(null);
+      setProvaReviewMessage(null);
+      setViewMode("prova");
+      setMobilePanel("preview");
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
+      });
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Erro ao aplicar alterações no Corel.");
+      void queryClient.invalidateQueries({
+        queryKey: ["papelaria", "cdrCampos", anoNum, nroNum],
+      });
     },
   });
 
@@ -773,7 +839,114 @@ export function PapelariaCorelPanel({
     });
   }, [modelDetailQuery.data]);
 
+  // --- Campos do .cdr da OS ------------------------------------------------
+
+  const cdrTemArquivo = isCdrDisponivel(cdrCampos);
+  const fonteEfetiva: FonteCampos =
+    fonteCampos ?? (cdrTemArquivo ? "cdr" : "modelo");
+
+  /** Depois de aplicar, o rascunho some quando o retrato novo chega. */
+  useEffect(() => {
+    const applied = cdrAppliedSnapshotRef.current;
+    if (applied === null || !cdrCampos) return;
+    if ((cdrCampos.extraido_em ?? "") !== applied && cdrCampos.atualizado) {
+      cdrAppliedSnapshotRef.current = null;
+      setCdrTextos({});
+      setCdrSemNome({});
+    }
+  }, [cdrCampos]);
+
+  /** Alteração do cliente no portal com textos do Corel (`cdr:`). */
+  useEffect(() => {
+    const alt = contextQuery.data?.cliente_alteracao;
+    const camposCdr = pickCdrCampos(alt?.campos);
+    if (Object.keys(camposCdr).length === 0) return;
+    const ident = clienteAlteracaoIdentity(alt) ?? JSON.stringify(camposCdr);
+    if (cdrClienteAppliedRef.current === ident) return;
+    cdrClienteAppliedRef.current = ident;
+    setCdrTextos((prev) => ({ ...prev, ...camposCdr }));
+    setFonteCampos("cdr");
+  }, [contextQuery.data?.cliente_alteracao]);
+
+  const handleCdrTextoChange = useCallback((key: string, value: string) => {
+    setCdrTextos((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+  }, []);
+
+  const handleCdrTextoReset = useCallback((key: string) => {
+    setCdrTextos((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const handleCdrSemNomeChange = useCallback(
+    (key: string, patch: CdrSemNomeDraft) => {
+      setCdrSemNome((prev) => {
+        const merged = { ...prev[key], ...patch };
+        if (merged.texto === undefined && !merged.nome) {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return { ...prev, [key]: merged };
+      });
+    },
+    [],
+  );
+
+  const handleCdrArquivoChange = useCallback((rel: string) => {
+    setCdrArquivo(rel);
+    setCdrTextos({});
+    setCdrSemNome({});
+  }, []);
+
+  const handleCdrRefresh = useCallback(async () => {
+    if (!hasOs) return;
+    setCdrRefreshPending(true);
+    try {
+      const data = await fetchPapelariaOsCdrCampos(anoNum, nroNum, {
+        arquivo: cdrArquivo,
+        refresh: true,
+      });
+      queryClient.setQueryData(
+        queryKeys.papelaria.cdrCampos(anoNum, nroNum, cdrArquivo),
+        data,
+      );
+    } catch (e) {
+      setFormError(
+        e instanceof Error ? e.message : "Não foi possível pedir nova leitura do Corel.",
+      );
+    } finally {
+      setCdrRefreshPending(false);
+    }
+  }, [anoNum, nroNum, cdrArquivo, hasOs, queryClient]);
+
+  const handleCdrDescartar = useCallback(() => {
+    setCdrTextos({});
+    setCdrSemNome({});
+    cdrAppliedSnapshotRef.current = null;
+  }, []);
+
+  const cdrAlteracoes = useMemo(
+    () => computeCdrAlteracoes(cdrCampos, cdrTextos, cdrSemNome),
+    [cdrCampos, cdrTextos, cdrSemNome],
+  );
+
+  const handleFieldChange = useCallback((key: string, value: string) => {
+    setFieldValues((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+  }, []);
+
+  const handleToggleExclude = useCallback((key: string) => {
+    setExcludedFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  }, []);
+
   const handleSelectModel = (model: PapelariaCorelModelSummary) => {
+    setModelPickerOpen(false);
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
     setExcludedFields([]);
@@ -801,10 +974,13 @@ export function PapelariaCorelPanel({
     return Object.fromEntries(items.map((item) => [item.key, item]));
   }, [clienteAlteracaoPendente?.campos_alterados]);
 
+  /** Prévia/mockup recalculam em segundo plano — digitação nunca trava. */
+  const deferredFieldValues = useDeferredValue(fieldValues);
+
   const previa = useMemo(() => {
     if (!modelDetailQuery.data?.campos) return null;
-    return buildPreviaTextual(modelDetailQuery.data.campos, fieldValues);
-  }, [modelDetailQuery.data?.campos, fieldValues]);
+    return buildPreviaTextual(modelDetailQuery.data.campos, deferredFieldValues);
+  }, [modelDetailQuery.data?.campos, deferredFieldValues]);
 
   const validateFormForAction = (): boolean => {
     if (!selectedModelId) return false;
@@ -821,9 +997,7 @@ export function PapelariaCorelPanel({
     return true;
   };
 
-  const ensureOsFolderThen = async (
-    action: "gerar" | "digital" | "corel" | "export",
-  ) => {
+  const ensureOsFolderThen = async (action: AndamentoAction) => {
     setFolderCheckPending(true);
     setFormError(null);
     try {
@@ -895,6 +1069,36 @@ export function PapelariaCorelPanel({
     setCorelEditMode(false);
   };
 
+  const runAplicarCdr = (lancarAndamento: boolean) => {
+    if (!selectedModelId) return;
+    aplicarCdrMutation.mutate({
+      ano: anoNum,
+      nro: nroNum,
+      modelo_id: selectedModelId,
+      arquivo_cdr: cdrCampos?.arquivo?.relative_path ?? cdrArquivo ?? undefined,
+      textos: cdrAlteracoes.textos,
+      sem_nome: cdrAlteracoes.semNome,
+      lancar_andamento: lancarAndamento,
+    });
+  };
+
+  const handleAplicarCdr = () => {
+    if (!selectedModelId) {
+      setFormError("Selecione o modelo da OS antes de aplicar as alterações.");
+      setModelPickerOpen(true);
+      return;
+    }
+    if (cdrAlteracoes.count === 0) return;
+    if (cdrCampos && !cdrCampos.atualizado) {
+      setFormError(
+        "O arquivo Corel está sendo relido. Aguarde a sincronização para aplicar.",
+      );
+      return;
+    }
+    setFormError(null);
+    void ensureOsFolderThen("aplicar_cdr");
+  };
+
   const runAbrirCorel = (lancarAndamento: boolean) => {
     abrirCorelMutation.mutate(lancarAndamento);
   };
@@ -910,6 +1114,8 @@ export function PapelariaCorelPanel({
       runAbrirCorel(lancarAndamento);
     } else if (action === "export") {
       runExportCdrExistente(lancarAndamento);
+    } else if (action === "aplicar_cdr") {
+      runAplicarCdr(lancarAndamento);
     }
   };
 
@@ -941,7 +1147,7 @@ export function PapelariaCorelPanel({
       setFormError("Selecione um modelo antes de gerar a prova.");
       return;
     }
-    const files = usableCdrFiles(cdrPathQuery.data);
+    const files = usableCdrFiles(cdrCampos);
     if (files.length === 0) {
       setFormError("Nenhum arquivo Corel utilizável encontrado na pasta desta OS.");
       return;
@@ -1163,6 +1369,7 @@ export function PapelariaCorelPanel({
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
+    aplicarCdrMutation.isPending ||
     imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending;
   const jobPipelineBusy = Boolean(
@@ -1321,39 +1528,67 @@ export function PapelariaCorelPanel({
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
+    aplicarCdrMutation.isPending ||
     imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending ||
     (!!activeJob &&
       (activeJob.status === "pending" ||
         activeJob.status === "processing")) ||
     !!listInFlightJob;
-  const cdrFiles = usableCdrFiles(cdrPathQuery.data);
+  const cdrFiles = usableCdrFiles(cdrCampos);
+
+  const selectedModelResumo =
+    modelos.find((m) => m.id === selectedModelId) ??
+    (modelDetailQuery.data && modelDetailQuery.data.id === selectedModelId
+      ? modelDetailQuery.data
+      : null);
 
   const mobilePanelClass = (panel: "form" | "preview") =>
     cn(
       mobilePanel !== panel && "max-md:hidden",
       panel === "preview"
         ? "flex min-h-[min(50vh,480px)] min-w-0 flex-1 flex-col md:min-h-0"
-        : "flex min-h-[min(50vh,480px)] w-full flex-col md:min-h-0 md:w-[288px] md:shrink-0",
+        : "flex min-h-[min(50vh,480px)] w-full flex-col md:min-h-0 md:w-[320px] md:shrink-0 xl:w-[360px]",
       "max-md:overflow-visible md:overflow-hidden",
     );
 
   return (
     <div className="flex min-h-min flex-1 flex-col gap-3 md:min-h-0 md:overflow-hidden">
-      <section className="shrink-0 rounded-lg border border-sagra-border bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-          <span className="font-bold text-secondary-blue">
+      <section className="shrink-0 rounded-lg border border-sagra-border bg-white px-3 py-2.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="rounded-md bg-secondary-blue px-2 py-0.5 text-xs font-bold tabular-nums text-white">
             OS {ctx.os.nro}/{ctx.os.ano}
           </span>
-          {ctx.os.produto && (
-            <span>
-              Produto: <strong>{ctx.os.produto}</strong>
+          {ctx.os.produto ? (
+            <span className="text-sm font-semibold text-neutral-800">{ctx.os.produto}</span>
+          ) : null}
+          {ctx.os.titulo ? (
+            <span
+              className="min-w-0 max-w-full truncate text-xs text-neutral-500"
+              title={ctx.os.titulo}
+            >
+              {ctx.os.titulo}
             </span>
-          )}
-          {ctx.os.titulo && <span>Título: {ctx.os.titulo}</span>}
-          {ctx.os.solicitante && <span>Solicitante: {ctx.os.solicitante}</span>}
-          {ctx.os.cores && <span>Cores: {ctx.os.cores}</span>}
-          {ctx.os.frente_verso && <span>F/V: {ctx.os.frente_verso}</span>}
+          ) : null}
+          <div className="flex flex-wrap gap-1 md:ml-auto">
+            {(
+              [
+                ["Solicitante", ctx.os.solicitante],
+                ["Cores", ctx.os.cores],
+                ["F/V", ctx.os.frente_verso],
+              ] as const
+            )
+              .filter(([, v]) => Boolean(v))
+              .map(([rotulo, valor]) => (
+                <span
+                  key={rotulo}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-neutral-600"
+                  title={`${rotulo}: ${valor}`}
+                >
+                  <span className="font-semibold text-neutral-500">{rotulo}:</span> {valor}
+                </span>
+              ))}
+          </div>
         </div>
         {ctx.warnings.length > 0 && (
           <ul className="mt-2 space-y-1 text-[11px] text-amber-700">
@@ -1421,117 +1656,221 @@ export function PapelariaCorelPanel({
         <section
           className={cn(
             mobilePanelClass("form"),
-            "max-md:order-1 rounded-lg border border-sagra-border bg-white shadow-sm",
+            "max-md:order-1 overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
           )}
         >
-          <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
-            <h2 className="text-xs font-bold text-secondary-blue">
-              Modelos compatíveis
-            </h2>
-            <p className="text-[10px] text-neutral-500">
-              {modelos.length === 0
-                ? "Nenhum modelo para este produto"
-                : `${modelos.length} opção(ões)`}
-            </p>
+          <div className="flex items-center justify-between gap-2 border-b border-sagra-border bg-slate-50/80 px-3 py-2">
+            <h2 className="text-xs font-bold text-secondary-blue">Campos</h2>
+            {cdrTemArquivo ? (
+              <div
+                className="flex rounded-md border border-sagra-border bg-white p-0.5"
+                role="tablist"
+                aria-label="Fonte dos campos"
+              >
+                {(
+                  [
+                    ["cdr", "Arquivo Corel", FileCode2],
+                    ["modelo", "Modelo", LayoutTemplate],
+                  ] as const
+                ).map(([id, rotulo, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={fonteEfetiva === id}
+                    onClick={() => setFonteCampos(id)}
+                    className={cn(
+                      "flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                      fonteEfetiva === id
+                        ? "bg-secondary-blue text-white shadow-sm"
+                        : "text-neutral-600 hover:bg-slate-100",
+                    )}
+                  >
+                    <Icon className="size-3" aria-hidden />
+                    {rotulo}
+                    {id === "cdr" && cdrAlteracoes.count > 0 ? (
+                      <span className="rounded-full bg-white/25 px-1 tabular-nums">
+                        {cdrAlteracoes.count}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[10px] text-neutral-500">
+                {cdrCamposQuery.isLoading ? "Verificando Corel…" : "Sem Corel na OS"}
+              </span>
+            )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-            <div className="min-h-0 shrink-0 space-y-2 overflow-y-auto">
-              {modelos.length === 0 ? (
-                <p className="p-4 text-center text-xs text-neutral-500">
-                  Importe a planilha de modelos ou verifique o produto da OS.
-                </p>
-              ) : (
-                modelos.map((m) => (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-2">
+            <div>
+              <div className="mb-1 flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                  Modelo
+                </span>
+                {selectedModelResumo && modelos.length > 1 ? (
                   <button
-                    key={m.id}
                     type="button"
-                    className={cn(
-                      "w-full rounded-lg border p-3 text-left text-xs transition-colors",
-                      selectedModelId === m.id
-                        ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
-                        : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
-                    )}
-                    onClick={() => handleSelectModel(m)}
+                    onClick={() => setModelPickerOpen((v) => !v)}
+                    className="flex items-center gap-0.5 text-[10px] font-semibold text-secondary-blue hover:underline"
+                    aria-expanded={modelPickerOpen}
                   >
-                    <p className="font-semibold text-secondary-blue">
-                      {m.nome_exibicao}
-                    </p>
-                    <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
-                    <p className="text-neutral-500">{m.cores}</p>
-                    <p className="mt-1 font-mono text-[10px] text-neutral-400">
-                      {m.arquivo_modelo}
-                    </p>
+                    {modelPickerOpen ? "Fechar" : "Trocar"}
+                    <ChevronDown
+                      className={cn("size-3 transition-transform", modelPickerOpen && "rotate-180")}
+                      aria-hidden
+                    />
                   </button>
-                ))
-              )}
-
-              {selectedModelId !== null ? (
-                <div className="border-t border-neutral-200 pt-2">
-                  <h3 className="mb-2 text-xs font-bold text-neutral-700">
-                    Campos do formulário
-                  </h3>
-                  <DynamicFields
-                    fields={modelDetailQuery.data?.campos_formulario}
-                    isLoading={modelDetailQuery.isLoading}
-                    values={fieldValues}
-                    camposAlterados={camposAlteradosByKey}
-                    onChange={(key, value) =>
-                      setFieldValues((prev) => ({ ...prev, [key]: value }))
-                    }
-                    excludedFields={excludedFields}
-                    onToggleExclude={(key) =>
-                      setExcludedFields((prev) =>
-                        prev.includes(key)
-                          ? prev.filter((k) => k !== key)
-                          : [...prev, key],
-                      )
-                    }
-                  />
-                  {formError ? (
-                    <p className="mt-2 text-[11px] text-sagra-danger">{formError}</p>
-                  ) : null}
-                  {clienteAlteracaoPendente?.observacao ? (
-                    <div className="mt-3">
-                      <label className="mb-0.5 block text-[11px] font-medium text-amber-800">
-                        Observações do cliente (alteração solicitada
-                        {clienteAlteracaoPendente.versao
-                          ? ` — prova v${clienteAlteracaoPendente.versao}`
-                          : ""}
-                        )
-                      </label>
-                      <textarea
-                        readOnly
-                        disabled
-                        rows={3}
-                        value={clienteAlteracaoPendente.observacao}
-                        className="w-full resize-none rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950"
-                      />
-                    </div>
-                  ) : null}
-                  {corelEditMode ? (
-                    <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">
-                      Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
-                      use Finalizar na barra de ações para montar a visualização e aprovar.
-                    </p>
-                  ) : null}
+                ) : null}
+              </div>
+              {modelos.length === 0 ? (
+                <p className="rounded-md border border-dashed border-sagra-border p-3 text-center text-xs text-neutral-500">
+                  Nenhum modelo para este produto. Importe a planilha de modelos ou verifique o
+                  produto da OS.
+                </p>
+              ) : selectedModelResumo && !modelPickerOpen ? (
+                <div className="rounded-md border border-secondary-blue/30 bg-secondary-blue/5 px-2.5 py-1.5 text-xs">
+                  <p className="truncate font-semibold text-secondary-blue" title={selectedModelResumo.nome_exibicao}>
+                    {selectedModelResumo.nome_exibicao}
+                  </p>
+                  <p className="truncate text-[10px] text-neutral-500">
+                    {[selectedModelResumo.frente_versao, selectedModelResumo.cores]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 </div>
-              ) : null}
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {modelos.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={cn(
+                        "w-full rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors",
+                        selectedModelId === m.id
+                          ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
+                          : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
+                      )}
+                      onClick={() => handleSelectModel(m)}
+                    >
+                      <p className="font-semibold text-secondary-blue">{m.nome_exibicao}</p>
+                      <p className="text-[10px] text-neutral-500">
+                        {[m.frente_versao, m.cores].filter(Boolean).join(" · ")}
+                      </p>
+                      <p className="mt-0.5 truncate font-mono text-[9px] text-neutral-400">
+                        {m.arquivo_modelo}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {selectedModelId !== null ? (
-              <div className="mt-2 flex min-h-[7rem] min-w-0 flex-1 flex-col">
-                <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
-                  Observações
+            {fonteEfetiva === "cdr" ? (
+              <PapelariaCdrFieldsPanel
+                data={cdrCampos}
+                isLoading={cdrCamposQuery.isLoading}
+                textos={cdrTextos}
+                semNome={cdrSemNome}
+                clienteAlterados={camposAlteradosByKey}
+                alteracoesCount={cdrAlteracoes.count}
+                arquivoSelecionado={cdrArquivo}
+                refreshPending={cdrRefreshPending}
+                aplicarPending={aplicarCdrMutation.isPending}
+                aplicarDisabled={
+                  !selectedModelId || isJobGenerating || folderCheckPending
+                }
+                onTextoChange={handleCdrTextoChange}
+                onTextoReset={handleCdrTextoReset}
+                onSemNomeChange={handleCdrSemNomeChange}
+                onArquivoChange={handleCdrArquivoChange}
+                onRefresh={() => void handleCdrRefresh()}
+                onDescartar={handleCdrDescartar}
+                onAplicar={handleAplicarCdr}
+              />
+            ) : selectedModelId === null ? (
+              <p className="py-4 text-center text-xs text-neutral-500">
+                Selecione um modelo para preencher os campos.
+              </p>
+            ) : modelDetailQuery.isLoading ? (
+              <p className="flex items-center gap-2 py-4 text-xs text-neutral-500">
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+                Carregando campos…
+              </p>
+            ) : (
+              <section aria-label="Campos do modelo" className="flex flex-col gap-0.5">
+                <h3 className="px-1 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                  Campos do modelo · {modelDetailQuery.data?.campos_formulario?.length ?? 0}
+                </h3>
+                {cdrTemArquivo ? (
+                  <p className="mx-1 mb-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-900">
+                    Criar prova pelo modelo gera um novo Corel (BaseSefoc) a partir do
+                    modelo, com os dados do deputado/OS.
+                  </p>
+                ) : null}
+                {(modelDetailQuery.data?.campos_formulario ?? []).length === 0 ? (
+                  <p className="py-3 text-center text-xs text-neutral-500">
+                    Sem campos para este modelo.
+                  </p>
+                ) : (
+                  (modelDetailQuery.data?.campos_formulario ?? []).map((field) => (
+                    <PapelariaFieldRow
+                      key={field.key}
+                      fieldKey={field.key}
+                      label={field.label}
+                      value={fieldValues[field.key] ?? ""}
+                      multiline={field.type === "textarea"}
+                      rows={field.rows}
+                      required={field.required}
+                      inputType={field.type === "email" ? "email" : "text"}
+                      placeholder={field.placeholder}
+                      excluded={excludedFields.includes(field.key)}
+                      alteracaoCliente={camposAlteradosByKey[field.key] ?? null}
+                      onChange={handleFieldChange}
+                      onToggleExclude={handleToggleExclude}
+                    />
+                  ))
+                )}
+              </section>
+            )}
+
+            {formError ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-sagra-danger" role="alert">
+                {formError}
+              </p>
+            ) : null}
+
+            {clienteAlteracaoPendente?.observacao ? (
+              <div>
+                <label className="mb-0.5 block px-1 text-[11px] font-semibold text-amber-800">
+                  Observações do cliente
+                  {clienteAlteracaoPendente.versao
+                    ? ` — prova v${clienteAlteracaoPendente.versao}`
+                    : ""}
                 </label>
-                <textarea
-                  readOnly
-                  disabled
-                  value={contextQuery.data?.os.observ ?? ""}
-                  className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
-                  placeholder="Sem observações na OS"
-                />
+                <p className="whitespace-pre-wrap rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950">
+                  {clienteAlteracaoPendente.observacao}
+                </p>
               </div>
+            ) : null}
+
+            {corelEditMode ? (
+              <p className="rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-relaxed text-neutral-600">
+                Após editar no CorelDRAW e salvar, use Finalizar na barra de ações para montar
+                a visualização e aprovar. Os campos do arquivo são relidos automaticamente.
+              </p>
+            ) : null}
+
+            {contextQuery.data?.os.observ ? (
+              <details className="group rounded-md border border-sagra-border bg-slate-50/70 px-2 py-1.5 text-xs">
+                <summary className="cursor-pointer select-none text-[11px] font-semibold text-neutral-700">
+                  Observações da OS
+                </summary>
+                <p className="mt-1 whitespace-pre-wrap text-neutral-800">
+                  {contextQuery.data.os.observ}
+                </p>
+              </details>
             ) : null}
           </div>
         </section>
@@ -1589,7 +1928,7 @@ export function PapelariaCorelPanel({
             arquivoModelo={arquivoModeloAtivo}
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
             previewConfigJson={modelDetailQuery.data?.preview_config_json}
-            livePreviewValues={fieldValues}
+            livePreviewValues={deferredFieldValues}
             previa={previa}
             selectedModelId={selectedModelId}
             modelLoading={modelDetailQuery.isLoading}
@@ -1609,9 +1948,7 @@ export function PapelariaCorelPanel({
             provaModo={contextQuery.data?.prova_modo}
             activeDynamicFields={activeDynamicFields}
             onActiveDynamicFieldsChange={setActiveDynamicFields}
-            onLivePreviewValueChange={(key, value) =>
-              setFieldValues((prev) => ({ ...prev, [key]: value }))
-            }
+            onLivePreviewValueChange={handleFieldChange}
           />
         </div>
       </div>
@@ -1689,6 +2026,7 @@ export function PapelariaCorelPanel({
                   createJobMutation.isPending ||
                   createDigitalJobMutation.isPending ||
                   exportCdrMutation.isPending ||
+                  aplicarCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }
                 className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
@@ -1702,6 +2040,7 @@ export function PapelariaCorelPanel({
                   createJobMutation.isPending ||
                   createDigitalJobMutation.isPending ||
                   exportCdrMutation.isPending ||
+                  aplicarCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }
                 className="sagra-btn sagra-btn--secondary sagra-btn--md"
@@ -1735,7 +2074,7 @@ export function PapelariaCorelPanel({
           const action = folderGateAction;
           setFolderGateAction(null);
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
+            queryKey: ["papelaria", "cdrCampos", anoNum, nroNum],
           });
           if (action === "imposicao") {
             void openImposicaoModal();
@@ -1764,133 +2103,6 @@ export function PapelariaCorelPanel({
         }}
         onConfirm={(payload) => runImposicao(payload)}
       />
-    </div>
-  );
-}
-
-function formatCampoAlteracaoValor(value: string): string {
-  return value.trim() || "—";
-}
-
-function DynamicFields({
-  fields,
-  isLoading,
-  values,
-  camposAlterados,
-  onChange,
-  excludedFields = [],
-  onToggleExclude,
-}: {
-  fields: PapelariaField[] | undefined;
-  isLoading: boolean;
-  values: Record<string, string>;
-  camposAlterados?: Record<string, { antes: string; depois: string }>;
-  onChange: (key: string, value: string) => void;
-  excludedFields?: string[];
-  onToggleExclude?: (key: string) => void;
-}) {
-  if (isLoading) {
-    return (
-      <p className="flex items-center gap-2 py-4 text-xs text-neutral-500">
-        <Loader2 className="size-3 animate-spin" aria-hidden />
-        Carregando campos...
-      </p>
-    );
-  }
-  if (!fields?.length) {
-    return (
-      <p className="py-4 text-center text-xs text-neutral-500">
-        Sem campos obrigatórios para este modelo.
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {fields.map((field) => {
-        const isExcluded = excludedFields.includes(field.key);
-        const alteracao = camposAlterados?.[field.key];
-        const inputClassName = cn(
-          "w-full rounded border px-2 py-1 text-xs transition-colors",
-          alteracao
-            ? "border-amber-400 bg-amber-50/60 ring-1 ring-amber-200"
-            : "border-sagra-border",
-          isExcluded && "bg-neutral-100 text-neutral-400 border-neutral-200 line-through",
-        );
-
-        return (
-          <div
-            key={field.key}
-            className={cn(
-              "rounded-md border border-transparent p-1 transition-colors",
-              alteracao && "border-amber-200 bg-amber-50/40 p-2",
-              isExcluded && "bg-neutral-50/70 opacity-70",
-            )}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <label
-                className={cn(
-                  "block text-[11px] font-medium text-neutral-700 transition-all",
-                  isExcluded && "text-neutral-400 line-through",
-                )}
-              >
-                {field.label}
-                {field.required && !isExcluded ? " *" : ""}
-                {alteracao ? (
-                  <span className="ml-1.5 font-semibold text-amber-800">
-                    (alterado pelo cliente)
-                  </span>
-                ) : null}
-              </label>
-              {onToggleExclude && (
-                <button
-                  type="button"
-                  onClick={() => onToggleExclude(field.key)}
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[9px] font-semibold transition-colors border",
-                    isExcluded
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : "border-neutral-200 bg-white text-neutral-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200",
-                  )}
-                  title={
-                    isExcluded
-                      ? "Restaurar campo no modelo"
-                      : "Excluir campo do modelo"
-                  }
-                >
-                  {isExcluded ? "Restaurar" : "Excluir"}
-                </button>
-              )}
-            </div>
-            {field.type === "textarea" ? (
-              <textarea
-                className={inputClassName}
-                rows={field.rows ?? 2}
-                value={values[field.key] ?? ""}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={isExcluded}
-              />
-            ) : (
-              <input
-                type={field.type === "email" ? "email" : "text"}
-                className={inputClassName}
-                value={values[field.key] ?? ""}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={isExcluded}
-              />
-            )}
-            {alteracao && !isExcluded ? (
-              <p className="mt-1 text-[10px] leading-relaxed text-amber-900/90">
-                <span className="font-medium">Anterior:</span>{" "}
-                {formatCampoAlteracaoValor(alteracao.antes)}
-                <span className="mx-1 text-amber-700">→</span>
-                <span className="font-medium">Novo:</span>{" "}
-                {formatCampoAlteracaoValor(alteracao.depois)}
-              </p>
-            ) : null}
-          </div>
-        );
-      })}
     </div>
   );
 }

@@ -162,6 +162,8 @@ export const queryKeys = {
       ["papelaria", "contexto", ano, nro] as const,
     cdrPath: (ano: number, nro: number) =>
       ["papelaria", "cdrPath", ano, nro] as const,
+    cdrCampos: (ano: number, nro: number, arquivo: string | null) =>
+      ["papelaria", "cdrCampos", ano, nro, arquivo ?? ""] as const,
     corelModelo: (id: number) => ["papelaria", "corelModelo", id] as const,
     jobsOs: (ano: number, nro: number) =>
       ["papelaria", "jobs", ano, nro] as const,

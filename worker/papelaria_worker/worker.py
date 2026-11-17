@@ -339,6 +339,17 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
                 pass
 
 
+def _prova_source_pdf(result, base_pdf: str) -> str:
+    """
+    PDF de origem da prova do cliente: o completo (com contornos de referência)
+    quando o PDF Base do JDF saiu sem eles; senão o próprio PDF Base.
+    """
+    prova_pdf = str(getattr(result, "prova_pdf_path", "") or "").strip()
+    if prova_pdf and os.path.isfile(prova_pdf):
+        return prova_pdf
+    return base_pdf
+
+
 def process_job(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dict) -> None:
     global _processing_job
     _processing_job = True
@@ -558,7 +569,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                         "info",
                     )
                 a4_logs = compose_prova_email_a4(
-                    base_pdf_path=output_pdf,
+                    base_pdf_path=_prova_source_pdf(result, output_pdf),
                     output_pdf_path=prova_path,
                     carimbo=carimbo,
                     template_pdf_path=template_pdf or None,
@@ -580,7 +591,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     prova_web_path = os.path.join(output_dir, prova_web_name)
                     try:
                         archive = copy_pdf_without_blank_pages(
-                            output_pdf,
+                            _prova_source_pdf(result, output_pdf),
                             prova_web_path,
                         )
                         kept = summarize_kept_pages(
@@ -596,7 +607,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     except Exception as archive_exc:
                         if os.path.isfile(prova_web_path):
                             os.remove(prova_web_path)
-                        shutil.copy2(output_pdf, prova_web_path)
+                        shutil.copy2(
+                            _prova_source_pdf(result, output_pdf), prova_web_path
+                        )
                         msg = (
                             f"Prova web arquivada (cópia integral — falha ao "
                             f"filtrar brancos: {archive_exc}): {prova_web_name}"
@@ -825,7 +838,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                         "info",
                     )
                 a4_logs = compose_prova_email_a4(
-                    base_pdf_path=output_pdf,
+                    base_pdf_path=_prova_source_pdf(result, output_pdf),
                     output_pdf_path=prova_path,
                     carimbo=carimbo,
                     template_pdf_path=template_pdf or None,
@@ -849,7 +862,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     prova_web_path = os.path.join(output_dir, prova_web_name)
                     try:
                         archive = copy_pdf_without_blank_pages(
-                            output_pdf,
+                            _prova_source_pdf(result, output_pdf),
                             prova_web_path,
                         )
                         kept = summarize_kept_pages(
@@ -865,7 +878,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     except Exception as archive_exc:
                         if os.path.isfile(prova_web_path):
                             os.remove(prova_web_path)
-                        shutil.copy2(output_pdf, prova_web_path)
+                        shutil.copy2(
+                            _prova_source_pdf(result, output_pdf), prova_web_path
+                        )
                         msg = (
                             f"Prova web arquivada (cópia integral — falha ao "
                             f"filtrar brancos: {archive_exc}): {prova_web_name}"

@@ -227,6 +227,9 @@ class GenerationResult:
     cdr_path: str
     pdf_path: str
     logs: list[str]
+    # PDF completo (com contornos de referência) para montar a prova do cliente
+    # quando o PDF Base (JDF) saiu sem eles. None = o PDF Base serve à prova.
+    prova_pdf_path: Optional[str] = None
 
 
 def limpar_nome_arquivo(texto: str) -> str:
@@ -2186,6 +2189,180 @@ def _ocultar_shapes_brasao(doc: Any, logs: list[str]) -> int:
     return ocultos
 
 
+# --- Contornos de referência fora do PDF Base (JDF) ---
+#
+# Objetos só com contorno nesta cor (sem preenchimento) são guias visuais da
+# arte (ex.: limite do cartão). Aparecem na prova do cliente, mas não podem ir
+# para o PDF Base enviado no JDF / impressão.
+CONTORNO_EXCLUIR_PDF_BASE_CMYK: tuple[int, int, int, int] = (38, 99, 73, 2)
+_CDR_NO_FILL = 0  # cdrNoFill
+_CDR_NO_OUTLINE = 0  # cdrNoOutline
+_CDR_COLOR_CMYK = 2  # cdrColorCMYK
+_CDR_GROUP_SHAPE = 7  # cdrGroupShape
+_CMYK_TOLERANCIA = 0.5
+
+
+def _cmyk_da_cor(cor: Any) -> Optional[tuple[float, float, float, float]]:
+    """Componentes CMYK da cor; converte uma cópia se a cor não for CMYK."""
+    if cor is None:
+        return None
+    alvo = cor
+    try:
+        tipo = int(cor.Type)
+    except Exception:
+        tipo = -1
+    if tipo != _CDR_COLOR_CMYK:
+        try:
+            alvo = cor.GetCopy()
+            alvo.ConvertToCMYK()
+        except Exception:
+            return None
+    try:
+        return (
+            float(alvo.CMYKCyan),
+            float(alvo.CMYKMagenta),
+            float(alvo.CMYKYellow),
+            float(alvo.CMYKBlack),
+        )
+    except Exception:
+        return None
+
+
+def shape_e_contorno_referencia(
+    shape: Any,
+    cmyk: tuple[int, int, int, int] = CONTORNO_EXCLUIR_PDF_BASE_CMYK,
+) -> bool:
+    """True se o shape não tem preenchimento e tem contorno exatamente em ``cmyk``."""
+    try:
+        if int(shape.Type) == _CDR_GROUP_SHAPE:
+            return False
+    except Exception:
+        pass
+    try:
+        if int(shape.Fill.Type) != _CDR_NO_FILL:
+            return False
+    except Exception:
+        return False
+    try:
+        outline = shape.Outline
+        if int(outline.Type) == _CDR_NO_OUTLINE:
+            return False
+        try:
+            if float(outline.Width) <= 0:
+                return False
+        except Exception:
+            pass
+        componentes = _cmyk_da_cor(outline.Color)
+    except Exception:
+        return False
+    if componentes is None:
+        return False
+    return all(abs(a - b) <= _CMYK_TOLERANCIA for a, b in zip(componentes, cmyk))
+
+
+def _coletar_contornos_referencia(shapes: Any, out: list[Any]) -> None:
+    try:
+        total = int(shapes.Count)
+    except Exception:
+        return
+    for i in range(1, total + 1):
+        try:
+            shape = shapes.Item(i)
+        except Exception:
+            continue
+        if shape_e_contorno_referencia(shape):
+            out.append(shape)
+            continue
+        try:
+            if shape.Shapes.Count > 0:
+                _coletar_contornos_referencia(shape.Shapes, out)
+        except Exception:
+            pass
+        try:
+            pc = shape.PowerClip
+            if pc is not None and pc.Shapes.Count > 0:
+                _coletar_contornos_referencia(pc.Shapes, out)
+        except Exception:
+            pass
+
+
+def encontrar_contornos_referencia(doc: Any) -> list[Any]:
+    """Todos os shapes só-contorno na cor de referência, em todas as páginas."""
+    out: list[Any] = []
+    try:
+        total_paginas = int(doc.Pages.Count)
+    except Exception:
+        return out
+    for p in range(1, total_paginas + 1):
+        try:
+            page = doc.Pages.Item(p)
+            total_camadas = int(page.Layers.Count)
+        except Exception:
+            continue
+        for l in range(1, total_camadas + 1):
+            try:
+                _coletar_contornos_referencia(page.Layers.Item(l).Shapes, out)
+            except Exception:
+                continue
+    return out
+
+
+def ocultar_contornos_referencia(doc: Any, logs: list[str]) -> list[Any]:
+    """Oculta os contornos de referência; retorna os shapes ocultados."""
+    ocultos: list[Any] = []
+    removidos = 0
+    for shape in encontrar_contornos_referencia(doc):
+        try:
+            shape.Visible = False
+            ocultos.append(shape)
+        except Exception:
+            # Só chamado em cópias temporárias que não são gravadas.
+            try:
+                shape.Delete()
+                removidos += 1
+            except Exception:
+                continue
+    c, m, y, k = CONTORNO_EXCLUIR_PDF_BASE_CMYK
+    if ocultos or removidos:
+        logs.append(
+            f"PDF Base: {len(ocultos) + removidos} objeto(s) só com contorno "
+            f"CMYK({c},{m},{y},{k}) fora do PDF."
+        )
+    return ocultos
+
+
+def _reexibir_shapes(shapes: list[Any]) -> None:
+    for shape in shapes:
+        try:
+            shape.Visible = True
+        except Exception:
+            continue
+
+
+def exportar_pdf_base_e_prova(
+    corel: Any,
+    doc: Any,
+    caminho_pdf_base: str,
+    caminho_pdf_prova: str,
+    logs: list[str],
+) -> bool:
+    """
+    Exporta o PDF Base (JDF) sem os contornos de referência. Se o documento
+    tiver esses contornos, exporta antes o PDF completo em ``caminho_pdf_prova``
+    (fonte da prova do cliente) e retorna True; senão um único PDF serve aos dois.
+    """
+    if not encontrar_contornos_referencia(doc):
+        exportar_pdf(corel, doc, caminho_pdf_base, logs)
+        return False
+    exportar_pdf(corel, doc, caminho_pdf_prova, logs)
+    ocultos = ocultar_contornos_referencia(doc, logs)
+    try:
+        exportar_pdf(corel, doc, caminho_pdf_base, logs)
+    finally:
+        _reexibir_shapes(ocultos)
+    return True
+
+
 def exportar_pdf_pre_impresso(
     caminho_cdr: str,
     output_pdf_path: str,
@@ -2228,6 +2405,7 @@ def exportar_pdf_pre_impresso(
                     corel.Visible = corel_visible
                 doc = corel.OpenDocument(os.path.abspath(temp_cdr))
                 _ocultar_shapes_brasao(doc, logs)
+                ocultar_contornos_referencia(doc, logs)
                 exportar_pdf(corel, doc, output_pdf_path, logs)
                 break
             except Exception as exc:
@@ -2547,9 +2725,11 @@ def _gerar_arquivo_corel_impl(
     exclusoes: Optional[list[str]] = None,
     carimbo: Optional[dict[str, str]] = None,
     pdf_somente_primeira_pagina: bool = False,
+    result_meta: Optional[dict[str, Any]] = None,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
+    meta = result_meta if result_meta is not None else {}
 
     if not os.path.isfile(caminho_modelo):
         raise CorelGenerationError(f"Modelo não encontrado: {caminho_modelo}")
@@ -2691,7 +2871,13 @@ def _gerar_arquivo_corel_impl(
                     if pdf_somente_primeira_pagina:
                         _manter_somente_primeira_pagina(doc_pdf, logs)
                         _ajustar_pasta_avulso_para_a4(doc_pdf, logs)
-                    exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
+                    temp_prova_pdf = os.path.join(
+                        os.path.dirname(temp_cdr_path), "working_prova.pdf"
+                    )
+                    if exportar_pdf_base_e_prova(
+                        corel, doc_pdf, temp_pdf_path, temp_prova_pdf, logs
+                    ):
+                        meta["prova_pdf_path"] = temp_prova_pdf
                 finally:
                     _fechar_documento_corel(doc_pdf, logs)
                     doc_pdf = None
@@ -2784,6 +2970,7 @@ def gerar_arquivo_corel(
             dados_norm["anexo"] = "IV"
 
     models_cache_dir = os.path.join(temp_dir, "_models_cache")
+    result_meta: dict[str, Any] = {}
     validar_acesso_job(
         caminho_modelo,
         os.path.dirname(output_cdr_path) or output_cdr_path,
@@ -2808,6 +2995,7 @@ def gerar_arquivo_corel(
             exclusoes=exclusoes,
             carimbo=carimbo,
             pdf_somente_primeira_pagina=pdf_somente_primeira_pagina,
+            result_meta=result_meta,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))
@@ -2836,6 +3024,7 @@ def gerar_arquivo_corel(
         cdr_path=output_cdr_path,
         pdf_path=output_pdf_path,
         logs=logs,
+        prova_pdf_path=result_meta.get("prova_pdf_path"),
     )
 
 
@@ -2960,6 +3149,9 @@ def _exportar_prova_cdr_existente_impl(
                     meta["converted_legacy"] = False
 
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
+                temp_prova_pdf = os.path.join(
+                    os.path.dirname(temp_cdr_path), "working_prova.pdf"
+                )
 
                 if converted and output_cdr_path:
                     # Grava o novo CDR normalizado e só então exporta o PDF.
@@ -2986,12 +3178,18 @@ def _exportar_prova_cdr_existente_impl(
                             f"Documento convertido reaberto para PDF — "
                             f"{doc_pdf.Pages.Count} página(s)."
                         )
-                        exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
+                        if exportar_pdf_base_e_prova(
+                            corel, doc_pdf, temp_pdf_path, temp_prova_pdf, logs
+                        ):
+                            meta["prova_pdf_path"] = temp_prova_pdf
                     finally:
                         _fechar_documento_corel(doc_pdf, logs)
                         doc_pdf = None
                 else:
-                    exportar_pdf(corel, doc, temp_pdf_path, logs)
+                    if exportar_pdf_base_e_prova(
+                        corel, doc, temp_pdf_path, temp_prova_pdf, logs
+                    ):
+                        meta["prova_pdf_path"] = temp_prova_pdf
                     os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
 
                 _copiar_arquivo_final(
@@ -3122,6 +3320,7 @@ def exportar_prova_de_cdr_existente(
         cdr_path=cdr_path,
         pdf_path=output_pdf_path,
         logs=logs,
+        prova_pdf_path=result_meta.get("prova_pdf_path"),
     )
 
 

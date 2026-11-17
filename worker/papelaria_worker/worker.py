@@ -37,7 +37,6 @@ from corel_generator import (
     gerar_arquivo_corel,
     humanizar_erro_corel,
     inspecionar_cdr,
-    ler_objetos_texto_cdr,
     reset_corel_session,
     validar_acesso_export_cdr,
     validar_acesso_job,
@@ -340,94 +339,6 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
                 pass
 
 
-def _push_objetos_cdr(api: PapelariaWorkerApiClient, job: dict, result) -> None:
-    """Envia o retrato de textos do .cdr gravado — best effort, nunca falha o job."""
-    objetos = getattr(result, "objetos_texto", None)
-    cdr_path = getattr(result, "objetos_cdr_path", None)
-    if objetos is None or not cdr_path or not os.path.isfile(cdr_path):
-        return
-    try:
-        st = os.stat(cdr_path)
-        api.push_os_cdr_campos(
-            ano=int(job["ano"]),
-            nro=int(job["nro"]),
-            cdr_path=cdr_path,
-            objetos=objetos,
-            mtime=st.st_mtime,
-            size=st.st_size,
-        )
-        logging.info(
-            "Retrato do .cdr enviado — %s objeto(s) (%s).",
-            len(objetos),
-            os.path.basename(cdr_path),
-        )
-    except (PapelariaWorkerApiError, OSError, KeyError, ValueError) as exc:
-        logging.warning("Retrato do .cdr não enviado: %s", exc)
-
-
-def process_os_cdr_scan(api: PapelariaWorkerApiClient, cfg: WorkerConfig, scan: dict) -> None:
-    """Lê os textos do .cdr da OS (cópia temporária) e grava o retrato na API."""
-    global _processing_job
-    _processing_job = True
-    scan_id = int(scan["scan_id"])
-    cdr_path = str(scan.get("cdr_path") or "")
-    try:
-        _ativar_protecao_suspensao(cfg)
-        logging.info(
-            "Lendo campos do Corel da OS %s/%s — %s",
-            scan.get("nro"),
-            scan.get("ano"),
-            os.path.basename(cdr_path),
-        )
-        if not _esperar_corel_livre(cfg):
-            api.fail_os_cdr_scan(scan_id, "CorelDRAW indisponível para leitura.")
-            return
-        objetos, size, mtime = ler_objetos_texto_cdr(
-            cdr_path, cfg.temp_dir, corel_visible=cfg.corel_visible
-        )
-        api.complete_os_cdr_scan(scan_id, objetos=objetos, mtime=mtime, size=size)
-        logging.info("Leitura %s concluída — %s texto(s).", scan_id, len(objetos))
-    except PapelariaWorkerApiError as exc:
-        logging.error("Leitura %s — erro API: %s", scan_id, exc)
-        try:
-            api.fail_os_cdr_scan(scan_id, str(exc))
-        except PapelariaWorkerApiError:
-            pass
-    except Exception as exc:
-        msg = humanizar_erro_corel(exc)
-        logging.error("Leitura %s falhou: %s", scan_id, msg)
-        reset_corel_session()
-        try:
-            api.fail_os_cdr_scan(scan_id, msg)
-        except PapelariaWorkerApiError:
-            pass
-    finally:
-        _processing_job = False
-
-
-OS_CDR_SCAN_BATCH = 5
-
-
-def process_os_cdr_scan_batch(
-    api: PapelariaWorkerApiClient, cfg: WorkerConfig, first_scan: dict
-) -> None:
-    """Processa leituras em sequência na mesma sessão do Corel (evita reabrir o app)."""
-    scan: dict | None = first_scan
-    try:
-        for _ in range(OS_CDR_SCAN_BATCH):
-            if scan is None or _shutdown:
-                break
-            process_os_cdr_scan(api, cfg, scan)
-            if corel_em_uso_externamente():
-                break
-            try:
-                scan = api.claim_os_cdr_scan()
-            except PapelariaWorkerApiError:
-                break
-    finally:
-        reset_corel_session()
-
-
 def process_job(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dict) -> None:
     global _processing_job
     _processing_job = True
@@ -612,7 +523,6 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 corel_visible=cfg.corel_visible,
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
-                cdr_edits=job.get("cdr_edits") or None,
             )
             # Mesmo pós-processamento de create: Prova e-mail A4 ou ProvaN web.
             prova_modo = str(job.get("prova_modo") or "").strip()
@@ -1026,8 +936,6 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 logging.info("Job #%s já cancelado na API — resultado descartado.", job_id)
                 return
             raise
-        if tipo_job in (TIPO_JOB_CREATE, TIPO_JOB_EXPORT_EXISTING_CDR):
-            _push_objetos_cdr(api, job, result)
         logging.info(
             "Job #%s concluído — %s / %s (pasta: %s)",
             job_id,
@@ -1122,10 +1030,6 @@ def _run_loop_inner(api: PapelariaWorkerApiClient, cfg: WorkerConfig) -> int:
             inspect = api.claim_inspect()
             if inspect:
                 process_inspect(api, cfg, inspect)
-                continue
-            scan = api.claim_os_cdr_scan()
-            if scan:
-                process_os_cdr_scan_batch(api, cfg, scan)
                 continue
             _maybe_auto_update(cfg)
             time.sleep(max(2, cfg.poll_interval_sec))

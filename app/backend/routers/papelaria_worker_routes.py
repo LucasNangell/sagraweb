@@ -59,32 +59,6 @@ class WorkerInspectFailPayload(BaseModel):
     erro: str = Field(..., min_length=1, max_length=4000)
 
 
-class WorkerOsCdrClaimPayload(BaseModel):
-    worker_id: str = Field(..., min_length=1, max_length=64)
-
-
-class WorkerOsCdrCompletePayload(BaseModel):
-    worker_id: str = Field(..., min_length=1, max_length=64)
-    objetos: list[Dict[str, Any]] = Field(default_factory=list)
-    mtime: Optional[float] = None
-    size: Optional[int] = None
-
-
-class WorkerOsCdrFailPayload(BaseModel):
-    worker_id: str = Field(..., min_length=1, max_length=64)
-    erro: str = Field(..., min_length=1, max_length=4000)
-
-
-class WorkerOsCdrPushPayload(BaseModel):
-    worker_id: str = Field(..., min_length=1, max_length=64)
-    ano: int = Field(..., ge=2000, le=2100)
-    nro: int = Field(..., ge=1)
-    cdr_path: str = Field(..., min_length=1, max_length=1024)
-    objetos: list[Dict[str, Any]] = Field(default_factory=list)
-    mtime: Optional[float] = None
-    size: Optional[int] = None
-
-
 @router.post("/worker/heartbeat")
 def worker_heartbeat(payload: WorkerHeartbeatPayload):
     try:
@@ -260,71 +234,3 @@ def worker_fail_inspect(inspect_id: str, payload: WorkerInspectFailPayload):
     except Exception as e:
         logger.exception("Erro fail inspect %s: %s", inspect_id, e)
         raise HTTPException(500, "Erro ao registrar falha da inspeção.")
-
-
-# --- Retrato dos textos do .cdr da OS -------------------------------------
-
-
-@router.post("/worker/os-cdr-campos/claim")
-def worker_claim_os_cdr_scan(payload: WorkerOsCdrClaimPayload):
-    try:
-        from services import papelaria_os_cdr_campos_service as svc
-
-        return {"scan": svc.claim_scan_for_worker(payload.worker_id)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        logger.exception("Erro claim leitura CDR worker %s: %s", payload.worker_id, e)
-        raise HTTPException(500, "Erro ao reivindicar leitura de .cdr da OS.")
-
-
-@router.post("/worker/os-cdr-campos/{scan_id}/complete")
-def worker_complete_os_cdr_scan(scan_id: int, payload: WorkerOsCdrCompletePayload):
-    try:
-        from services import papelaria_os_cdr_campos_service as svc
-
-        return svc.complete_scan(
-            scan_id, payload.worker_id, payload.objetos, payload.mtime, payload.size
-        )
-    except LookupError:
-        raise HTTPException(404, "Leitura não encontrada.")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        logger.exception("Erro complete leitura CDR %s: %s", scan_id, e)
-        raise HTTPException(500, "Erro ao concluir leitura de .cdr da OS.")
-
-
-@router.post("/worker/os-cdr-campos/{scan_id}/fail")
-def worker_fail_os_cdr_scan(scan_id: int, payload: WorkerOsCdrFailPayload):
-    try:
-        from services import papelaria_os_cdr_campos_service as svc
-
-        return svc.fail_scan(scan_id, payload.worker_id, payload.erro)
-    except LookupError:
-        raise HTTPException(404, "Leitura não encontrada.")
-    except Exception as e:
-        logger.exception("Erro fail leitura CDR %s: %s", scan_id, e)
-        raise HTTPException(500, "Erro ao registrar falha da leitura de .cdr.")
-
-
-@router.post("/worker/os-cdr-campos/push")
-def worker_push_os_cdr_snapshot(payload: WorkerOsCdrPushPayload):
-    try:
-        from services import papelaria_os_cdr_campos_service as svc
-
-        return svc.push_snapshot_from_worker(
-            payload.ano,
-            payload.nro,
-            payload.cdr_path,
-            payload.objetos,
-            payload.mtime,
-            payload.size,
-        )
-    except LookupError as e:
-        raise HTTPException(404, str(e))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        logger.exception("Erro push retrato CDR OS %s/%s: %s", payload.nro, payload.ano, e)
-        raise HTTPException(500, "Erro ao registrar campos do .cdr da OS.")

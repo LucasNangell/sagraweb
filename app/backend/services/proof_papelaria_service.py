@@ -2,14 +2,11 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, Optional
 
 from database import db
 from services.papelaria_jobs_service import STATUS_COMPLETED, list_jobs_for_os
 from services.proof_files_service import resolve_proof_pdf_for_token_row
-
-logger = logging.getLogger(__name__)
 
 
 def _os_produto_e_cores(ano: int, os_id: int) -> tuple[str, str]:
@@ -128,19 +125,6 @@ def _os_observ(ano: int, os_id: int) -> str:
     return str(rows[0].get("observ") or "").strip()
 
 
-def cdr_campo_to_form_field(campo: dict[str, Any]) -> dict[str, Any]:
-    texto = str(campo.get("texto") or "")
-    multiline = bool(campo.get("multiline"))
-    return {
-        "key": campo["key"],
-        "label": campo.get("label") or campo.get("nome") or campo["key"],
-        "type": "textarea" if multiline else "text",
-        "rows": max(2, min(5, texto.count("\n") + 1)) if multiline else None,
-        "required": False,
-        "default": "",
-    }
-
-
 def build_portal_papelaria_edit_payload(
     proof_row: dict,
     ano: int,
@@ -161,30 +145,13 @@ def build_portal_papelaria_edit_payload(
     modelo_id = job.get("modelo_id")
     modelo = get_modelo_with_preview(int(modelo_id)) if modelo_id else None
     job_dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
-    campos_formulario = (modelo or {}).get("campos_formulario") or []
-    fonte_campos = "modelo"
-
-    # Textos nomeados do .cdr da OS (retrato no banco) substituem os campos do
-    # modelo: o cliente edita exatamente o que está no arquivo.
-    try:
-        from services.papelaria_os_cdr_campos_service import get_latest_snapshot_for_portal
-
-        snap = get_latest_snapshot_for_portal(ano, os_id)
-    except Exception as exc:
-        logger.warning("Retrato CDR indisponível para o portal (%s/%s): %s", os_id, ano, exc)
-        snap = None
-    if snap and snap.get("campos"):
-        fonte_campos = "cdr"
-        campos_formulario = [cdr_campo_to_form_field(c) for c in snap["campos"]]
-        job_dados = {**job_dados, **{c["key"]: c["texto"] for c in snap["campos"]}}
 
     return {
         "proof_id": ctx["proof_id"],
         "job_id": ctx["job_id"],
         "modelo_id": modelo_id,
         "job_dados": job_dados,
-        "fonte_campos": fonte_campos,
-        "campos_formulario": campos_formulario,
+        "campos_formulario": (modelo or {}).get("campos_formulario") or [],
         "preview_config_json": (modelo or {}).get("preview_config_json"),
         "tem_preview_config": bool((modelo or {}).get("preview_config_json")),
         "produto": ctx.get("produto") or (modelo or {}).get("produto") or "",

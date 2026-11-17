@@ -36,7 +36,6 @@ TIPO_JOB_IMPOSICAO = "imposicao"
 
 CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
-CDR_EDITS_DADOS_KEY = "__cdr_edits"
 ARTEFATOS_DADOS_KEY = "__artefatos"
 
 OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
@@ -1306,14 +1305,8 @@ def create_export_existing_cdr_job(
     dados: dict[str, Any],
     solicitado_por: str,
     arquivo_cdr: Optional[str] = None,
-    cdr_edits: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
-    """
-    Enfileira exportação de PDF a partir de um .cdr existente na pasta da OS.
-
-    ``cdr_edits`` (opcional): edições por objeto (StaticID/página) aplicadas pelo
-    worker no próprio .cdr antes da exportação — troca de texto e nomeação.
-    """
+    """Enfileira exportação de PDF a partir de um .cdr existente na pasta da OS."""
     ensure_papelaria_jobs_tables()
     from services import papelaria_models_service as models_svc
 
@@ -1325,11 +1318,7 @@ def create_export_existing_cdr_job(
     chosen = select_os_usable_cdr(ano, nro, arquivo_cdr)
 
     _sanitize_dados(dados)
-    dados_clean: dict[str, Any] = {INPUT_CDR_DADOS_KEY: chosen["relative_path"]}
-    if cdr_edits:
-        dados_clean[CDR_EDITS_DADOS_KEY] = json.dumps(cdr_edits, ensure_ascii=False)
-        if len(dados_clean[CDR_EDITS_DADOS_KEY].encode("utf-8")) > MAX_DADOS_JSON_BYTES * 4:
-            raise ValueError("Alterações do Corel excedem o limite permitido.")
+    dados_clean = {INPUT_CDR_DADOS_KEY: chosen["relative_path"]}
 
     ordem = next_queue_position()
     produto_os = (os_row.get("produto") or modelo["produto"] or "").strip()
@@ -1370,15 +1359,11 @@ def create_export_existing_cdr_job(
     if not job:
         raise RuntimeError("Falha ao recuperar job criado.")
 
-    msg_export = f"Exportação de prova a partir do Corel existente ({chosen['filename']})."
-    if cdr_edits:
-        n_txt = sum(1 for e in cdr_edits if "texto" in e)
-        n_nome = sum(1 for e in cdr_edits if "novo_nome" in e)
-        msg_export = (
-            f"Alteração do Corel da OS ({chosen['filename']}): "
-            f"{n_txt} texto(s) e {n_nome} nome(s) de objeto; em seguida, prova."
-        )
-    append_job_log(job_id, msg_export, "info")
+    append_job_log(
+        job_id,
+        f"Exportação de prova a partir do Corel existente ({chosen['filename']}).",
+        "info",
+    )
     warning = _product_match_warning(produto_os, produto_job)
     if warning:
         append_job_log(job_id, warning, "warning")
@@ -2414,20 +2399,6 @@ def build_timbrado_a4_digital_artifact_names(ano: int, nro: int) -> dict[str, st
     }
 
 
-def _cdr_edits_from_dados(dados: Any) -> list[dict[str, Any]]:
-    if not isinstance(dados, dict):
-        return []
-    raw = dados.get(CDR_EDITS_DADOS_KEY)
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except json.JSONDecodeError:
-            return []
-    if not isinstance(raw, list):
-        return []
-    return [e for e in raw if isinstance(e, dict)]
-
-
 def build_worker_job_payload(job_id: int) -> dict[str, Any]:
     job = get_job(job_id)
     if not job:
@@ -2649,7 +2620,6 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "output_pdf_name": export_pdf_name,
             "tentativas": job.get("tentativas") or 0,
             "input_cdr_path": input_cdr_path,
-            "cdr_edits": _cdr_edits_from_dados(job.get("dados")),
         }
     else:
         payload = {

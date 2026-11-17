@@ -17,14 +17,11 @@ _WORKER_PATHS_EXACT = frozenset(
         "/api/papelaria/worker/heartbeat",
         "/api/papelaria/jobs/claim",
         "/api/papelaria/worker/inspect/claim",
-        "/api/papelaria/worker/os-cdr-campos/claim",
-        "/api/papelaria/worker/os-cdr-campos/push",
     }
 )
 
 _WORKER_PATH_RE = re.compile(
-    r"^/api/papelaria/(?:jobs/\d+/(complete|fail|log)|worker/inspect/[a-f0-9]+/(complete|fail)"
-    r"|worker/os-cdr-campos/\d+/(complete|fail))$"
+    r"^/api/papelaria/(?:jobs/\d+/(complete|fail|log)|worker/inspect/[a-f0-9]+/(complete|fail))$"
 )
 _WORKER_GET_PATH_RE = re.compile(
     r"^/api/papelaria/worker/inspect/[a-f0-9]+/cdr$"

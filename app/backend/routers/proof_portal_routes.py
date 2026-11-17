@@ -1131,23 +1131,8 @@ def respond_proof(req: ProofResponseRequest, request: Request):
             import json
             from services.papelaria_jobs_service import _sanitize_dados
 
-            from services.papelaria_os_cdr_campos_service import (
-                CDR_FIELD_PREFIX,
-                sanitize_cdr_textos,
-            )
-
             try:
-                # Textos do .cdr (``cdr:``) aceitam URLs/e-mails; demais campos
-                # seguem a validação de dados do modelo.
-                campos_modelo = {
-                    k: v
-                    for k, v in req.alteracoes_campos.items()
-                    if not str(k).startswith(CDR_FIELD_PREFIX)
-                }
-                alteracoes_campos = {
-                    **_sanitize_dados(campos_modelo),
-                    **sanitize_cdr_textos(req.alteracoes_campos),
-                }
+                alteracoes_campos = _sanitize_dados(req.alteracoes_campos)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             papelaria_alteracao = True

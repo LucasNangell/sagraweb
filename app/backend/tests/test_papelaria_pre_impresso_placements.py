@@ -25,16 +25,17 @@ def test_placements_pasta_coords():
 
     slots = placements_pasta(n_slots=2)
     assert len(slots) == 2
-    # Pasta1: 90° CCW; Superior X=x=372.46
+    # Centros informados → LL = centro − metade do footprint 320×220
+    assert slots[0]["cx_mm"] == pytest.approx(532.46)
+    assert slots[0]["cy_mm"] == pytest.approx(395.0)
     assert slots[0]["x_mm"] == pytest.approx(372.46)
     assert slots[0]["y_mm"] == pytest.approx(285.0)
     assert slots[0]["rotacao"] == 90
-    assert slots[0]["pagina"] == 1
-    # Pasta2: 90° CW (270); Superior X=x+320=372.46
+    assert slots[1]["cx_mm"] == pytest.approx(212.46)
+    assert slots[1]["cy_mm"] == pytest.approx(175.0)
     assert slots[1]["x_mm"] == pytest.approx(52.46)
     assert slots[1]["y_mm"] == pytest.approx(65.0)
     assert slots[1]["rotacao"] == 270
-    assert slots[1]["pagina"] == 2
 
 
 def test_placements_timbrado_coords():
@@ -42,14 +43,20 @@ def test_placements_timbrado_coords():
 
     slots = placements_timbrado(n_slots=4)
     assert len(slots) == 4
-    assert slots[0]["x_mm"] == pytest.approx(69.528)
+    assert slots[0]["cx_mm"] == pytest.approx(218.0)
+    assert slots[0]["cy_mm"] == pytest.approx(390.0)
+    assert slots[0]["x_mm"] == pytest.approx(69.5)
     assert slots[0]["y_mm"] == pytest.approx(285.0)
-    assert slots[0]["rotacao"] == 270  # CW
-    assert slots[1]["rotacao"] == 270
-    assert slots[2]["x_mm"] == pytest.approx(378.525)
-    assert slots[2]["rotacao"] == 90  # CCW
+    assert slots[0]["rotacao"] == 270
+    assert slots[1]["cx_mm"] == pytest.approx(218.0)
+    assert slots[1]["cy_mm"] == pytest.approx(180.0)
+    assert slots[2]["cx_mm"] == pytest.approx(527.0)
+    assert slots[2]["cy_mm"] == pytest.approx(390.0)
+    assert slots[2]["x_mm"] == pytest.approx(378.5)
+    assert slots[2]["rotacao"] == 90
+    assert slots[3]["cx_mm"] == pytest.approx(527.0)
+    assert slots[3]["cy_mm"] == pytest.approx(180.0)
     assert slots[3]["y_mm"] == pytest.approx(75.0)
-    assert slots[3]["rotacao"] == 90
 
 
 def test_compute_content_positions_absolutos():
@@ -201,7 +208,7 @@ def test_jdf_pasta_com_marcas_e_placements(tmp_path: Path):
     assert 'ContentObject Ord="0"' in xml
     assert 'ContentObject Ord="1"' in xml
     assert 'ContentObject Ord="2"' in xml
-    # Pasta1 rot 90: CTM origem (x+h, y); footprint ClipBox 320×220
+    # Centros (532.46,395) e (212.46,175) → LL + CTM/ClipBox 320×220
     x1 = 372.46 * MM_TO_PT
     y1 = 285.0 * MM_TO_PT
     h_pt = 320 * MM_TO_PT
@@ -210,7 +217,6 @@ def test_jdf_pasta_com_marcas_e_placements(tmp_path: Path):
     assert (
         f'ClipBox="{x1:.3f} {y1:.3f} {x1 + h_pt:.3f} {y1 + w_pt:.3f}"' in xml
     )
-    # Pasta2 rot 270: CTM (x, y+w); ClipBox 320×220
     x2 = 52.46 * MM_TO_PT
     y2 = 65.0 * MM_TO_PT
     assert f"0 -1 1 0 {x2:.3f} {y2 + w_pt:.3f}" in xml

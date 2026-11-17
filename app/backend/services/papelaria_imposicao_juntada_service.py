@@ -230,35 +230,59 @@ FOLHA_PRE_IMPRESSO_MM = {"largura": 745.0, "altura": 605.0}
 PAGINA_PASTA_MM = {"largura_mm": 220.0, "altura_mm": 320.0}
 PAGINA_TIMBRADO_MM = {"largura_mm": 210.0, "altura_mm": 297.0}
 
-# Pasta1: 90° CCW — Superior na vertical X=x; esquerda Y=y.
-# Pasta2: 90° CW (270° CCW) — Superior na vertical X=x+h; esquerda Y=y+w.
-# Superior X comum 372.46; Pasta1 Y 285–505; Pasta2 Y 65–285.
-_PASTA_SLOTS: list[tuple[float, float, int]] = [
-    (372.46, 285.0, 90),  # Pasta1 (CCW)
-    (52.46, 65.0, 270),  # Pasta2 (CW) x=372.46−320
+
+def _footprint_mm(page_w_mm: float, page_h_mm: float, rotacao: int) -> tuple[float, float]:
+    """Largura×altura do slot na folha após rotação 90/270."""
+    rot = int(rotacao) % 360
+    if rot in (90, 270):
+        return float(page_h_mm), float(page_w_mm)
+    return float(page_w_mm), float(page_h_mm)
+
+
+def _ll_from_center(
+    cx_mm: float,
+    cy_mm: float,
+    *,
+    page_w_mm: float,
+    page_h_mm: float,
+    rotacao: int,
+) -> tuple[float, float]:
+    fw, fh = _footprint_mm(page_w_mm, page_h_mm, rotacao)
+    return float(cx_mm) - fw / 2.0, float(cy_mm) - fh / 2.0
+
+
+# Centros na folha (mm, origem canto inferior esquerdo) + rotação CCW.
+# Pasta1: 90° anti-horário; Pasta2: 90° horário (270° CCW).
+_PASTA_CENTERS: list[tuple[float, float, int]] = [
+    (532.46, 395.0, 90),  # Pasta1
+    (212.46, 175.0, 270),  # Pasta2
 ]
 
-# Timbrado 1/2: 90° CW (270); 3/4: 90° CCW (90).
-# Col. esq. Superior=366.528 → x=366.528−297; col. dir. Superior=x=378.525.
-_TIMBRADO_SLOTS: list[tuple[float, float, int]] = [
-    (69.528, 285.0, 270),  # Timb1 CW
-    (69.528, 75.0, 270),  # Timb2 CW
-    (378.525, 285.0, 90),  # Timb3 CCW
-    (378.525, 75.0, 90),  # Timb4 CCW
+# Timbrado 1/2: 90° horário (270); 3/4: 90° anti-horário (90).
+_TIMBRADO_CENTERS: list[tuple[float, float, int]] = [
+    (218.0, 390.0, 270),  # Timb1
+    (218.0, 180.0, 270),  # Timb2
+    (527.0, 390.0, 90),  # Timb3
+    (527.0, 180.0, 90),  # Timb4
 ]
 
 
 def placements_pasta(*, n_slots: int = 2) -> list[dict[str, Any]]:
     """
-    Ocupadas absolutas Pasta1/Pasta2 (x_mm/y_mm/rotacao).
+    Ocupadas Pasta1/Pasta2 a partir do centro do slot na folha.
 
     ``pagina`` = 1..n (ordem no PDF ganged). 1 OS com 2 slots → pagina 1 e 2
     (arte duplicada no gang).
     """
-    n = max(1, min(int(n_slots), len(_PASTA_SLOTS)))
+    pw = float(PAGINA_PASTA_MM["largura_mm"])
+    ph = float(PAGINA_PASTA_MM["altura_mm"])
+    n = max(1, min(int(n_slots), len(_PASTA_CENTERS)))
     out: list[dict[str, Any]] = []
     for i in range(n):
-        x_mm, y_mm, rot = _PASTA_SLOTS[i]
+        cx, cy, rot = _PASTA_CENTERS[i]
+        x_mm, y_mm = _ll_from_center(
+            cx, cy, page_w_mm=pw, page_h_mm=ph, rotacao=rot
+        )
         out.append(
             {
                 "col": 0,
@@ -267,19 +291,25 @@ def placements_pasta(*, n_slots: int = 2) -> list[dict[str, Any]]:
                 "rotacao": rot,
                 "x_mm": x_mm,
                 "y_mm": y_mm,
+                "cx_mm": cx,
+                "cy_mm": cy,
             }
         )
     return out
 
 
 def placements_timbrado(*, n_slots: int = 4) -> list[dict[str, Any]]:
-    """Ocupadas absolutas Timb1..Timb4 (x_mm/y_mm/rotacao)."""
-    n = max(1, min(int(n_slots), len(_TIMBRADO_SLOTS)))
-    # Ordem visual: Timb1, Timb2, Timb3, Timb4 → col/row aproximados 2×2.
+    """Ocupadas Timb1..Timb4 a partir do centro do slot na folha."""
+    pw = float(PAGINA_TIMBRADO_MM["largura_mm"])
+    ph = float(PAGINA_TIMBRADO_MM["altura_mm"])
+    n = max(1, min(int(n_slots), len(_TIMBRADO_CENTERS)))
     cells = [(0, 0), (0, 1), (1, 0), (1, 1)]
     out: list[dict[str, Any]] = []
     for i in range(n):
-        x_mm, y_mm, rot = _TIMBRADO_SLOTS[i]
+        cx, cy, rot = _TIMBRADO_CENTERS[i]
+        x_mm, y_mm = _ll_from_center(
+            cx, cy, page_w_mm=pw, page_h_mm=ph, rotacao=rot
+        )
         col, row = cells[i]
         out.append(
             {
@@ -289,6 +319,8 @@ def placements_timbrado(*, n_slots: int = 4) -> list[dict[str, Any]]:
                 "rotacao": rot,
                 "x_mm": x_mm,
                 "y_mm": y_mm,
+                "cx_mm": cx,
+                "cy_mm": cy,
             }
         )
     return out

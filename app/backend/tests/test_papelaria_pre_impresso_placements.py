@@ -201,12 +201,20 @@ def test_jdf_pasta_com_marcas_e_placements(tmp_path: Path):
     assert 'ContentObject Ord="0"' in xml
     assert 'ContentObject Ord="1"' in xml
     assert 'ContentObject Ord="2"' in xml
-    # Pasta1 rot 90: CTM origem (x+h, y); Pasta2 rot 270: (x, y+w)
+    # Pasta1 rot 90: CTM origem (x+h, y); footprint ClipBox 320×220
     x1 = 372.46 * MM_TO_PT
     y1 = 285.0 * MM_TO_PT
     h_pt = 320 * MM_TO_PT
     w_pt = 220 * MM_TO_PT
     assert f"0 1 -1 0 {x1 + h_pt:.3f} {y1:.3f}" in xml
+    assert (
+        f'ClipBox="{x1:.3f} {y1:.3f} {x1 + h_pt:.3f} {y1 + w_pt:.3f}"' in xml
+    )
+    # Pasta2 rot 270: CTM (x, y+w); ClipBox 320×220
     x2 = 52.46 * MM_TO_PT
     y2 = 65.0 * MM_TO_PT
     assert f"0 -1 1 0 {x2:.3f} {y2 + w_pt:.3f}" in xml
+    assert (
+        f'ClipBox="{x2:.3f} {y2:.3f} {x2 + h_pt:.3f} {y2 + w_pt:.3f}"' in xml
+    )
+    assert f'TrimSize="{h_pt:.3f} {w_pt:.3f}"' in xml

@@ -316,8 +316,6 @@ def _content_objects_xml(
             rotacao = 0
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
-        clip_x1 = x_pt + page_w_pt
-        clip_y1 = y_pt + page_h_pt
         ord_idx = max(0, int(pagina) - 1)
         ctm, trim_w, trim_h = content_ctm_and_trim(
             x_pt=x_pt,
@@ -326,6 +324,9 @@ def _content_objects_xml(
             page_h_pt=page_h_pt,
             rotacao=int(rotacao or 0),
         )
+        # ClipBox = footprint na folha (após rotação TrimSize troca w/h).
+        clip_x1 = x_pt + trim_w
+        clip_y1 = y_pt + trim_h
         parts.append(
             f'              <ContentObject Ord="{ord_idx}"\n'
             f'                             CTM="{ctm}" '

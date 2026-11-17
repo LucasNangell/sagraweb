@@ -654,43 +654,24 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     copies = max(1, int(item.get("slots") or 1))
                     art_by_slot.extend([src] * copies)
 
-                if job.get("pasta_art_blank_pages"):
-                    # Pasta: por pasta na folha → arte 220×320 + branco 220×320.
-                    # 2 pastas ⇒ 4 páginas (ex.: 1 OS: art,branco, art, branco).
-                    from imposicao_folha_compose import build_pasta_art_blank_gang
-
-                    api.append_log(
-                        job_id,
-                        f"Montando PDF Pasta: {len(art_by_slot)} pasta(s) "
-                        f"(arte+branco cada; posição no Apogee).",
-                        "info",
-                    )
-                    gang_logs = build_pasta_art_blank_gang(
-                        art_pdf_paths=art_by_slot,
-                        output_pdf_path=gang_path,
-                    )
-                    pre_logs.extend(gang_logs)
-                    msg = gang_logs[-1] if gang_logs else (
-                        f"PDF Pasta montado: {os.path.basename(gang_path)}"
-                    )
-                else:
-                    # Timbrado: PDF multipágina com duplicatas por slot.
-                    out = fitz.open()
-                    try:
-                        for src in art_by_slot:
-                            with fitz.open(src) as doc:
-                                if doc.page_count < 1:
-                                    raise CorelGenerationError(
-                                        f"PDF pré-impresso sem páginas: {src}"
-                                    )
-                                out.insert_pdf(doc, from_page=0, to_page=0)
-                        out.save(gang_path)
-                    finally:
-                        out.close()
-                    msg = (
-                        f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
-                        f"({len(art_by_slot)} página(s), duplicadas por slot)."
-                    )
+                # Pasta/Timbrado: PDF multipágina com uma arte por slot.
+                # Posição na folha e marcas ficam no JDF Layout (API).
+                out = fitz.open()
+                try:
+                    for src in art_by_slot:
+                        with fitz.open(src) as doc:
+                            if doc.page_count < 1:
+                                raise CorelGenerationError(
+                                    f"PDF pré-impresso sem páginas: {src}"
+                                )
+                            out.insert_pdf(doc, from_page=0, to_page=0)
+                    out.save(gang_path)
+                finally:
+                    out.close()
+                msg = (
+                    f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
+                    f"({len(art_by_slot)} página(s), duplicadas por slot)."
+                )
                 pre_logs.append(msg)
                 api.append_log(job_id, msg, "info")
                 result = GenerationResult(

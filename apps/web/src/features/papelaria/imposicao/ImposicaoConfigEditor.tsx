@@ -312,9 +312,9 @@ export function ImposicaoConfigEditor({
         ) : null}
         {isPasta && config.usar_pre_impresso ? (
           <p className="text-[10px] text-slate-500">
-            Pasta: 2 pastas na folha. Cada uma = arte 220×320 + página em branco.
-            1 OS → 4 páginas (arte duplicada). Só o .jdf vai ao hotfolder; ele
-            referencia o PDF na Sefoc (posição no Apogee).
+            Pasta: folha 745×605, 2 artes 220×320 nas posições Pasta1/Pasta2 do
+            PDF de marcas. 1 OS → arte duplicada nos 2 slots. Só o .jdf vai ao
+            hotfolder Papelaria; FileSpec aponta o PDF na Sefoc.
           </p>
         ) : null}
         <label className="flex flex-col gap-1 text-xs text-slate-600">
@@ -335,7 +335,7 @@ export function ImposicaoConfigEditor({
         <CheckboxField
           label="Marcas de corte"
           checked={config.marcas_corte}
-          hint="Usa PDF de marcas no JDF (RL_Marcas + MarkObject). O arquivo varia por produto/grade."
+          hint="Usa PDF de marcas no JDF como ContentObject (não MarkObject). O arquivo varia por produto/grade."
           onChange={(v) =>
             onChange({
               ...config,

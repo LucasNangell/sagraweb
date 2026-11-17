@@ -463,6 +463,102 @@ def create_job(
     return job
 
 
+def _lote_nros_from_dados(dados: dict[str, Any], *, ano: int, nro: int) -> list[int]:
+    """Números de OP do lote (âncora + juntada), na ordem."""
+    nros: list[int] = []
+    lote = dados.get("juntada_lote")
+    if isinstance(lote, list) and lote:
+        for item in lote:
+            if not isinstance(item, dict):
+                continue
+            try:
+                nros.append(int(item.get("nro") or 0))
+            except (TypeError, ValueError):
+                continue
+    if not nros:
+        nros = [int(nro)]
+        for m in dados.get("juntada_membros") or []:
+            if isinstance(m, dict):
+                try:
+                    nros.append(int(m.get("nro") or 0))
+                except (TypeError, ValueError):
+                    continue
+    return [n for n in nros if n > 0] or [int(nro)]
+
+
+def _prepare_pre_impresso_jdf_config(
+    *,
+    config: dict[str, Any],
+    produto: str,
+    dados: dict[str, Any],
+    ano: int,
+    nro: int,
+    sefoc_dir: str,
+) -> dict[str, Any]:
+    """
+    Folha 745×605, placements absolutos e cópia do PDF de marcas com OPs.
+    """
+    from services import papelaria_jdf_service as jdf_svc
+    from services import papelaria_imposicao_juntada_service as juntada_svc
+
+    cfg = dict(config or {})
+    slots_info = dados.get("juntada_slots") if isinstance(dados, dict) else None
+    n_slots = 0
+    if isinstance(slots_info, dict):
+        try:
+            n_slots = int(slots_info.get("total_slots") or 0)
+        except (TypeError, ValueError):
+            n_slots = 0
+    if n_slots < 1:
+        n_slots = juntada_svc.max_slots(produto)
+
+    padrao = juntada_svc.grid_padrao_pre_impresso(produto)
+    grid = dict(cfg.get("grid") or {})
+    cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
+    rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
+    ocupadas = juntada_svc.placements_pre_impresso(produto, n_slots=n_slots)
+    if juntada_svc.is_pasta_avulso_familia(produto):
+        pagina = {"origem": "fixixa", **juntada_svc.PAGINA_PASTA_MM}
+    else:
+        pagina = {"origem": "fixixa", **juntada_svc.PAGINA_TIMBRADO_MM}
+
+    marcas_src = str(cfg.get("marcas_pdf_path") or "").strip()
+    if not marcas_src:
+        raise ValueError(
+            "Pasta/Timbrado exigem PDF de marcas na configuração de imposição."
+        )
+    nros = _lote_nros_from_dados(dados, ano=ano, nro=nro)
+    prefix = get_os_folder_basename(ano, nro)
+    marcas_out = os.path.normpath(
+        os.path.join(sefoc_dir, f"{prefix}-Marcas-OP.pdf")
+    )
+    marcas_ready = jdf_svc.prepare_marcas_pdf_with_ops(
+        source_pdf_path=marcas_src,
+        output_pdf_path=marcas_out,
+        nros=nros,
+    )
+
+    cfg.update(
+        {
+            "folha_mm": dict(juntada_svc.FOLHA_PRE_IMPRESSO_MM),
+            "pagina": pagina,
+            "grid": {
+                **grid,
+                "colunas": cols,
+                "linhas": rows,
+                "ocupadas": ocupadas,
+            },
+            "marcas_corte": True,
+            "marcas_pdf_path": marcas_ready,
+            "jdf_import_root": juntada_svc.resolve_jdf_import_root(
+                cfg, produto=produto
+            )
+            or juntada_svc.DEFAULT_JDF_IMPORT_ROOT_PAPELARIA,
+        }
+    )
+    return cfg
+
+
 def _build_imposicao_jdf_artifacts(
     *,
     ano: int,
@@ -735,31 +831,42 @@ def create_imposicao_job(
     if usar_pre:
         tiragens = [_load_os_tiragem(int(x["ano"]), int(x["nro"])) for x in lote]
         slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
-        # Timbrado: grade 2×2 no JDF. Pasta: páginas arte+branco; posição no Apogee.
-        if not is_pasta:
-            padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
-            grid = dict(config.get("grid") or {})
-            cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
-            rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
-            capacity = cols * rows
-            need = int(slots_info["total_slots"])
-            if need > capacity:
-                raise ValueError(
-                    f"Slots da juntada ({need}) excedem a grade "
-                    f"{cols}×{rows} ({capacity})."
-                )
-            ocupadas = juntada_svc.montar_ocupadas_por_slots(
-                colunas=cols,
-                linhas=rows,
-                slots_por_pagina=list(slots_info["slots"]),
+        # Pasta/Timbrado: posições absolutas do PDF de marcas + folha 745×605.
+        padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
+        grid = dict(config.get("grid") or {})
+        cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
+        rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
+        capacity = cols * rows
+        need = int(slots_info["total_slots"])
+        if need > capacity:
+            raise ValueError(
+                f"Slots da juntada ({need}) excedem a grade "
+                f"{cols}×{rows} ({capacity})."
             )
-            grid = {
+        ocupadas = juntada_svc.placements_pre_impresso(
+            produto_job, n_slots=need
+        )
+        if is_pasta:
+            pagina = {
+                "origem": "fixixa",
+                **juntada_svc.PAGINA_PASTA_MM,
+            }
+        else:
+            pagina = {
+                "origem": "fixixa",
+                **juntada_svc.PAGINA_TIMBRADO_MM,
+            }
+        config = {
+            **config,
+            "folha_mm": dict(juntada_svc.FOLHA_PRE_IMPRESSO_MM),
+            "pagina": pagina,
+            "grid": {
                 **grid,
                 "colunas": cols,
                 "linhas": rows,
                 "ocupadas": ocupadas,
-            }
-            config = {**config, "grid": grid}
+            },
+        }
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     removed_digital = clear_digital_imposicao_pdfs(sefoc_dir) if not usar_pre else []
@@ -825,9 +932,9 @@ def create_imposicao_job(
                 config, produto=produto_job
             ),
             "compose_com_template": False,
-            "pasta_art_blank_pages": is_pasta,
-            # Pasta/Timbrado pré-impresso: JDF só ticket + PDF (posição no Apogee).
-            "jdf_sem_imposicao": True,
+            # Layout JDF com posições absolutas + PDF de marcas (ContentObject).
+            "jdf_sem_imposicao": False,
+            "pasta_art_blank_pages": False,
         }
         insert_params = {
             "nro": nro,
@@ -1002,16 +1109,24 @@ def resend_imposicao_jdf(
     nro = int(job["nro_protocolo"])
     produto = (job.get("produto") or "").strip() or "Papelaria"
     gang_path = str(dados.get("gang_pdf_path") or "").strip()
-    sem_imposicao = bool(
-        dados.get("jdf_sem_imposicao")
-        or dados.get("usar_pre_impresso")
-        or dados.get("pasta_art_blank_pages")
-    )
-    if sem_imposicao and gang_path and os.path.isfile(gang_path):
+    usar_pre = bool(dados.get("usar_pre_impresso") or dados.get("pre_impresso_pipeline"))
+    # Legado: jobs antigos com passthrough; novos usam Layout + marcas.
+    sem_imposicao = bool(dados.get("jdf_sem_imposicao")) and not usar_pre
+    if (usar_pre or gang_path) and gang_path and os.path.isfile(gang_path):
         base_pdf_path = gang_path
     else:
         base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
     base_pdf_name = os.path.basename(base_pdf_path)
+
+    if usar_pre and not sem_imposicao:
+        config = _prepare_pre_impresso_jdf_config(
+            config=config,
+            produto=produto,
+            dados=dados,
+            ano=ano,
+            nro=nro,
+            sefoc_dir=os.path.dirname(base_pdf_path) or ".",
+        )
 
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
@@ -3152,7 +3267,14 @@ def _complete_pre_impresso_imposicao_job(
     nro = int(job["nro_protocolo"])
     produto = str(job.get("produto") or "Papelaria")
     comment = str(dados.get("jdf_comment") or "").strip() or None
-    # Pasta e Timbrado pré-impresso: nunca envia layout de imposição no JDF.
+    config = _prepare_pre_impresso_jdf_config(
+        config=config,
+        produto=produto,
+        dados=dados,
+        ano=ano,
+        nro=nro,
+        sefoc_dir=os.path.dirname(gang_path) or ".",
+    )
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
         nro=nro,
@@ -3162,7 +3284,7 @@ def _complete_pre_impresso_imposicao_job(
         comment=comment,
         descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,
         jdf_dir=str(dados.get("jdf_import_root") or "") or None,
-        sem_imposicao=True,
+        sem_imposicao=False,
     )
     dados.update(
         {
@@ -3170,9 +3292,11 @@ def _complete_pre_impresso_imposicao_job(
             "jdf_dir": artifacts["jdf_dir"],
             "jdf_name": artifacts["jdf_name"],
             "base_pdf": os.path.basename(gang_path),
+            "marcas_pdf_op": (config.get("marcas_pdf_path") or ""),
             "aguardando_apogee": True,
             "pre_impresso_pipeline": False,
-            "jdf_sem_imposicao": True,
+            "jdf_sem_imposicao": False,
+            "imposicao_config": config,
         }
     )
     db.execute_query(

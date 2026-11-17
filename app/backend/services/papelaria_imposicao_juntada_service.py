@@ -7,8 +7,9 @@ from typing import Any, Optional
 SITUACAO_AGUARD_JUNTADA = "Aguard. Juntada"
 
 DEFAULT_JDF_IMPORT_ROOT_PAPELARIA = r"\\apogee\JDFImportRoot\Papelaria"
-DEFAULT_JDF_IMPORT_ROOT_PASTA = r"\\apogee\JDFImportRoot\Papelaria_Pasta"
-DEFAULT_JDF_IMPORT_ROOT_TIMBRADO = r"\\apogee\JDFImportRoot\Papelaria_Timbrado"
+# Pasta/Timbrado usam o mesmo hotfolder dos demais produtos.
+DEFAULT_JDF_IMPORT_ROOT_PASTA = DEFAULT_JDF_IMPORT_ROOT_PAPELARIA
+DEFAULT_JDF_IMPORT_ROOT_TIMBRADO = DEFAULT_JDF_IMPORT_ROOT_PAPELARIA
 
 _MAX_SLOTS_PASTA = 2
 _MAX_SLOTS_TIMBRADO = 4
@@ -216,12 +217,92 @@ def montar_ocupadas_por_slots(
 
 
 def grid_padrao_pre_impresso(produto: Optional[str]) -> dict[str, int]:
-    """Grade que comporta a capacidade fixa (Pasta 2×1, Timbrado 2×2)."""
+    """Grade que comporta a capacidade fixa (Pasta 1×2, Timbrado 2×2)."""
     if is_pasta_avulso_familia(produto):
-        return {"colunas": 2, "linhas": 1}
+        return {"colunas": 1, "linhas": 2}
     if is_timbrado_a4_offset(produto):
         return {"colunas": 2, "linhas": 2}
     return {"colunas": 1, "linhas": 1}
+
+
+# Folha e página padrão (posições absolutas do PDF de marcas 745×605).
+FOLHA_PRE_IMPRESSO_MM = {"largura": 745.0, "altura": 605.0}
+PAGINA_PASTA_MM = {"largura_mm": 220.0, "altura_mm": 320.0}
+PAGINA_TIMBRADO_MM = {"largura_mm": 210.0, "altura_mm": 297.0}
+
+# Pasta: Superior X = 372.46 → x = 372.46 − 320; Y Pasta1=285, Pasta2=65; rot 90.
+_PASTA_SLOTS: list[tuple[float, float, int]] = [
+    (52.46, 285.0, 90),  # Pasta1
+    (52.46, 65.0, 90),  # Pasta2
+]
+
+# Timbrado: col. esq. Superior=366.528 → x=69.528; col. dir. x=378.525; rot 90.
+# Y = topo − 210 (Timb1 topo 495 → 285; Timb2/3 topo 285 → 75; Timb4 topo 75 → -135?
+# Plano: Timb1 y=285, Timb2 y=75, Timb3 y=285, Timb4 y=75.
+_TIMBRADO_SLOTS: list[tuple[float, float, int]] = [
+    (69.528, 285.0, 90),  # Timb1
+    (69.528, 75.0, 90),  # Timb2
+    (378.525, 285.0, 90),  # Timb3
+    (378.525, 75.0, 90),  # Timb4
+]
+
+
+def placements_pasta(*, n_slots: int = 2) -> list[dict[str, Any]]:
+    """
+    Ocupadas absolutas Pasta1/Pasta2 (x_mm/y_mm/rotacao).
+
+    ``pagina`` = 1..n (ordem no PDF ganged). 1 OS com 2 slots → pagina 1 e 2
+    (arte duplicada no gang).
+    """
+    n = max(1, min(int(n_slots), len(_PASTA_SLOTS)))
+    out: list[dict[str, Any]] = []
+    for i in range(n):
+        x_mm, y_mm, rot = _PASTA_SLOTS[i]
+        out.append(
+            {
+                "col": 0,
+                "row": i,
+                "pagina": i + 1,
+                "rotacao": rot,
+                "x_mm": x_mm,
+                "y_mm": y_mm,
+            }
+        )
+    return out
+
+
+def placements_timbrado(*, n_slots: int = 4) -> list[dict[str, Any]]:
+    """Ocupadas absolutas Timb1..Timb4 (x_mm/y_mm/rotacao)."""
+    n = max(1, min(int(n_slots), len(_TIMBRADO_SLOTS)))
+    # Ordem visual: Timb1, Timb2, Timb3, Timb4 → col/row aproximados 2×2.
+    cells = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    out: list[dict[str, Any]] = []
+    for i in range(n):
+        x_mm, y_mm, rot = _TIMBRADO_SLOTS[i]
+        col, row = cells[i]
+        out.append(
+            {
+                "col": col,
+                "row": row,
+                "pagina": i + 1,
+                "rotacao": rot,
+                "x_mm": x_mm,
+                "y_mm": y_mm,
+            }
+        )
+    return out
+
+
+def placements_pre_impresso(
+    produto: Optional[str],
+    *,
+    n_slots: int,
+) -> list[dict[str, Any]]:
+    if is_pasta_avulso_familia(produto):
+        return placements_pasta(n_slots=n_slots)
+    if is_timbrado_a4_offset(produto):
+        return placements_timbrado(n_slots=n_slots)
+    return []
 
 
 def resolve_imposicao_template_pdf(config: Optional[dict[str, Any]]) -> str:

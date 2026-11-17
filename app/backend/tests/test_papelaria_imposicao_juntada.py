@@ -160,11 +160,11 @@ class TestImposicaoConfigPreImpresso:
             "centralizar_na_folha": True,
             "work_style": "Simplex",
             "usar_pre_impresso": True,
-            "jdf_import_root": r"\\apogee\JDFImportRoot\Papelaria_Timbrado",
+            "jdf_import_root": r"\\apogee\JDFImportRoot\Papelaria",
         }
         out = validate_imposicao_config_payload(payload)
         assert out["usar_pre_impresso"] is True
-        assert out["jdf_import_root"].endswith("Papelaria_Timbrado")
+        assert out["jdf_import_root"].endswith("Papelaria")
 
     def test_validate_default_pre_impresso_false(self):
         from services.papelaria_imposicao_config_service import (

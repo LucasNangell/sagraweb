@@ -48,7 +48,7 @@ export interface PapelariaImposicaoConfig {
   /** Sangria / bleed (mm). 0 = sem sangria. */
   sangria_mm: number;
   /**
-   * true = inclui PDF de marcas no JDF (RL_Marcas + MarkObject).
+   * true = inclui PDF de marcas no JDF como ContentObject (não MarkObject).
    * NamedFeatures sempre usa JDFNoMarks (marcas vêm do PDF).
    */
   marcas_corte: boolean;
@@ -90,10 +90,10 @@ export const DEFAULT_IMPOSICAO_CONFIG: PapelariaImposicaoConfig = {
   jdf_import_root: null,
 };
 
-/** Defaults de hotfolder Apogee por família (quando jdf_import_root vazio). */
+/** Defaults de hotfolder Apogee (Pasta/Timbrado usam o mesmo dos demais). */
 export const DEFAULT_JDF_IMPORT_ROOT_PAPELARIA =
   "\\\\apogee\\JDFImportRoot\\Papelaria";
 export const DEFAULT_JDF_IMPORT_ROOT_PASTA =
-  "\\\\apogee\\JDFImportRoot\\Papelaria_Pasta";
+  DEFAULT_JDF_IMPORT_ROOT_PAPELARIA;
 export const DEFAULT_JDF_IMPORT_ROOT_TIMBRADO =
-  "\\\\apogee\\JDFImportRoot\\Papelaria_Timbrado";
+  DEFAULT_JDF_IMPORT_ROOT_PAPELARIA;

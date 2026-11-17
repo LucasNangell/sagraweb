@@ -62,7 +62,7 @@ def _normalize_ocupadas(
     cols: int,
     rows: int,
     field_label: str = "grid.ocupadas",
-) -> list[dict[str, int]]:
+) -> list[dict[str, Any]]:
     """Valida lista de células ocupadas com número de página (permite repetir pagina)."""
     if not isinstance(raw, list):
         raise ValueError(f"{field_label} deve ser uma lista.")
@@ -78,7 +78,7 @@ def _normalize_ocupadas(
         return num
 
     seen_cells: set[tuple[int, int]] = set()
-    out: list[dict[str, int]] = []
+    out: list[dict[str, Any]] = []
     valid_rot = {0, 90, 180, 270}
     for idx, item in enumerate(raw):
         label = f"{field_label}[{idx}]"
@@ -107,9 +107,18 @@ def _normalize_ocupadas(
         if cell in seen_cells:
             raise ValueError(f"{label}: célula ({col},{row}) duplicada.")
         seen_cells.add(cell)
-        entry: dict[str, int] = {"col": col, "row": row, "pagina": pagina}
+        entry: dict[str, Any] = {"col": col, "row": row, "pagina": pagina}
         if rotacao:
             entry["rotacao"] = rotacao
+        # Posição absoluta (Pasta/Timbrado) — opcional.
+        if item.get("x_mm") is not None and item.get("y_mm") is not None:
+            try:
+                entry["x_mm"] = float(item["x_mm"])
+                entry["y_mm"] = float(item["y_mm"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{label}.x_mm/y_mm devem ser números."
+                ) from exc
         out.append(entry)
 
     out.sort(key=lambda item: (item["pagina"], item["row"], item["col"]))
@@ -120,7 +129,7 @@ def resolve_grid_ocupadas(
     grid: dict[str, Any],
     *,
     face: str = "frente",
-) -> list[dict[str, int]]:
+) -> list[dict[str, Any]]:
     """
     Lista efetiva de células ocupadas.
     Sem ocupadas no JSON → grade cheia (linha-major, pagina 1..N).

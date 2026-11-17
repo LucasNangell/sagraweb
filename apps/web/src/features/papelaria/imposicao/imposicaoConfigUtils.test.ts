@@ -142,16 +142,17 @@ describe("imposicaoConfigUtils (JDF)", () => {
     ).toThrow(/largura_mm/);
   });
 
-  it("default Pasta Avulso usa folha 656x470 e pagina 440x320", () => {
+  it("default Pasta Avulso usa folha 745x605 e arte 220x320", () => {
     const cfg = cloneImposicaoConfigForProduto("Pasta Avulso c/ Bolso");
-    expect(cfg.folha_mm).toEqual({ largura: 656, altura: 470 });
+    expect(cfg.folha_mm).toEqual({ largura: 745, altura: 605 });
     expect(cfg.pagina).toEqual({
       origem: "fixixa",
-      largura_mm: 440,
+      largura_mm: 220,
       altura_mm: 320,
     });
     expect(cfg.usar_pre_impresso).toBe(true);
-    expect(cfg.grid).toEqual({ colunas: 2, linhas: 1 });
+    expect(cfg.jdf_import_root).toBe("\\\\apogee\\JDFImportRoot\\Papelaria");
+    expect(cfg.grid).toEqual({ colunas: 1, linhas: 2 });
   });
 
   it("parse envelope digital/offset e legado único", () => {

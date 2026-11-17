@@ -395,17 +395,19 @@ export function cloneImposicaoConfigForProduto(
   const name = (produto || "").trim().toLowerCase();
   if (name.startsWith("pasta avulso")) {
     cfg.usar_pre_impresso = true;
-    cfg.jdf_import_root =
-      "\\\\apogee\\JDFImportRoot\\Papelaria_Pasta";
-    // Offset padrão: folha 656×470, pasta 440×320 (arte 220×320 à direita).
-    cfg.folha_mm = { largura: 656, altura: 470 };
-    cfg.pagina = { origem: "fixixa", largura_mm: 440, altura_mm: 320 };
-    cfg.grid = { colunas: 2, linhas: 1 };
+    cfg.jdf_import_root = "\\\\apogee\\JDFImportRoot\\Papelaria";
+    // Folha 745×605; arte 220×320 posicionada no JDF (Pasta1/Pasta2).
+    cfg.folha_mm = { largura: 745, altura: 605 };
+    cfg.pagina = { origem: "fixixa", largura_mm: 220, altura_mm: 320 };
+    cfg.grid = { colunas: 1, linhas: 2 };
     cfg.work_style = "Simplex";
   } else if (name === "timbrado a4") {
     cfg.usar_pre_impresso = true;
-    cfg.jdf_import_root =
-      "\\\\apogee\\JDFImportRoot\\Papelaria_Timbrado";
+    cfg.jdf_import_root = "\\\\apogee\\JDFImportRoot\\Papelaria";
+    cfg.folha_mm = { largura: 745, altura: 605 };
+    cfg.pagina = { origem: "fixixa", largura_mm: 210, altura_mm: 297 };
+    cfg.grid = { colunas: 2, linhas: 2 };
+    cfg.work_style = "Simplex";
   }
   return cfg;
 }

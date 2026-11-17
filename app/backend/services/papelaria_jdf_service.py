@@ -238,19 +238,24 @@ def compute_content_positions(
         rotacao = int(cell.get("rotacao") or 0) % 360
         if rotacao not in (0, 90, 180, 270):
             rotacao = 0
-        x_mm, y_mm = compute_cell_origin_mm(
-            folha_w_mm=folha_w_mm,
-            folha_h_mm=folha_h_mm,
-            page_w_mm=page_w_mm,
-            page_h_mm=page_h_mm,
-            cols=cols,
-            rows=rows,
-            gap_h_mm=gap_h_mm,
-            gap_v_mm=gap_v_mm,
-            centralizar=centralizar,
-            col=col,
-            row=row,
-        )
+        # Posição absoluta (Pasta/Timbrado marcas) tem prioridade sobre a grade.
+        if cell.get("x_mm") is not None and cell.get("y_mm") is not None:
+            x_mm = float(cell["x_mm"])
+            y_mm = float(cell["y_mm"])
+        else:
+            x_mm, y_mm = compute_cell_origin_mm(
+                folha_w_mm=folha_w_mm,
+                folha_h_mm=folha_h_mm,
+                page_w_mm=page_w_mm,
+                page_h_mm=page_h_mm,
+                cols=cols,
+                rows=rows,
+                gap_h_mm=gap_h_mm,
+                gap_v_mm=gap_v_mm,
+                centralizar=centralizar,
+                col=col,
+                row=row,
+            )
         positions.append((x_mm, y_mm, pagina, rotacao))
     return positions
 
@@ -825,6 +830,78 @@ def build_apogee_passthrough_jdf_xml(
   </JDF>
 </JDF>
 """
+
+
+MARCAS_OP_PLACEHOLDER = "0000-0000-0000-0000_SM74"
+
+
+def format_marcas_op_token(nros: list[int]) -> str:
+    """NUMOP1-NUMOP2-…-NUMOPN_SM74 (números com 5 dígitos)."""
+    parts = [format_os_number(int(n)) for n in nros if int(n) > 0]
+    if not parts:
+        raise ValueError("Nenhuma OP para o PDF de marcas.")
+    return f"{'-'.join(parts)}_SM74"
+
+
+def prepare_marcas_pdf_with_ops(
+    *,
+    source_pdf_path: str,
+    output_pdf_path: str,
+    nros: list[int],
+    placeholder: str = MARCAS_OP_PLACEHOLDER,
+) -> str:
+    """
+    Copia o PDF de marcas e substitui o placeholder TxtOPs pelo token das OPs.
+    Retorna o caminho absoluto do PDF gerado.
+    """
+    import fitz  # pymupdf
+
+    src = os.path.normpath((source_pdf_path or "").strip())
+    if not src or not os.path.isfile(src):
+        raise FileNotFoundError(f"PDF de marcas não encontrado: {src or '(vazio)'}")
+    token = format_marcas_op_token(nros)
+    dest = os.path.normpath(output_pdf_path)
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+
+    doc = fitz.open(src)
+    try:
+        replaced = 0
+        for page in doc:
+            hits = page.search_for(placeholder)
+            if not hits:
+                continue
+            # Tamanho de fonte aproximado a partir do texto da página.
+            fontsize = 16.0
+            for block in page.get_text("dict").get("blocks", []):
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        if placeholder in (span.get("text") or ""):
+                            fontsize = float(span.get("size") or fontsize)
+                            break
+            for rect in hits:
+                page.add_redact_annot(
+                    rect,
+                    text=token,
+                    fontsize=fontsize,
+                    fontname="helv",
+                    align=fitz.TEXT_ALIGN_LEFT,
+                    fill=(1, 1, 1),
+                    text_color=(0, 0, 0),
+                )
+                replaced += 1
+            page.apply_redactions()
+        if replaced < 1:
+            raise ValueError(
+                f"Placeholder {placeholder!r} não encontrado no PDF de marcas."
+            )
+        doc.save(dest, deflate=True, garbage=3)
+    finally:
+        doc.close()
+    if not os.path.isfile(dest):
+        raise RuntimeError(f"PDF de marcas com OP não persistiu: {dest}")
+    return dest
 
 
 def write_jdf_file(jdf_xml: str, output_dir: str, filename: str) -> str:

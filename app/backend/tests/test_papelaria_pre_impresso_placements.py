@@ -147,17 +147,12 @@ def test_prepare_marcas_pdf_with_ops(tmp_path: Path):
     dest = tmp_path / "out-Marcas-OP.pdf"
     doc = fitz.open()
     page = doc.new_page(width=745 * 72 / 25.4, height=605 * 72 / 25.4)
-    # Texto upright (direita) + espelho 180° (esquerda), como no PDF de marcas.
     page.insert_text(
         (400, 500),
         f"[{MARCAS_OP_PLACEHOLDER}]",
         fontsize=16.22,
         fontname="helv",
     )
-    # Simula texto a 180°: escreve e morph — search_for ainda acha o placeholder.
-    rect = page.search_for(MARCAS_OP_PLACEHOLDER)[0]
-    # Segunda ocorrência upright basta para o teste de replace; rotação
-    # real é coberta no PDF de marcas anexado / inspeção manual.
     page.insert_text(
         (80, 200),
         f"[{MARCAS_OP_PLACEHOLDER}]",
@@ -179,8 +174,10 @@ def test_prepare_marcas_pdf_with_ops(tmp_path: Path):
                  if b.get("type") == 0
                  for line in b["lines"] for span in line["spans"]
                  if "SM74" in (span.get("text") or "")}
-    assert MARCAS_OP_PLACEHOLDER not in text
-    assert "06220-06221_SM74" in text
+    # MuPDF/Arial às vezes extrai hífen ASCII como soft-hyphen (U+00AD).
+    text_norm = text.replace("\xad", "-")
+    assert MARCAS_OP_PLACEHOLDER not in text_norm
+    assert "06220-06221_SM74" in text_norm
     # Preferência Arial Bold; fallback Helvetica se fonte Windows ausente.
     assert fonts
     assert fonts <= {"Arial-BoldMT", "Arial Bold", "Helvetica", "Helv"}

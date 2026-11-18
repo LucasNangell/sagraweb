@@ -171,6 +171,15 @@ SYNC_RELATED_RECONCILE_MAX_WRITES = max(
 # Guarda contra NULL sempre ligada (env não pode desligar; só documenta a intenção).
 SYNC_RELATED_NULL_GUARD = True
 SYNC_RELATED_EXTENDED_COLUMNS = _env_bool("SYNC_RELATED_EXTENDED_COLUMNS", True)
+# Pré-condição do andamento: além de tabProtocolos, inserir tabDetalhesServico
+# no ciclo rápido quando a OS ainda não existe no MySQL. Evita que a OS apareça
+# "em branco" na lista até a reconciliação estável preencher os detalhes.
+# INSERT-only (nunca UPDATE): atualizações seguem exclusivamente o worker lento.
+# Kill-switch: defina SYNC_RELATED_PRECONDITION_DETALHES=false para voltar ao
+# comportamento anterior sem novo deploy de código.
+SYNC_RELATED_PRECONDITION_DETALHES = _env_bool(
+    "SYNC_RELATED_PRECONDITION_DETALHES", True
+)
 _RELATED_TABLE_SPECS = (
     {
         "table": "tabProtocolos",
@@ -190,6 +199,10 @@ _RELATED_TABLE_SPECS = (
         "allowlist_extra": core._DETAILS_SYNC_EXTENDED,
         "allowlist": core._DETAILS_SYNC_ALLOWLIST,
     },
+)
+_PROTOCOL_SPEC = next(s for s in _RELATED_TABLE_SPECS if s["table"] == "tabProtocolos")
+_DETALHES_SPEC = next(
+    s for s in _RELATED_TABLE_SPECS if s["table"] == "tabDetalhesServico"
 )
 
 RELATED_ACTION_SEED = "seed"
@@ -1360,75 +1373,155 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
     def sync_os_data_from_mdb(self, nro: int, ano: int, origem: str):
         """
-        Mantém a pré-condição de FK do fluxo de tabAndamento sem fazer UPDATE
-        antecipado de dados da OS. Alterações de Protocolos/Detalhes seguem
-        exclusivamente a reconciliação estável em segundo plano.
+        Garante a pré-condição de dados da OS para o fluxo de tabAndamento, sem
+        fazer UPDATE antecipado: apenas INSERT quando a linha ainda não existe no
+        MySQL. Alterações de Protocolos/Detalhes seguem exclusivamente a
+        reconciliação estável em segundo plano.
+
+        Além de tabProtocolos (pré-condição de FK), insere tabDetalhesServico
+        quando ausente — para a OS não aparecer "em branco" na lista até o
+        reconciliador preencher os detalhes. Controlado por
+        SYNC_RELATED_PRECONDITION_DETALHES (default ligado).
         """
         try:
             if self.is_os_deleted(nro, ano):
                 self._svc_log.info(
-                    "[RELATED_SYNC] protocolo %s/%s ignorado: OS tombstoned", nro, ano
+                    "[RELATED_SYNC] OS %s/%s ignorada: tombstone deleted_os", nro, ano
                 )
                 return
 
-            mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
-            mdb_cursor = mdb_conn.cursor()
-            try:
-                mdb_cursor.execute(
-                    "SELECT * FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
-                    (nro, ano),
-                )
-                row = mdb_cursor.fetchone()
-                if row is None:
-                    self._svc_log.warning(
-                        "[RELATED_SYNC] protocolo %s/%s ausente no MDB %s", nro, ano, origem
-                    )
-                    return
-                columns = [desc[0] for desc in mdb_cursor.description]
-                record = dict(zip(columns, row))
-            finally:
-                mdb_cursor.close()
-
-            pk_fields = ("NroProtocolo", "AnoProtocolo")
-            sync_columns = self._sync_allowed_columns(
-                columns, core._PROTOCOL_SYNC_ALLOWLIST, list(pk_fields)
+            # tabProtocolos: pré-condição de FK do andamento (sempre).
+            self._ensure_related_precondition(
+                _PROTOCOL_SPEC, nro, ano, origem, core._PROTOCOL_SYNC_ALLOWLIST
             )
-            if any(field not in sync_columns for field in pk_fields):
-                raise ValueError("chave de tabProtocolos ausente no MDB")
 
-            mysql_conn = self.conn_mgr.get_mysql()
-            mysql_cursor = mysql_conn.cursor(dictionary=True)
-            try:
-                mysql_cursor.execute(
-                    "SELECT 1 FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s",
-                    (nro, ano),
-                )
-                if mysql_cursor.fetchone() is not None:
-                    # Atualizações são deliberadamente adiadas até confirmação estável.
-                    return
-
-                columns_clause = ", ".join(f"`{column}`" for column in sync_columns)
-                placeholders = ", ".join("%s" for _ in sync_columns)
-                mysql_cursor.execute(
-                    f"INSERT INTO tabProtocolos ({columns_clause}) VALUES ({placeholders})",
-                    [record.get(column) for column in sync_columns],
-                )
-                mysql_conn.commit()
-                self._svc_log.info(
-                    "[RELATED_SYNC] protocolo %s/%s inserido como pré-condição de tabAndamento (%s)",
+            # tabDetalhesServico: pré-condição para a OS não carregar em branco.
+            # Usa a mesma allowlist efetiva do reconciliador, para que as colunas
+            # inseridas coincidam com as que o worker lento gerencia.
+            if SYNC_RELATED_PRECONDITION_DETALHES:
+                self._ensure_related_precondition(
+                    _DETALHES_SPEC,
                     nro,
                     ano,
                     origem,
+                    self._effective_related_allowlist(_DETALHES_SPEC),
                 )
+        except Exception as exc:
+            # Nunca impede a rotina principal de tratar seu próprio erro/retentativa.
+            self._svc_log.error(
+                "[RELATED_SYNC] falha ao garantir dados da OS para tabAndamento %s/%s: %s",
+                nro,
+                ano,
+                exc,
+            )
+
+    def _ensure_related_precondition(
+        self,
+        spec: Dict[str, Any],
+        nro: int,
+        ano: int,
+        origem: str,
+        allowlist: Set[str],
+    ) -> None:
+        """INSERT-if-missing de uma tabela relacionada à OS (Protocolos/Detalhes).
+
+        Só insere quando a linha NÃO existe no MySQL — nunca faz UPDATE, logo não
+        há risco de sobrescrever edição recente da web. Após inserir, semeia o
+        baseline (best-effort) para o reconciliador enxergar SEED (MDB == MySQL)
+        e não reescrever a linha no primeiro ciclo.
+        """
+        table = spec["table"]
+        pk_fields = spec["pk_fields"]
+        nro_field, year_field = pk_fields
+
+        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+        mdb_cursor = mdb_conn.cursor()
+        try:
+            mdb_cursor.execute(
+                f"SELECT * FROM {table} WHERE {nro_field} = ? AND {year_field} = ?",
+                (nro, ano),
+            )
+            row = mdb_cursor.fetchone()
+            if row is None:
+                self._svc_log.warning(
+                    "[RELATED_SYNC] %s %s/%s ausente no MDB %s", table, nro, ano, origem
+                )
+                return
+            columns = [desc[0] for desc in mdb_cursor.description]
+            record = dict(zip(columns, row))
+        finally:
+            mdb_cursor.close()
+
+        sync_columns = self._sync_allowed_columns(columns, allowlist, list(pk_fields))
+        if any(field not in sync_columns for field in pk_fields):
+            raise ValueError(f"chave de {table} ausente no MDB")
+
+        mysql_conn = self.conn_mgr.get_mysql()
+        mysql_cursor = mysql_conn.cursor(dictionary=True)
+        try:
+            mysql_cursor.execute(
+                f"SELECT 1 FROM `{table}` WHERE {nro_field} = %s AND {year_field} = %s",
+                (nro, ano),
+            )
+            if mysql_cursor.fetchone() is not None:
+                # Atualizações são deliberadamente adiadas até confirmação estável.
+                return
+
+            columns_clause = ", ".join(f"`{column}`" for column in sync_columns)
+            placeholders = ", ".join("%s" for _ in sync_columns)
+            mysql_cursor.execute(
+                f"INSERT INTO `{table}` ({columns_clause}) VALUES ({placeholders})",
+                [record.get(column) for column in sync_columns],
+            )
+            mysql_conn.commit()
+            self._svc_log.info(
+                "[RELATED_SYNC] %s %s/%s inserido como pré-condição de tabAndamento (%s)",
+                table,
+                nro,
+                ano,
+                origem,
+            )
+        except Exception:
+            mysql_conn.rollback()
+            raise
+        finally:
+            mysql_cursor.close()
+
+        # Baseline: best-effort — a inserção já foi confirmada e não deve ser
+        # revertida se o seeding falhar (o reconciliador semeia na primeira
+        # comparação SEED de qualquer forma).
+        self._seed_related_baseline(spec, nro, ano, record, sync_columns)
+
+    def _seed_related_baseline(
+        self,
+        spec: Dict[str, Any],
+        nro: int,
+        ano: int,
+        record: Dict[str, Any],
+        sync_columns: List[str],
+    ) -> None:
+        pk_fields = spec["pk_fields"]
+        try:
+            values = {
+                column: self._related_normalize(record.get(column))
+                for column in sync_columns
+                if column not in pk_fields
+            }
+            mysql_conn = self.conn_mgr.get_mysql()
+            cursor = mysql_conn.cursor()
+            try:
+                self._upsert_related_baseline(cursor, spec["table"], nro, ano, values)
+                mysql_conn.commit()
             except Exception:
                 mysql_conn.rollback()
                 raise
             finally:
-                mysql_cursor.close()
+                cursor.close()
         except Exception as exc:
-            # Nunca impede a rotina principal de tratar seu próprio erro/retentativa.
-            self._svc_log.error(
-                "[RELATED_SYNC] falha ao garantir protocolo para tabAndamento %s/%s: %s",
+            self._svc_log.warning(
+                "[RELATED_SYNC] baseline de %s %s/%s não semeado "
+                "(o reconciliador cobrirá): %s",
+                spec["table"],
                 nro,
                 ano,
                 exc,

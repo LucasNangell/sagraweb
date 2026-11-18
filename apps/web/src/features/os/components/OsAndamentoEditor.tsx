@@ -743,7 +743,7 @@ export function OsAndamentoEditor({
       <div
         className={cn(
           "flex min-w-0 flex-col",
-          inline ? "w-full min-w-0 max-w-full gap-2 flex-col-reverse" : "min-h-0 flex-1 overflow-hidden p-2",
+          inline ? "w-full min-w-0 max-w-full gap-2" : "min-h-0 flex-1 overflow-hidden p-2",
         )}
       >
         {showForm ? (
@@ -780,7 +780,7 @@ export function OsAndamentoEditor({
                     onChange={(e) =>
                       setForm((f) => ({ ...f, situacao: e.target.value }))
                     }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border bg-white px-1 text-xs disabled:bg-slate-50"
                   >
                     <option value="">Selecione...</option>
                     {(situacoesQuery.data ?? []).map((s) => (
@@ -802,7 +802,7 @@ export function OsAndamentoEditor({
                     onChange={(e) =>
                       setForm((f) => ({ ...f, setor: e.target.value }))
                     }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border bg-white px-1 text-xs disabled:bg-slate-50"
                   >
                     <option value="">Selecione...</option>
                     {(setoresQuery.data ?? []).map((s) => (
@@ -840,7 +840,7 @@ export function OsAndamentoEditor({
                     onChange={(e) =>
                       setForm((f) => ({ ...f, usuario: e.target.value }))
                     }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-2 text-xs disabled:bg-slate-50"
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border bg-white px-2 text-xs disabled:bg-slate-50"
                   />
                 </label>
               </div>
@@ -917,7 +917,7 @@ export function OsAndamentoEditor({
                   onChange={(e) =>
                     setForm((f) => ({ ...f, obs: e.target.value }))
                   }
-                  className="mt-0.5 min-h-[5rem] w-full flex-1 resize-none rounded border border-sagra-border px-2 py-1.5 text-xs disabled:bg-slate-50"
+                  className="mt-0.5 min-h-[5rem] w-full flex-1 resize-none rounded border border-sagra-border bg-white px-2 py-1.5 text-xs disabled:bg-slate-50"
                 />
               </div>
             </div>

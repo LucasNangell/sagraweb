@@ -300,3 +300,98 @@ def test_letreiro_claim_sem_for_update():
     src = inspect.getsource(letreiro_routes._claim_pending_job)
     assert "FOR UPDATE\n" not in src.split("def op")[1]
     assert "WHERE Id = %s AND Status = %s" in src
+
+
+class TestOsSearchRenderedResponse:
+    def _client(self, monkeypatch, result, calls):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from routers import os_routes
+
+        def fake_exec(**kwargs):
+            calls.append(kwargs)
+            return result
+
+        monkeypatch.setattr(os_routes, "execute_os_search", fake_exec)
+        app = FastAPI()
+        app.include_router(os_routes.router, prefix="/api")
+        return TestClient(app)
+
+    def _result(self):
+        rows = [
+            {"nr_os": i, "ano": 2026, "titulo": f"Título ação {i}", "situacao": "Em produção",
+             "setor": "SEFOC", "last_update": "2026-11-18T10:00:00"}
+            for i in range(1, 80)
+        ]
+        return {"data": rows, "meta": {"page": 1, "limit": 80, "total_records": 79}}
+
+    def test_json_identico_ao_response_model(self, monkeypatch):
+        from fastapi.encoders import jsonable_encoder
+
+        from routers.os_routes import OsSearchResponse
+
+        calls = []
+        result = self._result()
+        client = self._client(monkeypatch, result, calls)
+        r1 = client.get("/api/os/search", params={"anos": 2026, "fetch_all": "true"})
+        r2 = client.get("/api/os/search", params={"anos": 2026, "fetch_all": "true"})
+        assert r1.status_code == r2.status_code == 200
+        assert r1.headers["X-Sagra-Cache"] == "miss" and r2.headers["X-Sagra-Cache"] == "hit"
+        assert len(calls) == 1
+        esperado = jsonable_encoder(OsSearchResponse.model_validate(result))
+        assert r1.json() == esperado == r2.json()
+        assert r1.headers["content-type"].startswith("application/json")
+        assert "no-store" in r1.headers["cache-control"]
+
+    def test_gzip_pronto_e_304(self, monkeypatch):
+        import gzip
+
+        calls = []
+        client = self._client(monkeypatch, self._result(), calls)
+        r = client.get(
+            "/api/os/search",
+            params={"anos": 2026, "fetch_all": "true"},
+            headers={"Accept-Encoding": "gzip"},
+        )
+        assert r.headers.get("content-encoding") == "gzip"
+        assert r.json()["data"][0]["titulo"] == "Título ação 1"  # httpx descomprime
+        etag = r.headers["ETag"]
+        r304 = client.get(
+            "/api/os/search",
+            params={"anos": 2026, "fetch_all": "true"},
+            headers={"If-None-Match": etag},
+        )
+        assert r304.status_code == 304
+        assert len(calls) == 1
+        assert gzip  # noqa
+
+    def test_sem_gzip_quando_cliente_nao_aceita(self, monkeypatch):
+        calls = []
+        client = self._client(monkeypatch, self._result(), calls)
+        r = client.get(
+            "/api/os/search",
+            params={"anos": 2026, "fetch_all": "true"},
+            headers={"Accept-Encoding": "identity"},
+        )
+        assert "content-encoding" not in r.headers
+        assert len(r.json()["data"]) == 79
+
+    def test_gzip_middleware_nao_recomprime(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from starlette.middleware.gzip import GZipMiddleware
+
+        from routers import os_routes
+
+        monkeypatch.setattr(os_routes, "execute_os_search", lambda **k: self._result())
+        app = FastAPI()
+        app.include_router(os_routes.router, prefix="/api")
+        app.add_middleware(GZipMiddleware, minimum_size=1000)
+        r = TestClient(app).get(
+            "/api/os/search",
+            params={"anos": 2026, "fetch_all": "true"},
+            headers={"Accept-Encoding": "gzip"},
+        )
+        assert r.headers.get("content-encoding") == "gzip"
+        assert len(r.json()["data"]) == 79

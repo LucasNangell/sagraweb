@@ -1225,6 +1225,18 @@ def duplicate_os(ano: int, id: int, req: DuplicateRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+_OS_SEARCH_GZIP_MIN_BYTES = 1000
+
+
+def _render_os_search(result: dict) -> dict:
+    """Valida no modelo de resposta e gera o corpo JSON (e gzip) uma única vez."""
+    import gzip
+
+    body = OsSearchResponse.model_validate(result).model_dump_json(by_alias=True).encode("utf-8")
+    gz = gzip.compress(body, 6) if len(body) >= _OS_SEARCH_GZIP_MIN_BYTES else None
+    return {"result": result, "json": body, "gzip": gz}
+
+
 @router.get("/os/search", response_model=OsSearchResponse)
 def search_os(
     request: Request,
@@ -1319,13 +1331,15 @@ def search_os(
         )
         from services.os_search_cache import get_or_compute, make_key
 
-        result, etag, from_cache = get_or_compute(
+        # A resposta já pronta (JSON + gzip) fica no cache junto com o resultado:
+        # validar/serializar/comprimir a lista do ano acontece 1x por versão, não a
+        # cada cliente (era o maior custo de CPU da API depois do cache da query).
+        rendered, etag, from_cache = get_or_compute(
             make_key(search_kwargs),
-            lambda: execute_os_search(**search_kwargs),
-            build_os_search_etag,
+            lambda: _render_os_search(execute_os_search(**search_kwargs)),
+            lambda r: build_os_search_etag(r["result"]),
         )
-        response.headers["ETag"] = etag
-        response.headers["X-Sagra-Cache"] = "hit" if from_cache else "miss"
+        result = rendered["result"]
         if fetch_all and not from_cache:
             try:
                 from services.runtime_metrics_service import record_os_search_fetch_all
@@ -1336,10 +1350,22 @@ def search_os(
                 )
             except Exception:
                 pass
+        headers = {
+            "ETag": etag,
+            "X-Sagra-Cache": "hit" if from_cache else "miss",
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
         inm = (request.headers.get("if-none-match") or "").strip()
         if fetch_all and inm and inm == etag:
             return Response(status_code=304, headers={"ETag": etag})
-        return OsSearchResponse.model_validate(result)
+        accepts_gzip = "gzip" in (request.headers.get("accept-encoding") or "").lower()
+        if accepts_gzip and rendered["gzip"] is not None:
+            headers["Content-Encoding"] = "gzip"
+            headers["Vary"] = "Accept-Encoding"
+            return Response(content=rendered["gzip"], media_type="application/json", headers=headers)
+        return Response(content=rendered["json"], media_type="application/json", headers=headers)
     except HTTPException:
         raise
     except ValueError as e:

@@ -1,0 +1,43 @@
+-- Cadastro local dos deputados da API de dados abertos da Câmara.
+-- O preenchimento dos campos da papelaria lê esta tabela e não consulta a API em tempo real.
+-- DadosJson guarda o objeto `dados` completo de GET /deputados/{id}.
+
+CREATE TABLE IF NOT EXISTS tabDeputadosCamara (
+    IdCamara INT NOT NULL,
+    Uri VARCHAR(255) NOT NULL DEFAULT '',
+    NomeCivil VARCHAR(255) NOT NULL DEFAULT '',
+    Nome VARCHAR(255) NOT NULL DEFAULT '',
+    NomeEleitoral VARCHAR(255) NOT NULL DEFAULT '',
+    NomeNormalizado VARCHAR(255) NOT NULL DEFAULT '',
+    NomeCivilNormalizado VARCHAR(255) NOT NULL DEFAULT '',
+    SiglaPartido VARCHAR(20) NOT NULL DEFAULT '',
+    UriPartido VARCHAR(255) NOT NULL DEFAULT '',
+    SiglaUf CHAR(2) NOT NULL DEFAULT '',
+    IdLegislatura INT NULL,
+    UrlFoto VARCHAR(500) NOT NULL DEFAULT '',
+    Email VARCHAR(255) NOT NULL DEFAULT '',
+    DataStatus DATE NULL,
+    GabineteNome VARCHAR(40) NOT NULL DEFAULT '',
+    GabinetePredio VARCHAR(20) NOT NULL DEFAULT '',
+    GabineteSala VARCHAR(40) NOT NULL DEFAULT '',
+    GabineteAndar VARCHAR(20) NOT NULL DEFAULT '',
+    GabineteTelefone VARCHAR(40) NOT NULL DEFAULT '',
+    GabineteEmail VARCHAR(255) NOT NULL DEFAULT '',
+    Situacao VARCHAR(80) NOT NULL DEFAULT '',
+    CondicaoEleitoral VARCHAR(80) NOT NULL DEFAULT '',
+    DescricaoStatus VARCHAR(255) NOT NULL DEFAULT '',
+    Cpf VARCHAR(14) NOT NULL DEFAULT '',
+    Sexo CHAR(1) NOT NULL DEFAULT '',
+    UrlWebsite VARCHAR(500) NOT NULL DEFAULT '',
+    RedeSocial MEDIUMTEXT NULL,
+    DataNascimento DATE NULL,
+    DataFalecimento DATE NULL,
+    UfNascimento CHAR(2) NOT NULL DEFAULT '',
+    MunicipioNascimento VARCHAR(120) NOT NULL DEFAULT '',
+    Escolaridade VARCHAR(120) NOT NULL DEFAULT '',
+    DadosJson MEDIUMTEXT NOT NULL,
+    AtualizadoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (IdCamara),
+    KEY idx_dep_camara_nome_norm (NomeNormalizado),
+    KEY idx_dep_camara_nome_civil_norm (NomeCivilNormalizado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

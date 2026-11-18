@@ -8,6 +8,7 @@ Endpoints utilizados:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -296,29 +297,334 @@ def _camara_session() -> requests.Session:
     return _http_session
 
 
-def _http_get(url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    resp = _camara_session().get(url, params=params, timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-    return resp.json()
+def _http_get(
+    url: str,
+    params: dict[str, Any] | None = None,
+    *,
+    timeout: int | None = None,
+    tentativas: int = 1,
+) -> dict[str, Any]:
+    espera = timeout or REQUEST_TIMEOUT
+    ultimo: Exception | None = None
+    for tentativa in range(tentativas):
+        try:
+            resp = _camara_session().get(url, params=params, timeout=espera)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            ultimo = exc
+            if tentativa + 1 < tentativas:
+                time.sleep(1.5 * (tentativa + 1))
+    assert ultimo is not None
+    raise ultimo
+
+
+_TAB_DEPUTADOS_CAMARA = "tabDeputadosCamara"
+_schema_tab_deputados_ok = False
+
+_UPSERT_DEPUTADO_CAMARA = """
+INSERT INTO tabDeputadosCamara (
+    IdCamara, Uri, NomeCivil, Nome, NomeEleitoral, NomeNormalizado, NomeCivilNormalizado,
+    SiglaPartido, UriPartido, SiglaUf, IdLegislatura, UrlFoto, Email, DataStatus,
+    GabineteNome, GabinetePredio, GabineteSala, GabineteAndar, GabineteTelefone, GabineteEmail,
+    Situacao, CondicaoEleitoral, DescricaoStatus, Cpf, Sexo, UrlWebsite, RedeSocial,
+    DataNascimento, DataFalecimento, UfNascimento, MunicipioNascimento, Escolaridade,
+    DadosJson, AtualizadoEm
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s,
+    %s, NOW()
+)
+ON DUPLICATE KEY UPDATE
+    Uri = VALUES(Uri),
+    NomeCivil = VALUES(NomeCivil),
+    Nome = VALUES(Nome),
+    NomeEleitoral = VALUES(NomeEleitoral),
+    NomeNormalizado = VALUES(NomeNormalizado),
+    NomeCivilNormalizado = VALUES(NomeCivilNormalizado),
+    SiglaPartido = VALUES(SiglaPartido),
+    UriPartido = VALUES(UriPartido),
+    SiglaUf = VALUES(SiglaUf),
+    IdLegislatura = VALUES(IdLegislatura),
+    UrlFoto = VALUES(UrlFoto),
+    Email = VALUES(Email),
+    DataStatus = VALUES(DataStatus),
+    GabineteNome = VALUES(GabineteNome),
+    GabinetePredio = VALUES(GabinetePredio),
+    GabineteSala = VALUES(GabineteSala),
+    GabineteAndar = VALUES(GabineteAndar),
+    GabineteTelefone = VALUES(GabineteTelefone),
+    GabineteEmail = VALUES(GabineteEmail),
+    Situacao = VALUES(Situacao),
+    CondicaoEleitoral = VALUES(CondicaoEleitoral),
+    DescricaoStatus = VALUES(DescricaoStatus),
+    Cpf = VALUES(Cpf),
+    Sexo = VALUES(Sexo),
+    UrlWebsite = VALUES(UrlWebsite),
+    RedeSocial = VALUES(RedeSocial),
+    DataNascimento = VALUES(DataNascimento),
+    DataFalecimento = VALUES(DataFalecimento),
+    UfNascimento = VALUES(UfNascimento),
+    MunicipioNascimento = VALUES(MunicipioNascimento),
+    Escolaridade = VALUES(Escolaridade),
+    DadosJson = VALUES(DadosJson),
+    AtualizadoEm = NOW()
+"""
+
+
+def ensure_tab_deputados_camara(executar=None) -> None:
+    global _schema_tab_deputados_ok
+    executar = executar or db.execute_query
+    if executar is db.execute_query and _schema_tab_deputados_ok:
+        return
+    ddl_path = (
+        __import__("pathlib").Path(__file__).resolve().parents[3]
+        / "deploy"
+        / "sql"
+        / "create_tab_deputados_camara.sql"
+    )
+    sql = ddl_path.read_text(encoding="utf-8")
+    sql = sql[sql.index("CREATE TABLE"):]
+    executar(sql)
+    if executar is db.execute_query:
+        _schema_tab_deputados_ok = True
+
+
+def _texto(value: Any, limite: int = 255) -> str:
+    return str(value or "").strip()[:limite]
+
+
+def _data_api(value: Any) -> str | None:
+    texto = str(value or "").strip()
+    if len(texto) < 10:
+        return None
+    return texto[:10]
+
+
+def colunas_de_detalhe_camara(dados: dict[str, Any]) -> tuple[Any, ...]:
+    """Converte o objeto `dados` de GET /deputados/{id} na linha da tabela."""
+    status = dados.get("ultimoStatus") or {}
+    gab = status.get("gabinete") or {}
+    nome = _texto(status.get("nome") or dados.get("nomeCivil"))
+    nome_eleitoral = _texto(status.get("nomeEleitoral") or nome)
+    nome_civil = _texto(dados.get("nomeCivil") or nome)
+    rede = dados.get("redeSocial") or []
+    if not isinstance(rede, list):
+        rede = []
+    legislatura = status.get("idLegislatura")
+    try:
+        legislatura_id = int(legislatura) if legislatura is not None else None
+    except (TypeError, ValueError):
+        legislatura_id = None
+    dep_id = int(dados["id"])
+    return (
+        dep_id,
+        _texto(dados.get("uri"), 255),
+        nome_civil,
+        nome,
+        nome_eleitoral,
+        normalizar_nome(nome_eleitoral or nome),
+        normalizar_nome(nome_civil),
+        _texto(status.get("siglaPartido"), 20),
+        _texto(status.get("uriPartido"), 255),
+        _texto(status.get("siglaUf"), 2).upper(),
+        legislatura_id,
+        _texto(status.get("urlFoto"), 500),
+        _texto(status.get("email") or gab.get("email"), 255),
+        _data_api(status.get("data")),
+        _texto(gab.get("nome"), 40),
+        _texto(gab.get("predio"), 20),
+        _texto(gab.get("sala"), 40),
+        _texto(gab.get("andar"), 20),
+        _texto(gab.get("telefone"), 40),
+        _texto(gab.get("email"), 255),
+        _texto(status.get("situacao"), 80),
+        _texto(status.get("condicaoEleitoral"), 80),
+        _texto(status.get("descricaoStatus"), 255),
+        _texto(dados.get("cpf"), 14),
+        _texto(dados.get("sexo"), 1).upper(),
+        _texto(dados.get("urlWebsite"), 500),
+        json.dumps(rede, ensure_ascii=False),
+        _data_api(dados.get("dataNascimento")),
+        _data_api(dados.get("dataFalecimento")),
+        _texto(dados.get("ufNascimento"), 2).upper(),
+        _texto(dados.get("municipioNascimento"), 120),
+        _texto(dados.get("escolaridade"), 120),
+        json.dumps(dados, ensure_ascii=False),
+    )
+
+
+def _deputado_de_dados(dados: dict[str, Any]) -> DeputadoCamara:
+    status = dados.get("ultimoStatus") or {}
+    gab = status.get("gabinete") or {}
+    dep_id = int(dados["id"])
+    list_item = {
+        "id": dep_id,
+        "nome": status.get("nome") or dados.get("nomeCivil"),
+        "siglaPartido": status.get("siglaPartido"),
+        "siglaUf": status.get("siglaUf"),
+        "urlFoto": status.get("urlFoto"),
+        "email": status.get("email") or gab.get("email"),
+    }
+    return _parse_deputado(dep_id, list_item, dados)
+
+
+def _buscar_deputado_na_tabela(nome: str) -> Optional[DeputadoCamara]:
+    ensure_tab_deputados_camara()
+    rows = db.execute_query(
+        """
+        SELECT IdCamara, Nome, NomeEleitoral, NomeCivil
+        FROM tabDeputadosCamara
+        """
+    )
+    if not rows:
+        return None
+    por_id = {int(row["IdCamara"]): row for row in rows}
+    candidatos = [
+        {
+            "id": dep_id,
+            "nome": row.get("NomeEleitoral") or row.get("Nome") or "",
+        }
+        for dep_id, row in por_id.items()
+    ]
+    escolhido = _escolher_melhor_candidato(nome, candidatos, min_score=65)
+    if not escolhido:
+        civis = [
+            {"id": dep_id, "nome": row.get("NomeCivil") or ""}
+            for dep_id, row in por_id.items()
+        ]
+        escolhido = _escolher_melhor_candidato(nome, civis, min_score=65)
+    if not escolhido:
+        return None
+    detalhe = db.execute_query(
+        "SELECT DadosJson FROM tabDeputadosCamara WHERE IdCamara = %s LIMIT 1",
+        (int(escolhido["id"]),),
+    )
+    if not detalhe:
+        return None
+    try:
+        dados = json.loads(detalhe[0].get("DadosJson") or "")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(dados, dict) or not dados.get("id"):
+        return None
+    return _deputado_de_dados(dados)
+
+
+def _buscar_deputado_na_tabela_por_id(deputado_id: int) -> Optional[DeputadoCamara]:
+    ensure_tab_deputados_camara()
+    rows = db.execute_query(
+        "SELECT DadosJson FROM tabDeputadosCamara WHERE IdCamara = %s LIMIT 1",
+        (deputado_id,),
+    )
+    if not rows:
+        return None
+    try:
+        dados = json.loads(rows[0].get("DadosJson") or "")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(dados, dict) or not dados.get("id"):
+        return None
+    return _deputado_de_dados(dados)
+
+
+def baixar_deputados_camara(
+    lista: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Baixa o detalhe completo de cada deputado da lista informada."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if lista is None:
+        lista = listar_deputados_paginado(itens=100)
+    ids = [int(item["id"]) for item in lista]
+    detalhes: list[dict[str, Any]] = []
+    falhas = 0
+
+    def baixar_um(dep_id: int) -> dict[str, Any] | None:
+        session = requests.Session()
+        session.trust_env = False
+        session.headers.update({"Accept": "application/json", "User-Agent": USER_AGENT})
+        session.proxies = {}
+        ultimo: Exception | None = None
+        for tentativa in range(3):
+            try:
+                resp = session.get(f"{DEPUTADOS_URL}/{dep_id}", timeout=30)
+                resp.raise_for_status()
+                dados = (resp.json() or {}).get("dados") or {}
+                if dados.get("id"):
+                    return dados
+            except Exception as exc:
+                ultimo = exc
+                time.sleep(0.4 * (tentativa + 1))
+        logger.warning("Detalhe do deputado %s não baixado: %s", dep_id, ultimo)
+        return None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futuros = [pool.submit(baixar_um, dep_id) for dep_id in ids]
+        for indice, futuro in enumerate(as_completed(futuros), start=1):
+            dados = futuro.result()
+            if dados:
+                detalhes.append(dados)
+            else:
+                falhas += 1
+            if indice % 50 == 0:
+                logger.info("API Câmara: %s/%s detalhes", indice, len(ids))
+    if falhas:
+        logger.warning("API Câmara: %s detalhes não gravados", falhas)
+    return detalhes
+
+
+def gravar_deputados_camara(
+    detalhes: list[dict[str, Any]],
+    *,
+    executar=None,
+    ids_em_exercicio: set[int] | None = None,
+) -> int:
+    """Grava o lote. Remove quem saiu da lista atual quando ela veio completa."""
+    executar = executar or db.execute_query
+    ensure_tab_deputados_camara(executar)
+    for dados in detalhes:
+        executar(_UPSERT_DEPUTADO_CAMARA, colunas_de_detalhe_camara(dados))
+    if ids_em_exercicio:
+        manter = tuple(sorted(ids_em_exercicio))
+        marcadores = ", ".join(["%s"] * len(manter))
+        executar(
+            f"DELETE FROM tabDeputadosCamara WHERE IdCamara NOT IN ({marcadores})",
+            manter,
+        )
+    return len(detalhes)
+
+
+def sincronizar_deputados_camara() -> dict[str, int]:
+    """Consulta a API e substitui o conteúdo local pelo cadastro atual."""
+    lista = listar_deputados_paginado(itens=100)
+    if not lista:
+        raise RuntimeError("A API da Câmara não devolveu deputados.")
+    ids = {int(item["id"]) for item in lista}
+    detalhes = baixar_deputados_camara(lista)
+    if len(detalhes) < len(lista):
+        logger.warning(
+            "Sincronização parcial: %s detalhes de %s deputados. Quem já estava na tabela e falhou é mantido.",
+            len(detalhes),
+            len(lista),
+        )
+        ids_remover = None
+    else:
+        ids_remover = ids
+    gravados = gravar_deputados_camara(detalhes, ids_em_exercicio=ids_remover)
+    return {"listados": len(lista), "gravados": gravados}
 
 
 def obter_deputado_por_id(deputado_id: int) -> Optional[DeputadoCamara]:
     if not deputado_id or deputado_id < 1:
         return None
     try:
-        payload = _http_get(f"{DEPUTADOS_URL}/{deputado_id}")
-        detail = payload.get("dados") or {}
-        list_item = {
-            "id": deputado_id,
-            "nome": detail.get("nomeCivil") or (detail.get("ultimoStatus") or {}).get("nome"),
-            "siglaPartido": (detail.get("ultimoStatus") or {}).get("siglaPartido"),
-            "siglaUf": (detail.get("ultimoStatus") or {}).get("siglaUf"),
-            "urlFoto": (detail.get("ultimoStatus") or {}).get("urlFoto"),
-            "email": (detail.get("ultimoStatus") or {}).get("email"),
-        }
-        return _parse_deputado(deputado_id, list_item, detail)
+        return _buscar_deputado_na_tabela_por_id(deputado_id)
     except Exception as exc:
-        logger.error("Erro ao obter deputado id=%s: %s", deputado_id, exc)
+        logger.error("Erro ao obter deputado id=%s na tabela local: %s", deputado_id, exc)
         return None
 
 
@@ -340,7 +646,7 @@ def listar_deputados_paginado(
     while True:
         params["pagina"] = pagina
         try:
-            payload = _http_get(DEPUTADOS_URL, params)
+            payload = _http_get(DEPUTADOS_URL, params, timeout=45, tentativas=3)
         except Exception as exc:
             logger.error("Erro listagem deputados (página %s): %s", pagina, exc)
             if pagina == 1 and not resultados:
@@ -498,8 +804,18 @@ def buscar_deputado_por_nome(
     cache MySQL — fresco, incompleto ou expirado — e **não** chama a API Câmara.
     """
     nome = (nome or "").strip()
+    if local_only:
+        logger.debug("Busca de deputado '%s' apenas na base local", nome)
     if len(nome) < 3:
         return None
+
+    try:
+        da_tabela = _buscar_deputado_na_tabela(nome)
+    except Exception as exc:
+        logger.warning("Tabela de deputados da Câmara indisponível para '%s': %s", nome, exc)
+        da_tabela = None
+    if da_tabela:
+        return da_tabela
 
     ensure_deputados_cache_email_columns()
     cached = _ler_cache_deputado(nome)
@@ -507,30 +823,11 @@ def buscar_deputado_por_nome(
         logger.debug("Deputado '%s' obtido do cache local", nome)
         return cached
 
-    if not local_only:
-        try:
-            dep = _buscar_deputado_via_api(nome)
-            if dep:
-                _gravar_cache(dep)
-                return dep
-        except Exception as exc:
-            logger.warning("API Câmara indisponível para '%s': %s", nome, exc)
-
     if cached:
-        logger.debug(
-            "Deputado '%s' obtido do cache local (incompleto%s)",
-            nome,
-            ", local_only" if local_only else "",
-        )
         return cached
 
     stale = _ler_cache_deputado(nome, ignore_freshness=True)
     if stale:
-        logger.debug(
-            "Deputado '%s' obtido do cache local (expirado%s)",
-            nome,
-            ", local_only" if local_only else "",
-        )
         return stale
 
     return None

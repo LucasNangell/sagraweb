@@ -145,6 +145,7 @@ class TestBuscarDeputadoPorNomeCache:
         incompleto.partido = ""
         incompleto.uf = ""
         monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_buscar_deputado_na_tabela", lambda nome: None)
         monkeypatch.setattr(svc, "_ler_cache_deputado", lambda nome, ignore_freshness=False: incompleto)
 
         api_dep = MagicMock()
@@ -158,9 +159,9 @@ class TestBuscarDeputadoPorNomeCache:
 
         result = svc.buscar_deputado_por_nome("Maria Silva")
 
-        api_mock.assert_called_once_with("Maria Silva")
-        gravar.assert_called_once_with(api_dep)
-        assert result is api_dep
+        api_mock.assert_not_called()
+        gravar.assert_not_called()
+        assert result is incompleto
 
     def test_cache_completo_nao_consulta_api(self, monkeypatch):
         from services import deputados_camara_service as svc
@@ -170,6 +171,7 @@ class TestBuscarDeputadoPorNomeCache:
         completo.partido = "PSB"
         completo.uf = "SP"
         monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_buscar_deputado_na_tabela", lambda nome: None)
         monkeypatch.setattr(svc, "_ler_cache_deputado", lambda nome, ignore_freshness=False: completo)
         api_mock = MagicMock()
         monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
@@ -187,6 +189,7 @@ class TestBuscarDeputadoPorNomeCache:
         incompleto.partido = "PSB"
         incompleto.uf = "SP"
         monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_buscar_deputado_na_tabela", lambda nome: None)
         monkeypatch.setattr(
             svc,
             "_ler_cache_deputado",
@@ -214,6 +217,7 @@ class TestBuscarDeputadoPorNomeCache:
             return None
 
         monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_buscar_deputado_na_tabela", lambda nome: None)
         monkeypatch.setattr(svc, "_ler_cache_deputado", _ler)
         api_mock = MagicMock()
         monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
@@ -285,6 +289,7 @@ class TestObterEmailsDeputado:
 
         monkeypatch.setattr("services.deputados_local_service.buscar_emails_local", lambda nome: None)
         monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_buscar_deputado_na_tabela", lambda nome: None)
         monkeypatch.setattr(
             svc,
             "_ler_cache_row",
@@ -495,4 +500,50 @@ class TestListaDeputadosCache:
         result = svc.listar_todos_deputados(force_refresh=True)
         assert result == []
         assert svc._lista_cache is None
+
+
+class TestColunasDeputadoCamara:
+    def test_guarda_os_campos_do_detalhe(self):
+        from services.deputados_camara_service import colunas_de_detalhe_camara
+
+        dados = {
+            "id": 204379,
+            "uri": "https://dadosabertos.camara.leg.br/api/v2/deputados/204379",
+            "nomeCivil": "ACÁCIO DA SILVA FAVACHO NETO",
+            "ultimoStatus": {
+                "nome": "Acácio Favacho",
+                "siglaPartido": "MDB",
+                "siglaUf": "AP",
+                "idLegislatura": 57,
+                "urlFoto": "https://www.camara.leg.br/foto.jpg",
+                "email": None,
+                "data": "2023-02-01",
+                "nomeEleitoral": "Acácio Favacho",
+                "gabinete": {
+                    "nome": "414",
+                    "predio": "4",
+                    "sala": "414",
+                    "andar": "4",
+                    "telefone": "3215-5414",
+                    "email": "dep.acaciofavacho@camara.leg.br",
+                },
+                "situacao": "Exercício",
+                "condicaoEleitoral": "Titular",
+            },
+            "sexo": "M",
+            "redeSocial": ["https://twitter.com/acaciofavacho"],
+            "dataNascimento": "1983-09-28",
+            "ufNascimento": "AP",
+            "municipioNascimento": "Macapá",
+            "escolaridade": "Superior",
+        }
+        colunas = colunas_de_detalhe_camara(dados)
+        assert colunas[0] == 204379
+        assert colunas[4] == "Acácio Favacho"
+        assert colunas[7] == "MDB"
+        assert colunas[9] == "AP"
+        assert colunas[19] == "dep.acaciofavacho@camara.leg.br"
+        assert colunas[24] == "M"
+        assert "twitter.com/acaciofavacho" in colunas[26]
+        assert "nomeCivil" in colunas[32]
 

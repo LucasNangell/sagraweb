@@ -16,6 +16,12 @@ _SEARCH_INDEXES = (
         "(NroProtocoloLink, AnoProtocoloLink, UltimoStatus, `Data`, CodStatus)",
     ),
     (
+        # Pré-filtro da fila PCP por setor (GET /api/pcp/queue).
+        "idx_andamento_setor_ultimo",
+        "tabAndamento",
+        "(SetorLink(64), UltimoStatus, NroProtocoloLink, AnoProtocoloLink)",
+    ),
+    (
         "idx_protocolos_search_sort",
         "tabProtocolos",
         "(EntregData, AnoProtocolo, NroProtocolo)",

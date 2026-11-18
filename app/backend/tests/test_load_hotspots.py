@@ -222,3 +222,81 @@ class TestSyncAndamentosCacheDiff:
             ["12", 3, 2026, "OS_Atual"],
         ]
         conn.commit.assert_called_once()
+
+
+class TestPcpQueueCache:
+    def _client(self, monkeypatch, calls):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from routers import pcp_routes
+
+        monkeypatch.setattr(pcp_routes, "ensure_pcp_table", lambda: None)
+
+        def fake_build(setor, setor_key, painel):
+            calls.append((setor_key, painel))
+            return {"setor": setor_key, "items": [{"n": len(calls)}]}
+
+        monkeypatch.setattr(pcp_routes, "_build_pcp_queue_payload", fake_build)
+        app = FastAPI()
+        app.include_router(pcp_routes.router, prefix="/api")
+        return TestClient(app), pcp_routes
+
+    def test_cache_separa_painel_e_reaproveita(self, monkeypatch):
+        calls = []
+        client, _ = self._client(monkeypatch, calls)
+        r1 = client.get("/api/pcp/queue", params={"setor": "SEFOC", "painel": "true"})
+        r2 = client.get("/api/pcp/queue", params={"setor": "SEFOC", "painel": "true"})
+        r3 = client.get("/api/pcp/queue", params={"setor": "SEFOC"})
+        assert r1.headers["X-Sagra-Cache"] == "miss"
+        assert r2.headers["X-Sagra-Cache"] == "hit"
+        assert r3.headers["X-Sagra-Cache"] == "miss"
+        assert calls == [("SEFOC", True), ("SEFOC", False)]
+
+    def test_invalidacao_por_setor_e_broadcast(self, monkeypatch):
+        calls = []
+        client, pcp_routes = self._client(monkeypatch, calls)
+        client.get("/api/pcp/queue", params={"setor": "SEFOC"})
+        client.get("/api/pcp/queue", params={"setor": "SECOG"})
+        pcp_routes.invalidate_pcp_queue_cache("SEFOC")
+        assert client.get("/api/pcp/queue", params={"setor": "SECOG"}).headers["X-Sagra-Cache"] == "hit"
+        assert client.get("/api/pcp/queue", params={"setor": "SEFOC"}).headers["X-Sagra-Cache"] == "miss"
+        cache.bump_os_search_cache_version("ws")
+        assert client.get("/api/pcp/queue", params={"setor": "SECOG"}).headers["X-Sagra-Cache"] == "miss"
+
+    def test_ttl_zero_desliga_cache(self, monkeypatch):
+        monkeypatch.setenv("SAGRA_PCP_QUEUE_CACHE_SEC", "0")
+        calls = []
+        client, _ = self._client(monkeypatch, calls)
+        client.get("/api/pcp/queue", params={"setor": "SEFOC"})
+        client.get("/api/pcp/queue", params={"setor": "SEFOC"})
+        assert len(calls) == 2
+
+    def test_query_tem_prefiltro_e_parametros_na_ordem(self, monkeypatch):
+        from routers import pcp_routes
+
+        captured = {}
+
+        def fake_exec(sql, params=None):
+            captured["sql"], captured["params"] = sql, params
+            return []
+
+        monkeypatch.setattr(pcp_routes.db, "execute_query", fake_exec)
+        import services.os_sub_os_queries as subq
+
+        monkeypatch.setattr(subq, "fetch_sub_os_queue_rows", lambda **k: [])
+        pcp_routes._build_pcp_queue_payload("Gravação", "Gravação", True)
+        sql = captured["sql"]
+        assert "AS cand" in sql and "c.SetorLink = %s" in sql
+        assert captured["params"] == ["Gravação", "SEFOC", "Gravação", "SEFOC", "Gravação", "Gravação Parcial"]
+        assert sql.count("%s") == len(captured["params"])
+
+
+def test_letreiro_claim_sem_for_update():
+    import inspect
+
+    from routers import letreiro_routes
+
+    src = inspect.getsource(letreiro_routes._claim_pending_job)
+    assert "FOR UPDATE\n" not in src.split("def op")[1]
+    assert "WHERE Id = %s AND Status = %s" in src

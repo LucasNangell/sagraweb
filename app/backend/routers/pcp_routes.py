@@ -18,14 +18,21 @@ def _pcp_queue_cache_ttl_sec() -> float:
         return 8.0
 
 
-_PCP_QUEUE_CACHE: Dict[str, tuple[float, dict]] = {}
+_PCP_CACHE_PREFIX = "pcp_queue"
 
 
 def _invalidate_pcp_queue_cache(setor: str | None = None) -> None:
-    if setor:
-        _PCP_QUEUE_CACHE.pop(setor.strip(), None)
-    else:
-        _PCP_QUEUE_CACHE.clear()
+    """Remove a fila PCP do cache compartilhado (services.os_search_cache)."""
+    from services.os_search_cache import discard
+
+    setor_key = (setor or "").strip()
+
+    def _match(key) -> bool:
+        if not (isinstance(key, tuple) and key and key[0] == _PCP_CACHE_PREFIX):
+            return False
+        return not setor_key or (len(key) > 1 and key[1] == setor_key)
+
+    discard(_match)
 
 
 def invalidate_pcp_queue_cache(setor: str | None = None) -> None:
@@ -96,13 +103,30 @@ def get_pcp_queue(
     ensure_pcp_table()
     setor_key = setor.strip()
     ttl = _pcp_queue_cache_ttl_sec()
-    if ttl > 0:
-        cached = _PCP_QUEUE_CACHE.get(setor_key)
-        if cached and (time.time() - cached[0]) < ttl:
-            response.headers["X-Sagra-Cache"] = "hit"
-            response.headers["Cache-Control"] = f"private, max-age={int(ttl)}"
-            return cached[1]
+    try:
+        if ttl <= 0:
+            return _build_pcp_queue_payload(setor, setor_key, painel)
+        from services.os_search_cache import get_or_compute
 
+        # Cache compartilhado: versão invalidada a cada broadcast WS + single-flight
+        # (painéis/TVs do mesmo setor disparavam a mesma query de ~2 s em paralelo).
+        payload, _etag, from_cache = get_or_compute(
+            (_PCP_CACHE_PREFIX, setor_key, bool(painel)),
+            lambda: _build_pcp_queue_payload(setor, setor_key, painel),
+            lambda _r: "",
+            ttl_sec=ttl,
+        )
+        response.headers["X-Sagra-Cache"] = "hit" if from_cache else "miss"
+        response.headers["Cache-Control"] = f"private, max-age={int(ttl)}"
+        return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Erro ao buscar fila PCP: %s", exc)
+        raise HTTPException(status_code=500, detail="Erro ao buscar fila do setor")
+
+
+def _build_pcp_queue_payload(setor: str, setor_key: str, painel: bool) -> dict:
     base_setor, situacoes = _resolve_setor(setor_key)
 
     situacao_filter = ""
@@ -133,6 +157,17 @@ def get_pcp_queue(
         pcp.ordem AS pcp_ordem,
         pcp.ultima_atualizacao AS pcp_ultima_atualizacao
     FROM tabProtocolos AS p
+    INNER JOIN (
+        -- Pré-filtro por índice (idx_andamento_setor_ultimo): só OS que têm algum
+        -- andamento UltimoStatus=1 no setor. Condição necessária do WHERE final,
+        -- então o resultado é o mesmo — evita o subselect correlacionado em todas as OS.
+        SELECT DISTINCT c.NroProtocoloLink AS nro, c.AnoProtocoloLink AS ano
+        FROM tabAndamento AS c
+        WHERE c.SetorLink = %s
+          AND c.UltimoStatus = 1
+          AND c.SituacaoLink NOT IN ('Entregue', 'Cancelada', 'Cancelado')
+    ) AS cand
+        ON (cand.nro = p.NroProtocolo AND cand.ano = p.AnoProtocolo)
     LEFT JOIN tabDetalhesServico AS d 
         ON (p.NroProtocolo = d.NroProtocoloLinkDet AND p.AnoProtocolo = d.AnoProtocoloLinkDet)
     LEFT JOIN tabAndamento AS a
@@ -165,47 +200,38 @@ def get_pcp_queue(
         p.AnoProtocolo DESC,
         p.NroProtocolo DESC
     """
-    try:
-        params = [setor, setor, base_setor] + situacao_params
-        main_rows = db.execute_query(query, params)
-        from services.os_sub_os_queries import (
-            dedupe_queue_rows_with_sub_os,
-            fetch_sub_os_queue_rows,
-        )
+    params = [setor, base_setor, setor, base_setor] + situacao_params
+    main_rows = db.execute_query(query, params)
+    from services.os_sub_os_queries import (
+        dedupe_queue_rows_with_sub_os,
+        fetch_sub_os_queue_rows,
+    )
 
-        sub_rows = fetch_sub_os_queue_rows(
-            base_setor=base_setor,
-            display_setor=setor_key,
-            situacoes=situacoes or None,
-        )
-        items = dedupe_queue_rows_with_sub_os(list(main_rows or []) + sub_rows)
-        if not painel:
-            try:
-                from services.pcp_prediction_service import enrich_queue_items
+    sub_rows = fetch_sub_os_queue_rows(
+        base_setor=base_setor,
+        display_setor=setor_key,
+        situacoes=situacoes or None,
+    )
+    items = dedupe_queue_rows_with_sub_os(list(main_rows or []) + sub_rows)
+    if not painel:
+        try:
+            from services.pcp_prediction_service import enrich_queue_items
 
-                items = enrich_queue_items(
-                    items,
-                    base_setor=base_setor,
-                    allowed_situacoes=situacoes or None,
-                )
-            except Exception as exc:
-                logger.warning("Previsões PCP indisponíveis para %s: %s", setor_key, exc)
+            items = enrich_queue_items(
+                items,
+                base_setor=base_setor,
+                allowed_situacoes=situacoes or None,
+            )
+        except Exception as exc:
+            logger.warning("Previsões PCP indisponíveis para %s: %s", setor_key, exc)
 
-        payload = {
-            "setor": setor_key,
-            "items": items,
-        }
-        if ttl > 0:
-            _PCP_QUEUE_CACHE[setor_key] = (time.time(), payload)
-            response.headers["X-Sagra-Cache"] = "miss"
-            response.headers["Cache-Control"] = f"private, max-age={int(ttl)}"
-        return payload
-    except Exception as exc:
-        logger.error("Erro ao buscar fila PCP: %s", exc)
-        raise HTTPException(status_code=500, detail="Erro ao buscar fila do setor")
+    return {
+        "setor": setor_key,
+        "items": items,
+    }
 
 @router.post("/pcp/queue/reorder")
-async def reorder_pcp_queue(payload: ReorderRequest):
+def reorder_pcp_queue(payload: ReorderRequest):
     ensure_pcp_table()
     setor = payload.setor.strip()
     base_setor, situacoes = _resolve_setor(setor)

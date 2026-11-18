@@ -31,8 +31,8 @@ _MAX_ENTRIES = 48
 
 _lock = threading.Lock()
 _version = 0
-# key -> (version, stored_at_monotonic, result, etag)
-_entries: "OrderedDict[Hashable, Tuple[int, float, Dict[str, Any], str]]" = OrderedDict()
+# key -> (version, stored_at_monotonic, result, etag, ttl_sec)
+_entries: "OrderedDict[Hashable, Tuple[int, float, Dict[str, Any], str, float]]" = OrderedDict()
 _key_locks: Dict[Hashable, threading.Lock] = {}
 _stats = {"hits": 0, "misses": 0, "waits": 0, "bumps": 0}
 
@@ -74,19 +74,21 @@ def _lookup(key: Hashable) -> Optional[Tuple[Dict[str, Any], str]]:
         entry = _entries.get(key)
         if entry is None:
             return None
-        version, stored_at, result, etag = entry
-        if version != _version or (now - stored_at) > _ttl_sec():
+        version, stored_at, result, etag, ttl = entry
+        if version != _version or (now - stored_at) > ttl:
             _entries.pop(key, None)
             return None
         _entries.move_to_end(key)
         return result, etag
 
 
-def _store(key: Hashable, version: int, result: Dict[str, Any], etag: str) -> None:
+def _store(
+    key: Hashable, version: int, result: Dict[str, Any], etag: str, ttl: float
+) -> None:
     with _lock:
         if version != _version:
             return  # houve alteração durante o cálculo — não guardar resultado velho
-        _entries[key] = (version, time.monotonic(), result, etag)
+        _entries[key] = (version, time.monotonic(), result, etag, ttl)
         _entries.move_to_end(key)
         while len(_entries) > _MAX_ENTRIES:
             _entries.popitem(last=False)
@@ -109,10 +111,12 @@ def get_or_compute(
     key: Hashable,
     compute: Callable[[], Dict[str, Any]],
     build_etag: Callable[[Dict[str, Any]], str],
+    *,
+    ttl_sec: Optional[float] = None,
 ) -> Tuple[Dict[str, Any], str, bool]:
     """
     Retorna (result, etag, from_cache). O ``result`` devolvido é compartilhado:
-    quem chama não deve alterá-lo.
+    quem chama não deve alterá-lo. ``ttl_sec`` sobrescreve o TTL padrão desta entrada.
     """
     if not is_enabled():
         result = compute()
@@ -139,8 +143,18 @@ def get_or_compute(
             _stats["misses"] += 1
         result = compute()
         etag = build_etag(result)
-        _store(key, version, result, etag)
+        ttl = _ttl_sec() if ttl_sec is None else max(0.5, float(ttl_sec))
+        _store(key, version, result, etag, ttl)
         return result, etag, False
+
+
+def discard(match: Callable[[Hashable], bool]) -> int:
+    """Remove entradas cuja chave satisfaz ``match`` (invalidação pontual)."""
+    with _lock:
+        keys = [k for k in _entries if match(k)]
+        for k in keys:
+            _entries.pop(k, None)
+        return len(keys)
 
 
 def snapshot() -> Dict[str, Any]:

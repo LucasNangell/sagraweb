@@ -390,6 +390,9 @@ def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
     if not host_name or not sam:
         return None
 
+    # Leitura sem FOR UPDATE: a exclusividade vem do UPDATE condicional abaixo
+    # (WHERE Status = pending + rowcount == 1). O FOR UPDATE travava as linhas do host
+    # a cada poll (~13/s em produção) e gerava esperas de lock no InnoDB.
     def op(cursor):
         cursor.execute(
             """
@@ -397,7 +400,6 @@ def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
             FROM tabLetreiroComandoJob
             WHERE Status = %s AND HostName = %s
             ORDER BY Id ASC
-            FOR UPDATE
             """,
             (JOB_STATUS_PENDING, host_name),
         )

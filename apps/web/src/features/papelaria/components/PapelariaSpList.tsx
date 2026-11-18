@@ -223,7 +223,7 @@ export function PapelariaSpList({
             Nenhuma SP no SEFOC com as situações configuradas.
           </p>
         ) : (
-          <table className="w-full min-w-[30rem] border-collapse text-[11px]">
+          <table className="w-full table-fixed border-collapse text-[11px]">
             <thead className="sticky top-0 bg-slate-100 text-left">
               <tr>
                 <th className="px-2 py-1.5 font-semibold">Nr SP</th>
@@ -366,7 +366,7 @@ export function PapelariaSpList({
                     </tr>
                     {isSelected ? (
                       <tr className="border-b border-neutral-100 bg-secondary-blue/5">
-                        <td colSpan={7} className="p-0">
+                        <td colSpan={7} className="w-full max-w-full p-0">
                           <PapelariaSpTramitacao row={row} />
                         </td>
                       </tr>

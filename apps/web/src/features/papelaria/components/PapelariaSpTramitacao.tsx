@@ -67,7 +67,7 @@ export function PapelariaSpTramitacao({ row }: Props) {
 
   return (
     <div
-      className="border-t border-neutral-200 bg-slate-50/70 px-2 py-2"
+      className="min-w-0 max-w-full border-t border-neutral-200 bg-slate-50/70 px-2 py-2"
       data-testid={`papelaria-sp-tramitacao-${row.nr_os}`}
       onClick={(event) => event.stopPropagation()}
     >
@@ -80,7 +80,7 @@ export function PapelariaSpTramitacao({ row }: Props) {
           Nenhum andamento.
         </p>
       ) : (
-        <ul className="mb-2 overflow-hidden rounded border border-sagra-border bg-white">
+        <ul className="mb-2 min-w-0 overflow-hidden rounded border border-sagra-border bg-white">
           {rows.map((item) => {
             const active = selectedHistory?.CodStatus === item.CodStatus;
             const ponto = formatUsuarioPontoLabel(item.Ponto, item.usuario_nome);
@@ -89,24 +89,23 @@ export function PapelariaSpTramitacao({ row }: Props) {
                 <button
                   type="button"
                   className={cn(
-                    "flex w-full flex-col gap-0.5 border-b border-neutral-100 px-2 py-1.5 text-left last:border-b-0",
+                    "block w-full min-w-0 border-b border-neutral-100 px-2 py-1.5 text-left text-[11px] leading-snug last:border-b-0",
                     active ? "bg-[var(--highlight-yellow)]" : "hover:bg-slate-50",
                   )}
                   data-testid={`papelaria-sp-andamento-${row.nr_os}-${item.CodStatus}`}
                   onClick={() => setSelectedHistory(item)}
                 >
-                  <span className="truncate text-[11px] font-semibold text-neutral-800">
+                  <span className="font-semibold text-neutral-800">
                     {item.SituacaoLink ?? "—"}
                   </span>
-                  <span className="truncate text-[10px] text-neutral-600">
-                    {item.SetorLink ?? "—"}
-                    <span className="px-1 text-neutral-300">·</span>
-                    <span className="tabular-nums">
-                      {formatDateBr(item.Data) || "—"}
-                    </span>
-                    <span className="px-1 text-neutral-300">·</span>
-                    {ponto || "—"}
+                  <span className="text-neutral-300"> · </span>
+                  <span className="text-neutral-700">{item.SetorLink ?? "—"}</span>
+                  <span className="text-neutral-300"> · </span>
+                  <span className="tabular-nums text-neutral-700">
+                    {formatDateBr(item.Data) || "—"}
                   </span>
+                  <span className="text-neutral-300"> · </span>
+                  <span className="text-neutral-700">{ponto || "—"}</span>
                 </button>
               </li>
             );

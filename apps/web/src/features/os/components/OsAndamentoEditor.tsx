@@ -743,7 +743,7 @@ export function OsAndamentoEditor({
       <div
         className={cn(
           "flex min-w-0 flex-col",
-          inline ? "gap-2 flex-col-reverse" : "min-h-0 flex-1 overflow-hidden p-2",
+          inline ? "w-full min-w-0 max-w-full gap-2 flex-col-reverse" : "min-h-0 flex-1 overflow-hidden p-2",
         )}
       >
         {showForm ? (
@@ -926,7 +926,7 @@ export function OsAndamentoEditor({
 
         <div
           className={cn(
-            "flex shrink-0 items-center justify-between gap-2",
+            "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-between gap-2",
             inline ? "" : "border-t border-sagra-border/60 pt-2",
           )}
         >
@@ -947,7 +947,7 @@ export function OsAndamentoEditor({
             <span className="size-8" aria-hidden />
           )}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-2">
             {!editing ? extraActions : null}
             {!editing ? (
               <>

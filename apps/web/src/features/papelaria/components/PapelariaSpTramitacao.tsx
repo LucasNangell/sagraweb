@@ -89,23 +89,24 @@ export function PapelariaSpTramitacao({ row }: Props) {
                 <button
                   type="button"
                   className={cn(
-                    "block w-full min-w-0 border-b border-neutral-100 px-2 py-1.5 text-left text-[11px] leading-snug last:border-b-0",
+                    "grid w-full min-w-0 grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_5.25rem_minmax(0,1.2fr)] items-start gap-x-2 border-b border-neutral-100 px-2 py-1.5 text-left text-[11px] leading-snug last:border-b-0",
                     active ? "bg-[var(--highlight-yellow)]" : "hover:bg-slate-50",
                   )}
                   data-testid={`papelaria-sp-andamento-${row.nr_os}-${item.CodStatus}`}
                   onClick={() => setSelectedHistory(item)}
                 >
-                  <span className="font-semibold text-neutral-800">
+                  <span className="min-w-0 break-words font-semibold text-neutral-800">
                     {item.SituacaoLink ?? "—"}
                   </span>
-                  <span className="text-neutral-300"> · </span>
-                  <span className="text-neutral-700">{item.SetorLink ?? "—"}</span>
-                  <span className="text-neutral-300"> · </span>
+                  <span className="min-w-0 break-words text-neutral-700">
+                    {item.SetorLink ?? "—"}
+                  </span>
                   <span className="tabular-nums text-neutral-700">
                     {formatDateBr(item.Data) || "—"}
                   </span>
-                  <span className="text-neutral-300"> · </span>
-                  <span className="text-neutral-700">{ponto || "—"}</span>
+                  <span className="min-w-0 break-words text-neutral-700">
+                    {ponto || "—"}
+                  </span>
                 </button>
               </li>
             );

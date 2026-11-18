@@ -10,7 +10,6 @@ import { queryKeys } from "@/api/query-keys";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { defaultOsFilters } from "@/features/os/osFiltersStore";
 import type { OsSearchFilters, OsSearchRow } from "@/features/os/types";
-import { formatDateBr, formatPonto } from "@/lib/format";
 import { sameOsRow } from "../papelariaSelection";
 import {
   papelariaSpStatusKey,
@@ -27,6 +26,8 @@ import { PapelariaSpTramitacao } from "./PapelariaSpTramitacao";
 
 type Props = {
   selected: OsSearchRow | null;
+  /** Lista de andamentos aberta no item selecionado. */
+  expanded?: boolean;
   onSelect: (row: OsSearchRow) => void;
   provaOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
   imposicaoOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
@@ -50,16 +51,6 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
     sortDir: "asc",
     sorts: [{ column: "nr_os", dir: "asc" }],
   };
-}
-
-function formatAndamentoAtual(row: OsSearchRow): string {
-  const ponto = formatPonto(row.andamento_ponto);
-  return [
-    row.situacao?.trim() || "—",
-    row.setor?.trim() || "—",
-    formatDateBr(row.last_update) || "—",
-    ponto || "—",
-  ].join(" · ");
 }
 
 function formatTiragem(value: string | number | null | undefined): string {
@@ -104,6 +95,7 @@ function PipelineIcon({
 
 export function PapelariaSpList({
   selected,
+  expanded = true,
   onSelect,
   provaOverlayBySp = {},
   imposicaoOverlayBySp = {},
@@ -226,10 +218,15 @@ export function PapelariaSpList({
           <table className="w-full table-fixed border-collapse text-[11px]">
             <thead className="sticky top-0 bg-slate-100 text-left">
               <tr>
-                <th className="px-2 py-1.5 font-semibold">Nr SP</th>
-                <th className="px-2 py-1.5 font-semibold">Ano</th>
+                <th className="w-[calc(4ch+0.85rem)] whitespace-nowrap px-1 py-1.5 text-center font-semibold">
+                  Nr SP
+                </th>
+                <th className="w-[calc(4ch+0.85rem)] whitespace-nowrap px-1 py-1.5 text-center font-semibold">
+                  Ano
+                </th>
                 <th className="px-2 py-1.5 font-semibold">Produto</th>
                 <th className="px-2 py-1.5 font-semibold">Solicitante</th>
+                <th className="px-2 py-1.5 font-semibold">Situação</th>
                 <th className="px-2 py-1.5 text-right font-semibold">Tiragem</th>
                 <th className="w-14 px-1 py-1.5 text-center font-semibold">
                   Prova
@@ -242,6 +239,7 @@ export function PapelariaSpList({
             <tbody>
               {rows.map((row) => {
                 const isSelected = sameOsRow(selected, row);
+                const isExpanded = isSelected && expanded;
                 const key = papelariaSpStatusKey(row.ano, row.nr_os);
                 const resumo = statusBySp[key];
                 const hasOverlay =
@@ -275,7 +273,7 @@ export function PapelariaSpList({
                   <Fragment key={`${row.ano}-${row.nr_os}`}>
                     <tr
                       className={cn(
-                        "cursor-pointer transition",
+                        "cursor-pointer border-b border-neutral-100 transition",
                         isSelected
                           ? "bg-secondary-blue/10"
                           : "hover:bg-slate-50",
@@ -284,21 +282,30 @@ export function PapelariaSpList({
                       aria-selected={isSelected}
                       data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
                     >
-                    <td className="px-2 py-1.5 font-mono font-semibold text-secondary-blue">
+                    <td className="w-[calc(4ch+0.85rem)] px-1 py-1.5 text-center font-mono font-semibold tabular-nums text-secondary-blue">
                       {row.nr_os}
                     </td>
-                    <td className="px-2 py-1.5">{row.ano}</td>
+                    <td className="w-[calc(4ch+0.85rem)] px-1 py-1.5 text-center tabular-nums">
+                      {row.ano}
+                    </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5"
+                      className="min-w-0 truncate px-2 py-1.5"
                       title={row.produto ?? undefined}
                     >
                       {row.produto ?? "—"}
                     </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5"
+                      className="min-w-0 truncate px-2 py-1.5"
                       title={row.solicitante ?? undefined}
                     >
                       {row.solicitante ?? "—"}
+                    </td>
+                    <td
+                      className="min-w-0 truncate px-2 py-1.5"
+                      title={row.situacao ?? undefined}
+                      data-testid={`papelaria-sp-situacao-${row.nr_os}`}
+                    >
+                      {row.situacao?.trim() || "—"}
                     </td>
                     <td
                       className="whitespace-nowrap px-2 py-1.5 text-right font-mono tabular-nums"
@@ -349,24 +356,9 @@ export function PapelariaSpList({
                       ) : null}
                     </td>
                     </tr>
-                    <tr
-                      className={cn(
-                        "cursor-pointer border-b border-neutral-100",
-                        isSelected ? "bg-secondary-blue/10" : "hover:bg-slate-50",
-                      )}
-                      onClick={() => onSelect(row)}
-                    >
-                      <td
-                        colSpan={7}
-                        className="px-2 pb-1.5 text-[10px] text-neutral-600"
-                        data-testid={`papelaria-sp-andamento-atual-${row.nr_os}`}
-                      >
-                        {formatAndamentoAtual(row)}
-                      </td>
-                    </tr>
-                    {isSelected ? (
+                    {isExpanded ? (
                       <tr className="border-b border-neutral-100 bg-secondary-blue/5">
-                        <td colSpan={7} className="w-full max-w-full p-0">
+                        <td colSpan={8} className="w-full max-w-full p-0">
                           <PapelariaSpTramitacao row={row} />
                         </td>
                       </tr>

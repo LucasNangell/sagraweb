@@ -100,21 +100,27 @@ describe("PapelariaSpList coluna Tiragem", () => {
     renderList();
     const headers = screen.getAllByRole("columnheader").map((el) => el.textContent);
     const solicitante = headers.indexOf("Solicitante");
+    const situacao = headers.indexOf("Situação");
     const tiragem = headers.indexOf("Tiragem");
     const prova = headers.indexOf("Prova");
     expect(solicitante).toBeGreaterThanOrEqual(0);
-    expect(tiragem).toBe(solicitante + 1);
+    expect(situacao).toBe(solicitante + 1);
+    expect(tiragem).toBe(situacao + 1);
     expect(prova).toBe(tiragem + 1);
     expect(screen.getByTestId("papelaria-sp-tiragem-6100")).toHaveTextContent(
       "1.500",
+    );
+    expect(screen.getByTestId("papelaria-sp-situacao-6100")).toHaveTextContent(
+      "Em execução",
     );
   });
 
   it("mostra o andamento atual e expande o último com observação e botões", () => {
     renderList(searchRow);
-    expect(screen.getByTestId("papelaria-sp-andamento-atual-6100")).toHaveTextContent(
-      "Em execução · SEFOC · 18/11/2026 · 918.713",
+    expect(screen.getByTestId("papelaria-sp-situacao-6100")).toHaveTextContent(
+      "Em execução",
     );
+    expect(screen.queryByTestId("papelaria-sp-andamento-atual-6100")).not.toBeInTheDocument();
     expect(screen.getByTestId("papelaria-sp-obs-6100")).toHaveTextContent(
       "Aguardando prova",
     );

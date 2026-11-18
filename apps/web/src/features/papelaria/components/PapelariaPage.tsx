@@ -29,6 +29,7 @@ type TrackedLaneJob = {
 export function PapelariaPage() {
   /** Só preenche o formulário/visualização após clique na lista de SPs. */
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
+  const [listExpanded, setListExpanded] = useState(false);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [provaOverlayBySp, setProvaOverlayBySp] = useState<
@@ -66,12 +67,14 @@ export function PapelariaPage() {
     setMobilePane("trabalho");
   };
 
-  /** Quando a lista traz a linha completa, sincroniza metadados da seleção stub. */
+  /** Quando a lista traz a linha completa, sincroniza metadados e alterna a expansão. */
   const handleSelectFromList = (row: OsSearchRow) => {
     if (sameOsRow(selected, row) && selected) {
       setSelected({ ...selected, ...row });
+      setListExpanded((open) => !open);
       return;
     }
+    setListExpanded(true);
     handleSelect(row);
   };
 
@@ -267,6 +270,7 @@ export function PapelariaPage() {
         >
           <PapelariaSpList
             selected={selected}
+            expanded={listExpanded}
             onSelect={handleSelectFromList}
             provaOverlayBySp={provaOverlayBySp}
             imposicaoOverlayBySp={imposicaoOverlayBySp}

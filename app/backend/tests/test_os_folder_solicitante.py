@@ -120,6 +120,17 @@ def test_compute_os_folder_name_com_titulo():
     )
 
 
+def test_compute_os_folder_name_sp_ignora_titulo():
+    assert (
+        compute_os_folder_name(5024, "SECOM", "Cartão de Visita", "Título X")
+        == "05024-Secom-Cartaodevisita"
+    )
+    assert (
+        compute_os_folder_name(5000, "SECOM", "Cartão de Visita", "Título X")
+        == "05000-Secom-Cartaodevisita"
+    )
+
+
 def test_compute_os_folder_name_titulo_vazio_sem_sufixo():
     assert (
         compute_os_folder_name(123, "SECOM", "Cartão de Visita", "")

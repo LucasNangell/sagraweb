@@ -69,6 +69,9 @@ export function OsFolderCreatePanel({
     return null;
   }
 
+  const osNumber = Number(plan.folder_name.slice(0, 5));
+  const isSp = Number.isFinite(osNumber) && osNumber >= 5000;
+
   if (plan.exists) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-12">
@@ -105,9 +108,13 @@ export function OsFolderCreatePanel({
             </p>
             <p className="mt-1 text-xs text-slate-500">
               Padrão:{" "}
-              <span className="font-mono">NNNNN-Solicitante-Produto_Titul</span>{" "}
+              <span className="font-mono">
+                {isSp
+                  ? "NNNNN-Solicitante-Produto"
+                  : "NNNNN-Solicitante-Produto_Titul"}
+              </span>{" "}
               (solicitante: {plan.solicitante}; produto: {plan.produto}
-              {plan.titulo ? `; título: ${plan.titulo}` : null})
+              {plan.titulo && !isSp ? `; título: ${plan.titulo}` : null})
             </p>
           </div>
 

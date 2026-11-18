@@ -638,11 +638,13 @@ def open_folder():
                 except:
                     ano_str = str(datetime.now().year)
 
-                # Montar nome da pasta: 00000-Solicitante-Produto_Titul
+                # Montar nome da pasta: 00000-Solicitante-Produto
+                # SP (OS >= 5000) não recebe o sufixo de título.
                 folder_name = f"{nr_os_norm}-{solicitante_norm}-{produto_norm}"
-                titulo_snip = normalize_text_custom(titulo or "", is_product=False)[:5]
-                if titulo_snip:
-                    folder_name = f"{folder_name}_{titulo_snip}"
+                if nr_os_val < 5000:
+                    titulo_snip = normalize_text_custom(titulo or "", is_product=False)[:5]
+                    if titulo_snip:
+                        folder_name = f"{folder_name}_{titulo_snip}"
                 
                 # Definir caminho base (Normal vs Papelaria)
                 # Regra: >= 5000 é Papelaria

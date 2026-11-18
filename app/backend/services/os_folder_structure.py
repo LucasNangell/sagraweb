@@ -58,6 +58,9 @@ def compute_os_folder_name(
     produto_norm = normalize_text_custom(produto, is_product=True)
     base = f"{num}-{solicitante_norm}-{produto_norm}".replace("--", "-")
     base = re.sub(r"-{2,}", "-", base).strip("-")
+    # SP (papelaria, OS >= 5000): NNNNN-Solicitante-Produto, sem sufixo de título.
+    if int(nr_os) >= 5000:
+        return base
     titulo_snip = normalize_text_custom(titulo or "")[:5]
     if titulo_snip:
         return f"{base}_{titulo_snip}"

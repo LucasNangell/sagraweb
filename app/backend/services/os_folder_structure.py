@@ -116,9 +116,11 @@ def ensure_os_folder_on_network(
     base_path = get_deputados_base_path(ano, nr_os)
 
     from routers.os_routes import _get_os_folder_path
+    from services.os_folder_path_service import remember_os_folder_path
 
     existing = _get_os_folder_path(ano, nr_os)
     if existing and os.path.isdir(existing):
+        remember_os_folder_path(ano, nr_os, existing)
         return existing, os.path.basename(existing.rstrip("\\/"))
 
     if not os.path.exists(DFS_ROOT):
@@ -133,11 +135,13 @@ def ensure_os_folder_on_network(
             ano,
             local_test,
         )
+        remember_os_folder_path(ano, nr_os, local_test)
         return local_test, folder_name
 
     ok, path_res, err = create_folder_structure(base_path, folder_name)
     if not ok or not path_res:
         raise RuntimeError(err or "Falha ao criar pasta da OS na rede.")
+    remember_os_folder_path(ano, nr_os, path_res)
     return path_res, folder_name
 
 

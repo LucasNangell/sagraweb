@@ -633,8 +633,11 @@ def create_os_folder(ano: int, id: int):
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    from services.os_folder_path_service import remember_os_folder_path
+
     existing = _resolve_os_root_path(ano, id)
     if existing:
+        remember_os_folder_path(ano, id, existing)
         folder_name = os.path.basename(existing.rstrip("\\/"))
         return OsFolderCreateResponse(
             path=existing,
@@ -659,6 +662,7 @@ def create_os_folder(ano: int, id: int):
             detail=str(exc) or "Não foi possível criar a pasta na rede.",
         ) from exc
 
+    remember_os_folder_path(ano, id, path)
     return OsFolderCreateResponse(
         path=path,
         folder_name=folder_name,

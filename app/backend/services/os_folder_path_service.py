@@ -18,6 +18,14 @@ def clear_os_folder_path_cache() -> None:
     _path_cache.clear()
 
 
+def remember_os_folder_path(ano: int, nro: int, path: Optional[str]) -> None:
+    """Substitui o cache (inclusive negativo) pelo caminho recém-conhecido."""
+    if not path:
+        return
+    key = (int(ano), int(nro))
+    _path_cache[key] = (time.monotonic() + _CACHE_TTL_SEC, path)
+
+
 def _base_path_for_os(ano: int, nro: int) -> str:
     if nro >= 5000:
         return (

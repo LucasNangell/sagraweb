@@ -37,3 +37,23 @@ def test_resolve_os_folder_path_pode_bypass_cache(monkeypatch):
     svc.resolve_os_folder_path(2026, 5025, use_cache=False)
 
     assert calls["n"] == 2
+
+
+def test_remember_os_folder_path_substitui_cache_negativo(monkeypatch):
+    from services import os_folder_path_service as svc
+
+    svc.clear_os_folder_path_cache()
+    calls = {"n": 0}
+
+    def _uncached(ano, nro):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(svc, "_resolve_uncached", _uncached)
+
+    assert svc.resolve_os_folder_path(2026, 5026) is None
+    svc.remember_os_folder_path(2026, 5026, r"\\fake\os\2026\05026-Z")
+    found = svc.resolve_os_folder_path(2026, 5026)
+
+    assert found == r"\\fake\os\2026\05026-Z"
+    assert calls["n"] == 1

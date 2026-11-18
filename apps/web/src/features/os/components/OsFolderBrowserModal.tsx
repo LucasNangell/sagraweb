@@ -23,6 +23,7 @@ import {
 } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { formatOsLabel } from "@/lib/format";
+import { tryOpenFolderLocally } from "@/lib/sagraLocalOpener";
 import { homeTestIds } from "@/lib/testId";
 import { isGravacaoExternaFile } from "@/features/gravacao-externa/constants";
 import {
@@ -182,6 +183,10 @@ export function OsFolderBrowserModal({
     mutationFn: () => createOsFolder(ano!, id!),
     onSuccess: async (result) => {
       setCreateMessage(result.message);
+      const path = result.path?.trim() ?? "";
+      if (path) {
+        queryClient.setQueryData(queryKeys.os.path(ano!, id!), { path });
+      }
       await queryClient.invalidateQueries({
         queryKey: queryKeys.os.path(ano!, id!),
       });
@@ -191,6 +196,11 @@ export function OsFolderBrowserModal({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.os.folderPlan(ano!, id!),
       });
+      if (!path) return;
+      const opened = await tryOpenFolderLocally(path);
+      if (opened && mode === "browse") {
+        onClose();
+      }
     },
   });
 

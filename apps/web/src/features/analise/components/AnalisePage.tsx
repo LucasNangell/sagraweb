@@ -70,11 +70,12 @@ import { countProblemItems } from "../preAnaliseUtils";
 import { ANALISE_COMPONENTES } from "../types";
 import {
   appendIndicationToAnaliseHtml,
-  buildExecutionObsWithCorrecoes,
   buildPtMovementObsWithCorrecoes,
   hasIndicationInAnaliseHtml,
+  itemsForAnaliseVersion,
   parsePgsField,
   removeIndicationFromAnaliseHtml,
+  resolveAnaliseFinishDecision,
 } from "../utils";
 import { countPdfPagesInFolder } from "../pdfPageCount";
 import { AnaliseAnnotationModal } from "./AnaliseAnnotationModal";
@@ -1176,8 +1177,9 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const completeFinish = async (
     mode: "default" | "encam" | "keep_current",
   ) => {
-    const correctedItems = items.filter((i) => i.corrigidoSefoc);
-    const activeClientItems = items.filter((i) => !i.corrigidoSefoc);
+    const versionItems = itemsForAnaliseVersion(items, osVersions, versaoKey);
+    const correctedItems = versionItems.filter((i) => i.corrigidoSefoc);
+    const activeClientItems = versionItems.filter((i) => !i.corrigidoSefoc);
     const hasCorrections = correctedItems.length > 0;
     const hasUncorrectedClientItems = activeClientItems.length > 0;
     const isPtSituation = lastAnalysisStatus === "Problemas Técnicos";
@@ -1197,7 +1199,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
           versao: versionLabel,
           observacao:
             hasCorrections && hasUncorrectedClientItems
-              ? buildPtMovementObsWithCorrecoes(items, versionLabel)
+              ? buildPtMovementObsWithCorrecoes(versionItems, versionLabel)
               : undefined,
         });
         await generateAnaliseLink(ano, osId, versionLabel, ponto);
@@ -1209,7 +1211,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
           usuario: ponto,
           link: linkRes.url,
           versao: versionLabel,
-          observacao: buildPtMovementObsWithCorrecoes(items, versionLabel),
+          observacao: buildPtMovementObsWithCorrecoes(versionItems, versionLabel),
         });
       } else if (isPtSituation) {
         await registerPtvDispatch({
@@ -1248,22 +1250,21 @@ export function AnalisePage({ search }: AnalisePageProps) {
 
     flushPendingItemUpdates();
 
-    const correctedItems = items.filter((i) => i.corrigidoSefoc);
-    const allCorrected = items.length > 0 && correctedItems.length === items.length;
     const isPtSituation = lastAnalysisStatus === "Problemas Técnicos";
     const hasProblemChanges =
       analiseItemsFingerprint(items) !== itemsBaselineRef.current;
+    const decision = resolveAnaliseFinishDecision(items, osVersions, versaoKey);
 
-    if (items.length === 0) {
+    if (decision.kind === "execution_empty") {
       setObsModalMode("empty");
-      setObsText("");
+      setObsText(decision.observacao);
       setShowObsModal(true);
       return;
     }
 
-    if (allCorrected) {
+    if (decision.kind === "execution_corrected") {
       setObsModalMode("all_corrected");
-      setObsText(buildExecutionObsWithCorrecoes(items));
+      setObsText(decision.observacao);
       setShowObsModal(true);
       return;
     }
@@ -1284,9 +1285,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
     setFinishing(true);
     try {
       const versionLabel = versaoLabel || versaoKey.replace(/^v/, "v");
-      if (obsModalMode === "all_corrected") {
-        await updateAnaliseMeta(ano, osId, { versao: versionLabel, componente });
-      }
+      await updateAnaliseMeta(ano, osId, { versao: versionLabel, componente });
       await registerExecutionMovement({
         os_id: osId,
         ano,

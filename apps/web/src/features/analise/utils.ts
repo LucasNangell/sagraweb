@@ -1,6 +1,7 @@
 import { apiUrl } from "@/lib/api";
 
-import type { AnaliseSelectedItem } from "./types";
+import { itemMatchesVersion } from "./analiseItemsTree";
+import type { AnaliseSelectedItem, OsVersionItem } from "./types";
 
 /** Converte o campo Pags da OS para número inteiro (vazio → null). */
 export function parsePgsField(value: unknown): number | null {
@@ -404,6 +405,49 @@ export function buildPtMovementObsWithCorrecoes(
   return `${correcoes}\n\nEnviar ${ptv}`;
 }
 
+/** Texto padrão do andamento Em Execução, completado pelo analista no modal. */
+export const EXECUTION_OBS_DEFAULT = "Dar prosseguimento:";
+
 export function buildExecutionObsWithCorrecoes(items: AnaliseSelectedItem[]): string {
-  return `${buildCorrecoesSefocText(items)}\n\nDar prosseguimento:`;
+  return `${buildCorrecoesSefocText(items)}\n\n${EXECUTION_OBS_DEFAULT}`;
+}
+
+export type AnaliseFinishDecision =
+  | { kind: "execution_empty"; observacao: string }
+  | { kind: "execution_corrected"; observacao: string }
+  | { kind: "continue_pt" };
+
+/** Itens registrados na versão selecionada. Sem versão conhecida, devolve a lista inteira. */
+export function itemsForAnaliseVersion(
+  items: AnaliseSelectedItem[],
+  versions: OsVersionItem[],
+  versaoKey: string,
+): AnaliseSelectedItem[] {
+  const version = versions.find((entry) => `v${entry.version}` === versaoKey);
+  if (!version) return items;
+  return items.filter((item) => itemMatchesVersion(item.versaoOrigem, version));
+}
+
+/**
+ * Conclusão da análise olha só a versão atual.
+ * Sem itens, ou só com correções SEFOC, abre o modal de Em Execução.
+ * Itens de outras versões não disparam Problemas Técnicos.
+ */
+export function resolveAnaliseFinishDecision(
+  items: AnaliseSelectedItem[],
+  versions: OsVersionItem[],
+  versaoKey: string,
+): AnaliseFinishDecision {
+  const versionItems = itemsForAnaliseVersion(items, versions, versaoKey);
+  if (versionItems.length === 0) {
+    return { kind: "execution_empty", observacao: EXECUTION_OBS_DEFAULT };
+  }
+  const hasActive = versionItems.some((item) => !item.corrigidoSefoc);
+  if (!hasActive) {
+    return {
+      kind: "execution_corrected",
+      observacao: buildExecutionObsWithCorrecoes(versionItems),
+    };
+  }
+  return { kind: "continue_pt" };
 }

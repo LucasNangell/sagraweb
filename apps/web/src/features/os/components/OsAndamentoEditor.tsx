@@ -1,7 +1,7 @@
 import { cn } from "@sagra/ui";
 import { Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { queryKeys } from "@/api/query-keys";
 import { useSetoresLookup, useSituacoesLookup } from "@/api/hooks/useAuxLookups";
@@ -142,6 +142,8 @@ export type OsAndamentoEditorProps = {
   onEditingChange?: (editing: boolean) => void;
   onTourSavedChange?: (saved: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
+  /** Linha de ações (Excluir, Novo, Editar ou Salvar, Cancelar). */
+  actionsRef?: Ref<HTMLDivElement>;
 };
 
 export function OsAndamentoEditor({
@@ -156,6 +158,7 @@ export function OsAndamentoEditor({
   onEditingChange,
   onTourSavedChange,
   onSavingChange,
+  actionsRef,
 }: OsAndamentoEditorProps) {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
@@ -925,6 +928,7 @@ export function OsAndamentoEditor({
         ) : null}
 
         <div
+          ref={actionsRef}
           className={cn(
             "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-between gap-2",
             inline ? "" : "border-t border-sagra-border/60 pt-2",

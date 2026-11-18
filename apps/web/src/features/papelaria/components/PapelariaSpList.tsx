@@ -168,6 +168,9 @@ export function PapelariaSpList({
     }
     const measure = () => setHeaderOffset(node.offsetHeight);
     measure();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
@@ -205,7 +208,7 @@ export function PapelariaSpList({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-papelaria-sp-scroll="">
         {situacoes.length === 0 ? (
           <p className="p-4 text-center text-xs text-neutral-500">
             Nenhuma situação selecionada. Use a engrenagem para escolher os

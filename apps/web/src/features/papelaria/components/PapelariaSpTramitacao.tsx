@@ -10,6 +10,23 @@ type Props = {
   row: OsSearchRow;
 };
 
+function revealActionsInList(target: HTMLElement) {
+  const scroller = target.closest("[data-papelaria-sp-scroll]");
+  if (!(scroller instanceof HTMLElement) || typeof scroller.scrollBy !== "function") {
+    return;
+  }
+  const margin = 8;
+  const targetRect = target.getBoundingClientRect();
+  const scrollerRect = scroller.getBoundingClientRect();
+  const below = targetRect.bottom - (scrollerRect.bottom - margin);
+  const above = scrollerRect.top + margin - targetRect.top;
+  if (below > 1) {
+    scroller.scrollBy({ top: below, behavior: "smooth" });
+  } else if (above > 1) {
+    scroller.scrollBy({ top: -above, behavior: "smooth" });
+  }
+}
+
 export function PapelariaSpTramitacao({ row }: Props) {
   const historyQuery = useOsHistory(row.ano, row.nr_os);
   const rows = useMemo(
@@ -19,6 +36,7 @@ export function PapelariaSpTramitacao({ row }: Props) {
   const [selectedHistory, setSelectedHistory] = useState<OsHistoryRow | null>(null);
   const [editing, setEditing] = useState(false);
   const lastAutoKeyRef = useRef<string | null>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSelectedHistory(null);
@@ -64,6 +82,19 @@ export function PapelariaSpTramitacao({ row }: Props) {
   }, [rows, selectedHistory]);
 
   const loading = historyQuery.isPending && rows.length === 0;
+
+  useEffect(() => {
+    const el = actionsRef.current;
+    if (!el) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => revealActionsInList(el));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [loading, rows.length, editing]);
 
   return (
     <div
@@ -128,6 +159,7 @@ export function PapelariaSpTramitacao({ row }: Props) {
         historyRow={selectedHistory}
         onHistoryRowChange={setSelectedHistory}
         onEditingChange={setEditing}
+        actionsRef={actionsRef}
         compact
         presentation="inline"
       />

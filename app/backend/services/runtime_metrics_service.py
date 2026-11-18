@@ -180,6 +180,15 @@ def _papelaria_snapshot() -> dict[str, Any]:
         return {"error": "unavailable"}
 
 
+def _os_search_cache_snapshot() -> dict:
+    try:
+        from services.os_search_cache import snapshot
+
+        return snapshot()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 def collect_runtime_metrics() -> dict[str, Any]:
     from resilience.cpu_jobs import snapshot as cpu_snapshot
     from resilience.heavy_jobs import inprocess_heavy_jobs
@@ -191,6 +200,7 @@ def collect_runtime_metrics() -> dict[str, Any]:
         "mdb_sync": _mdb_snapshot(),
         "websocket": _websocket_snapshot(),
         "os_search": _fetch_all_snapshot(),
+        "os_search_cache": _os_search_cache_snapshot(),
         "papelaria": _papelaria_snapshot(),
         "heavy_jobs": {
             "inprocess": inprocess_heavy_jobs(),

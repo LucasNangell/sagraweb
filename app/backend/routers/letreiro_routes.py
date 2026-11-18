@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -60,7 +61,7 @@ def _lookup_instance(host: str | None, user: str | None) -> Optional[tuple[str, 
         """
         SELECT HostName, WindowsUser
         FROM tabLetreiroInstancia
-        WHERE LOWER(HostName) = LOWER(%s)
+        WHERE HostName = %s
         """,
         (host_name,),
     )
@@ -394,7 +395,7 @@ def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
             """
             SELECT Id, ComandoId, Nome, Tipo, Conteudo, TimeoutSec, HostName, WindowsUser
             FROM tabLetreiroComandoJob
-            WHERE Status = %s AND LOWER(HostName) = LOWER(%s)
+            WHERE Status = %s AND HostName = %s
             ORDER BY Id ASC
             FOR UPDATE
             """,
@@ -427,7 +428,17 @@ STALE_JOB_GRACE_SEC = 30
 STALE_JOB_MESSAGE = "Tempo esgotado: o cliente não enviou o resultado."
 
 
-def _expire_stale_running_jobs() -> None:
+# Varredura de timeout no máximo a cada N s por processo (antes: a cada poll de cada letreiro).
+_EXPIRE_STALE_MIN_INTERVAL_SEC = 15.0
+_expire_stale_last_run = 0.0
+
+
+def _expire_stale_running_jobs(*, force: bool = False) -> None:
+    global _expire_stale_last_run
+    now = time.monotonic()
+    if not force and (now - _expire_stale_last_run) < _EXPIRE_STALE_MIN_INTERVAL_SEC:
+        return
+    _expire_stale_last_run = now
     db.execute_query(
         """
         UPDATE tabLetreiroComandoJob
@@ -611,7 +622,7 @@ def _enqueue_jobs(
 
 
 @router.post("/heartbeat")
-async def post_heartbeat(body: HeartbeatBody):
+def post_heartbeat(body: HeartbeatBody):
     host = _clip(body.host_name, 128)
     user = _clip(body.windows_user, 128)
     if not host or not user:
@@ -656,7 +667,7 @@ def list_painel_presets():
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     host: str = Query(..., min_length=1),
     user: str = Query(..., min_length=1),
 ):
@@ -686,7 +697,7 @@ async def get_config(
 
 
 @router.get("/instances")
-async def list_instances(
+def list_instances(
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
 ):
@@ -723,7 +734,7 @@ async def list_instances(
 
 
 @router.put("/instances")
-async def put_instance_profile(
+def put_instance_profile(
     body: InstanceProfilePut,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -768,7 +779,7 @@ def _upsert_config(host: str, user: str, payload_json: str, updated_by: str) -> 
 
 
 @router.put("/config")
-async def put_config(
+def put_config(
     body: LetreiroConfigPut,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -800,7 +811,7 @@ async def put_config(
 
 
 @router.get("/groups")
-async def list_groups(
+def list_groups(
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
 ):
@@ -820,7 +831,7 @@ async def list_groups(
 
 
 @router.post("/groups")
-async def create_group(
+def create_group(
     body: LetreiroGroupBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -845,7 +856,7 @@ async def create_group(
 
 
 @router.put("/groups/{group_id}")
-async def update_group(
+def update_group(
     group_id: int,
     body: LetreiroGroupBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
@@ -872,7 +883,7 @@ async def update_group(
 
 
 @router.delete("/groups/{group_id}")
-async def delete_group(
+def delete_group(
     group_id: int,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
@@ -884,7 +895,7 @@ async def delete_group(
 
 
 @router.get("/commands")
-async def list_commands(
+def list_commands(
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
 ):
@@ -900,7 +911,7 @@ async def list_commands(
 
 
 @router.post("/commands")
-async def create_command(
+def create_command(
     body: LetreiroCommandBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -926,7 +937,7 @@ async def create_command(
 
 
 @router.put("/commands/{command_id}")
-async def update_command(
+def update_command(
     command_id: int,
     body: LetreiroCommandBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
@@ -954,7 +965,7 @@ async def update_command(
 
 
 @router.delete("/commands/{command_id}")
-async def delete_command(
+def delete_command(
     command_id: int,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
@@ -966,7 +977,7 @@ async def delete_command(
 
 
 @router.post("/commands/{command_id}/run")
-async def run_command(
+def run_command(
     command_id: int,
     body: CommandRunBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
@@ -992,7 +1003,7 @@ async def run_command(
 
 
 @router.post("/jobs/run")
-async def run_adhoc(
+def run_adhoc(
     body: AdhocRunBody,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -1014,12 +1025,12 @@ async def run_adhoc(
 
 
 @router.get("/settings")
-async def get_settings():
+def get_settings():
     return {"commandPollIntervalSec": _command_poll_interval()}
 
 
 @router.put("/settings")
-async def put_settings(
+def put_settings(
     body: LetreiroSettingsPut,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -1040,7 +1051,7 @@ async def put_settings(
 
 
 @router.get("/jobs/pending")
-async def pending_job(
+def pending_job(
     host: str = Query(..., min_length=1),
     user: str = Query(..., min_length=1),
 ):
@@ -1054,14 +1065,14 @@ async def pending_job(
 
 
 @router.get("/jobs")
-async def list_jobs(
+def list_jobs(
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
     host: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
 ):
     _require_admin(x_letreiro_windows_user or windows_user)
-    _expire_stale_running_jobs()
+    _expire_stale_running_jobs(force=True)
     clauses = []
     params: list[Any] = []
     if host:
@@ -1087,7 +1098,7 @@ async def list_jobs(
 
 
 @router.delete("/jobs")
-async def clear_jobs(
+def clear_jobs(
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
 ):
@@ -1097,13 +1108,13 @@ async def clear_jobs(
 
 
 @router.get("/screenshot-capability")
-async def screenshot_capability(x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
+def screenshot_capability(x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
     _require_admin(x_letreiro_windows_user)
     return {"highQuality": True}
 
 
 @router.get("/jobs/{job_id}/result")
-async def get_job_result(job_id: int, x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
+def get_job_result(job_id: int, x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
     _require_admin(x_letreiro_windows_user)
     rows = db.execute_query("SELECT Nome, Stdout FROM tabLetreiroComandoJob WHERE Id = %s LIMIT 1", (job_id,))
     if not rows or not (rows[0].get("Nome") or "").startswith(SCREENSHOT_HQ_PREFIX):
@@ -1112,7 +1123,7 @@ async def get_job_result(job_id: int, x_letreiro_windows_user: Optional[str] = H
 
 
 @router.post("/jobs/{job_id}/result")
-async def post_job_result(job_id: int, body: JobResultBody):
+def post_job_result(job_id: int, body: JobResultBody):
     host = _clip(body.host_name, 128)
     user = _clip(body.windows_user, 128)
     if not host or not user:
@@ -1155,12 +1166,12 @@ async def post_job_result(job_id: int, body: JobResultBody):
 
 
 @router.get("/sounds")
-async def list_sounds():
+def list_sounds():
     return {"sounds": letreiro_sounds_service.list_sounds()}
 
 
 @router.get("/sounds/{sound_id}")
-async def get_sound(sound_id: str):
+def get_sound(sound_id: str):
     path = letreiro_sounds_service.resolve_file(sound_id)
     if path is None:
         raise HTTPException(status_code=404, detail="Som não encontrado.")
@@ -1193,7 +1204,7 @@ def _decode_sound_base64(raw: str) -> bytes:
 
 
 @router.post("/sounds")
-async def upload_sound_json(
+def upload_sound_json(
     body: LetreiroSoundUploadJson,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
 ):
@@ -1223,7 +1234,7 @@ async def upload_sound_multipart(
 
 
 @router.delete("/sounds/{sound_id}")
-async def delete_sound(
+def delete_sound(
     sound_id: str,
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),

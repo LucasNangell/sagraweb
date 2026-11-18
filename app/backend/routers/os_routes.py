@@ -1275,7 +1275,7 @@ def search_os(
             exact_os_lookup = True
 
         started = time.perf_counter()
-        result = execute_os_search(
+        search_kwargs = dict(
             nr_os=nr_os,
             ano=ano,
             ano_mode=ano_mode,
@@ -1313,9 +1313,16 @@ def search_os(
             painel=painel,
             fetch_all=fetch_all,
         )
-        etag = build_os_search_etag(result)
+        from services.os_search_cache import get_or_compute, make_key
+
+        result, etag, from_cache = get_or_compute(
+            make_key(search_kwargs),
+            lambda: execute_os_search(**search_kwargs),
+            build_os_search_etag,
+        )
         response.headers["ETag"] = etag
-        if fetch_all:
+        response.headers["X-Sagra-Cache"] = "hit" if from_cache else "miss"
+        if fetch_all and not from_cache:
             try:
                 from services.runtime_metrics_service import record_os_search_fetch_all
 

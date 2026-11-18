@@ -192,22 +192,38 @@ class OsDeleteManager:
     # Cache incremental
     # ------------------------------------------------------------------
 
-    def upsert_cache(self, present: Dict[OsKey, str]) -> None:
+    _CACHE_BATCH = 500
+
+    def upsert_cache(
+        self, present: Dict[OsKey, str], known: Optional[Dict[OsKey, str]] = None
+    ) -> None:
+        """
+        Grava no cache só OS novas ou com origem alterada. Antes regravava todas as OS
+        presentes a cada ciclo (~3 bilhões de upserts medidos em produção);
+        last_seen_at não é lido por nenhum código.
+        """
         if not present:
+            return
+        if known is None:
+            pending = list(present.items())
+        else:
+            pending = [(k, v) for k, v in present.items() if known.get(k) != v]
+        if not pending:
             return
         conn = self._mysql()
         cur = conn.cursor(buffered=True)
         try:
-            for (nro, ano), origem in present.items():
+            batch = self._CACHE_BATCH
+            for i in range(0, len(pending), batch):
+                chunk = pending[i : i + batch]
+                params: List[Any] = []
+                for (nro, ano), origem in chunk:
+                    params.extend((nro, ano, origem))
                 cur.execute(
-                    """
-                    INSERT INTO cache_os_mdb (nro, ano, origem, last_seen_at)
-                    VALUES (%s, %s, %s, NOW())
-                    ON DUPLICATE KEY UPDATE
-                        origem = VALUES(origem),
-                        last_seen_at = NOW()
-                    """,
-                    (nro, ano, origem),
+                    "INSERT INTO cache_os_mdb (nro, ano, origem, last_seen_at) VALUES "
+                    + ",".join(["(%s, %s, %s, NOW())"] * len(chunk))
+                    + " ON DUPLICATE KEY UPDATE origem = VALUES(origem), last_seen_at = NOW()",
+                    params,
                 )
             conn.commit()
         except Exception:
@@ -633,7 +649,7 @@ class OsDeleteManager:
                 return result
 
         # Atualiza cache com o que está presente (incremental)
-        self.upsert_cache(present)
+        self.upsert_cache(present, cache)
 
         missing: List[Tuple[OsKey, str]] = []
         for key, origem in cache.items():

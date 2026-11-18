@@ -395,6 +395,15 @@ class ConnectionManager:
         return json.dumps(subset, sort_keys=True, default=str)
 
     async def broadcast(self, message: Dict[str, Any]):
+        msg_type_for_cache = message.get("type")
+        if msg_type_for_cache not in _SUPPORT_WS_TYPES:
+            # Todo evento que faz os clientes recarregarem invalida o cache da busca de OS.
+            try:
+                from services.os_search_cache import bump_os_search_cache_version
+
+                bump_os_search_cache_version(str(msg_type_for_cache or ""))
+            except Exception as exc:
+                logger.warning("os_search_cache: falha ao invalidar: %s", exc)
         key = self._dedupe_key(message)
         if key is not None:
             now = time.monotonic()

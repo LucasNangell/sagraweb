@@ -231,6 +231,25 @@ def _ensure_last_seen_not_auto_update(cursor) -> None:
     logger.info("tabLetreiroInstancia: LastSeen sem ON UPDATE CURRENT_TIMESTAMP")
 
 
+def _ensure_job_status_index(cursor) -> None:
+    """Índice da varredura de timeout (Status, StartedAt) — evita ler a tabela inteira (Stdout/Stderr grandes)."""
+    cursor.execute(
+        """
+        SELECT 1 FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name = 'tabLetreiroComandoJob'
+          AND index_name = 'idx_letreiro_job_status'
+        LIMIT 1
+        """
+    )
+    if cursor.fetchone():
+        return
+    cursor.execute(
+        "CREATE INDEX idx_letreiro_job_status ON tabLetreiroComandoJob (Status, StartedAt)"
+    )
+    logger.info("tabLetreiroComandoJob: índice idx_letreiro_job_status criado")
+
+
 def ensure_letreiro_schema() -> None:
     db = Database()
     try:
@@ -247,6 +266,7 @@ def ensure_letreiro_schema() -> None:
             _ensure_last_seen_not_auto_update(cursor)
             for table in _HOST_USER_PK_TABLES:
                 _ensure_host_user_primary(cursor, table)
+            _ensure_job_status_index(cursor)
         logger.info("Schema letreiro verificado")
     except Exception as exc:
         logger.error("Erro ao garantir schema letreiro: %s", exc)

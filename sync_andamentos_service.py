@@ -2063,6 +2063,96 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             )
             self._invalidate_for_conn(conn)
 
+    _CACHE_BATCH = 500
+
+    def update_cache(self, andamentos_os: List[Dict], andamentos_pap: List[Dict]):
+        """
+        Mesmo estado final do core (cache = espelho dos andamentos do MDB), mas grava
+        só a diferença. O core fazia DELETE de tudo + 1 INSERT por linha a cada ciclo
+        (~1,6 bilhão de INSERTs medidos em produção, com fsync de binlog/redo em cada commit).
+        """
+        desired: Dict[str, tuple] = {}
+        duplicados = 0
+        for rows, origem in ((andamentos_os, "OS_Atual"), (andamentos_pap, "Papelaria")):
+            for and_ in rows or []:
+                code = str(and_.get("CodStatus") or "").strip()
+                if not code:
+                    continue
+                if code in desired:
+                    duplicados += 1
+                    continue
+                try:
+                    nro = int(and_.get("NroProtocoloLink"))
+                    ano = int(and_.get("AnoProtocoloLink"))
+                except (TypeError, ValueError):
+                    continue
+                desired[code] = (nro, ano, origem)
+
+        conn = None
+        cursor = None
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cursor = conn.cursor()
+            cursor.execute("SELECT codstatus, nro, ano, origem FROM cache_andamentos_mdb")
+            existing: Dict[str, tuple] = {}
+            for codstatus, nro, ano, origem in cursor.fetchall() or []:
+                try:
+                    existing[str(codstatus)] = (int(nro), int(ano), origem)
+                except (TypeError, ValueError):
+                    existing[str(codstatus)] = (nro, ano, origem)
+
+            to_delete = [c for c in existing if c not in desired]
+            to_upsert = [
+                (c, *vals) for c, vals in desired.items() if existing.get(c) != vals
+            ]
+            if not to_delete and not to_upsert:
+                cursor.close()
+                return
+
+            batch = self._CACHE_BATCH
+            for i in range(0, len(to_delete), batch):
+                chunk = to_delete[i : i + batch]
+                cursor.execute(
+                    "DELETE FROM cache_andamentos_mdb WHERE codstatus IN ("
+                    + ",".join(["%s"] * len(chunk))
+                    + ")",
+                    chunk,
+                )
+            for i in range(0, len(to_upsert), batch):
+                chunk = to_upsert[i : i + batch]
+                params: List[Any] = []
+                for row in chunk:
+                    params.extend(row)
+                cursor.execute(
+                    "INSERT INTO cache_andamentos_mdb (codstatus, nro, ano, origem) VALUES "
+                    + ",".join(["(%s, %s, %s, %s)"] * len(chunk))
+                    + " ON DUPLICATE KEY UPDATE nro = VALUES(nro), ano = VALUES(ano),"
+                    " origem = VALUES(origem), ultima_atualizacao = NOW()",
+                    params,
+                )
+            conn.commit()
+            cursor.close()
+            if duplicados:
+                self._svc_log.warning(
+                    "[CACHE] %s CodStatus duplicados entre OS_Atual e Papelaria (mantido OS_Atual)",
+                    duplicados,
+                )
+            self._svc_log.info(
+                "[CACHE] cache_andamentos_mdb: %s removidos, %s gravados (de %s)",
+                len(to_delete),
+                len(to_upsert),
+                len(desired),
+            )
+        except Exception as e:
+            try:
+                if conn is not None:
+                    conn.rollback()
+            except Exception:
+                pass
+            self.logger.logger.error(f"[ERRO] Erro ao atualizar cache: {e}")
+            if conn is not None:
+                self._invalidate_for_conn(conn)
+
     def detect_and_register_deletions(self, mysql_codes, mdb_all_codes, mysql_data=None):
         excluidos_confirmados = set()
         mysql_by_code = {

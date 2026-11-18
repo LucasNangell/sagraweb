@@ -1842,10 +1842,14 @@ def _parse_heartbeat_datetime(value: Any) -> Optional[datetime]:
     return None
 
 
-def _persist_worker_heartbeat(
-    worker_id: str, heartbeat_at: datetime, meta: dict[str, Any]
-) -> None:
-    ensure_papelaria_jobs_tables()
+_heartbeat_table_ready = False
+
+
+def _ensure_worker_heartbeat_table() -> None:
+    """DDL uma vez por processo — antes rodava a cada heartbeat (~1/s, 7 mi vezes)."""
+    global _heartbeat_table_ready
+    if _heartbeat_table_ready:
+        return
     db.execute_query(
         """
         CREATE TABLE IF NOT EXISTS tabPapelariaWorkerHeartbeat (
@@ -1856,6 +1860,14 @@ def _persist_worker_heartbeat(
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
+    _heartbeat_table_ready = True
+
+
+def _persist_worker_heartbeat(
+    worker_id: str, heartbeat_at: datetime, meta: dict[str, Any]
+) -> None:
+    ensure_papelaria_jobs_tables()
+    _ensure_worker_heartbeat_table()
     meta_json = json.dumps(meta, ensure_ascii=False) if meta else None
     db.execute_query(
         """

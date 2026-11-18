@@ -107,6 +107,15 @@ def reset_ws_connections():
     manager.active_connections.clear()
 
 
+@pytest.fixture(autouse=True)
+def reset_os_search_cache():
+    from services.os_search_cache import clear_for_tests
+
+    clear_for_tests()
+    yield
+    clear_for_tests()
+
+
 @pytest.fixture
 def storage_root(tmp_path, monkeypatch):
     """Root autorizado isolado para testes de file_access."""

@@ -5,7 +5,6 @@ import { cn } from "@sagra/ui";
 import { fetchPapelariaJob } from "@/api/papelaria";
 import { queryKeys } from "@/api/query-keys";
 import { OsFolderBrowserModal } from "@/features/os/components/OsFolderBrowserModal";
-import { OsHistoryPanel } from "@/features/os/components/OsHistoryPanel";
 import type { OsSearchRow } from "@/features/os/types";
 
 import { sameOsRow } from "../papelariaSelection";
@@ -28,7 +27,7 @@ type TrackedLaneJob = {
 };
 
 export function PapelariaPage() {
-  /** Só preenche histórico/formulário/visualização após clique na lista de SPs. */
+  /** Só preenche o formulário/visualização após clique na lista de SPs. */
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
@@ -271,20 +270,8 @@ export function PapelariaPage() {
             onSelect={handleSelectFromList}
             provaOverlayBySp={provaOverlayBySp}
             imposicaoOverlayBySp={imposicaoOverlayBySp}
-            className="min-h-[200px] flex-1 md:min-h-0"
+            className="min-h-0 flex-1"
           />
-          <section className="flex min-h-[260px] min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm md:min-h-[280px]">
-            <OsHistoryPanel
-              key={
-                selected
-                  ? `history-${selected.ano}-${selected.nr_os}`
-                  : "history-none"
-              }
-              selected={selected}
-              embedded
-              listLayout="compact"
-            />
-          </section>
         </div>
         <div
           className={cn(

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Clock, Loader2, Send, Settings2, X } from "lucide-react";
 import { cn } from "@sagra/ui";
@@ -10,6 +10,7 @@ import { queryKeys } from "@/api/query-keys";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { defaultOsFilters } from "@/features/os/osFiltersStore";
 import type { OsSearchFilters, OsSearchRow } from "@/features/os/types";
+import { formatDateBr, formatPonto } from "@/lib/format";
 import { sameOsRow } from "../papelariaSelection";
 import {
   papelariaSpStatusKey,
@@ -22,6 +23,7 @@ import {
   loadPapelariaSpSituacoes,
   savePapelariaSpSituacoes,
 } from "../papelariaSpSituacoesPrefs";
+import { PapelariaSpTramitacao } from "./PapelariaSpTramitacao";
 
 type Props = {
   selected: OsSearchRow | null;
@@ -48,6 +50,16 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
     sortDir: "asc",
     sorts: [{ column: "nr_os", dir: "asc" }],
   };
+}
+
+function formatAndamentoAtual(row: OsSearchRow): string {
+  const ponto = formatPonto(row.andamento_ponto);
+  return [
+    row.situacao?.trim() || "—",
+    row.setor?.trim() || "—",
+    formatDateBr(row.last_update) || "—",
+    ponto || "—",
+  ].join(" · ");
 }
 
 function formatTiragem(value: string | number | null | undefined): string {
@@ -260,18 +272,18 @@ export function PapelariaSpList({
                           | undefined),
                     );
                 return (
-                  <tr
-                    key={`${row.ano}-${row.nr_os}`}
-                    className={cn(
-                      "cursor-pointer border-b border-neutral-100 transition",
-                      isSelected
-                        ? "bg-secondary-blue/10"
-                        : "hover:bg-slate-50",
-                    )}
-                    onClick={() => onSelect(row)}
-                    aria-selected={isSelected}
-                    data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
-                  >
+                  <Fragment key={`${row.ano}-${row.nr_os}`}>
+                    <tr
+                      className={cn(
+                        "cursor-pointer transition",
+                        isSelected
+                          ? "bg-secondary-blue/10"
+                          : "hover:bg-slate-50",
+                      )}
+                      onClick={() => onSelect(row)}
+                      aria-selected={isSelected}
+                      data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
+                    >
                     <td className="px-2 py-1.5 font-mono font-semibold text-secondary-blue">
                       {row.nr_os}
                     </td>
@@ -336,7 +348,30 @@ export function PapelariaSpList({
                         </span>
                       ) : null}
                     </td>
-                  </tr>
+                    </tr>
+                    <tr
+                      className={cn(
+                        "cursor-pointer border-b border-neutral-100",
+                        isSelected ? "bg-secondary-blue/10" : "hover:bg-slate-50",
+                      )}
+                      onClick={() => onSelect(row)}
+                    >
+                      <td
+                        colSpan={7}
+                        className="px-2 pb-1.5 text-[10px] text-neutral-600"
+                        data-testid={`papelaria-sp-andamento-atual-${row.nr_os}`}
+                      >
+                        {formatAndamentoAtual(row)}
+                      </td>
+                    </tr>
+                    {isSelected ? (
+                      <tr className="border-b border-neutral-100 bg-secondary-blue/5">
+                        <td colSpan={7} className="p-0">
+                          <PapelariaSpTramitacao row={row} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>

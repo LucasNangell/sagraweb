@@ -16,6 +16,8 @@ export interface OsSearchRow {
   entreg_periodo?: string | null;
   last_update?: string | null;
   andamento_usuario?: string | null;
+  /** Ponto do andamento atual, preenchido por GET /api/os/search. */
+  andamento_ponto?: string | null;
   observacao?: string | null;
   /** Preenchido por GET /api/os/search (opcional, retrocompatível). */
   has_sub_os?: boolean;

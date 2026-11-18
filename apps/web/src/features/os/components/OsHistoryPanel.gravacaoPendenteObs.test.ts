@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGravacaoPendenteObservacaoPayload,
   mergeGravacaoPendenteObservacoes,
-} from "./OsHistoryPanel";
+} from "../gravacaoPendenteObservacao";
 
 describe("mergeGravacaoPendenteObservacoes", () => {
   it("preserva a observação da home antes da observação para o Birô", () => {

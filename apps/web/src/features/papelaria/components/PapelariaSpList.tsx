@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Clock, Loader2, Send, Settings2, X } from "lucide-react";
 import { cn } from "@sagra/ui";
@@ -52,6 +52,9 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
     sorts: [{ column: "nr_os", dir: "asc" }],
   };
 }
+
+const LIST_COLUMNS =
+  "grid grid-cols-[calc(4ch+0.85rem)_calc(4ch+0.85rem)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(4.5rem,0.7fr)_3.5rem_6.25rem] items-center";
 
 function formatTiragem(value: string | number | null | undefined): string {
   if (value == null || String(value).trim() === "") return "—";
@@ -115,6 +118,8 @@ export function PapelariaSpList({
   const searchEnabled = situacoes.length > 0;
   const searchQuery = useOsSearch(filters, searchEnabled);
   const rows = searchQuery.data?.data ?? [];
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerOffset, setHeaderOffset] = useState(0);
 
   const statusItems = useMemo(
     () => rows.map((row) => ({ ano: row.ano, nro: row.nr_os })),
@@ -156,6 +161,18 @@ export function PapelariaSpList({
     setSettingsOpen(false);
   };
 
+  useEffect(() => {
+    const node = headerRef.current;
+    if (!node) {
+      return;
+    }
+    const measure = () => setHeaderOffset(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [rows.length]);
+
   return (
     <section
       className={cn(
@@ -188,7 +205,7 @@ export function PapelariaSpList({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {situacoes.length === 0 ? (
           <p className="p-4 text-center text-xs text-neutral-500">
             Nenhuma situação selecionada. Use a engrenagem para escolher os
@@ -215,28 +232,32 @@ export function PapelariaSpList({
             Nenhuma SP no SEFOC com as situações configuradas.
           </p>
         ) : (
-          <table className="w-full table-fixed border-collapse text-[11px]">
-            <thead className="sticky top-0 bg-slate-100 text-left">
-              <tr>
-                <th className="w-[calc(4ch+0.85rem)] whitespace-nowrap px-1 py-1.5 text-center font-semibold">
+          <div className="w-full text-[11px]" role="table">
+            <div
+              ref={headerRef}
+              className={cn(
+                LIST_COLUMNS,
+                "sticky top-0 z-30 bg-slate-100 text-left",
+              )}
+              role="row"
+            >
+                <div className="whitespace-nowrap px-1 py-1.5 text-center font-semibold" role="columnheader">
                   Nr SP
-                </th>
-                <th className="w-[calc(4ch+0.85rem)] whitespace-nowrap px-1 py-1.5 text-center font-semibold">
+                </div>
+                <div className="whitespace-nowrap px-1 py-1.5 text-center font-semibold" role="columnheader">
                   Ano
-                </th>
-                <th className="px-2 py-1.5 font-semibold">Produto</th>
-                <th className="px-2 py-1.5 font-semibold">Solicitante</th>
-                <th className="px-2 py-1.5 font-semibold">Situação</th>
-                <th className="px-2 py-1.5 text-right font-semibold">Tiragem</th>
-                <th className="w-14 px-1 py-1.5 text-center font-semibold">
+                </div>
+                <div className="px-2 py-1.5 font-semibold" role="columnheader">Produto</div>
+                <div className="px-2 py-1.5 font-semibold" role="columnheader">Solicitante</div>
+                <div className="px-2 py-1.5 font-semibold" role="columnheader">Situação</div>
+                <div className="px-2 py-1.5 text-right font-semibold" role="columnheader">Tiragem</div>
+                <div className="px-1 py-1.5 text-center font-semibold" role="columnheader">
                   Prova
-                </th>
-                <th className="w-14 px-1 py-1.5 text-center font-semibold">
+                </div>
+                <div className="whitespace-nowrap px-1 py-1.5 text-center font-semibold" role="columnheader">
                   Imposição
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </div>
+            </div>
               {rows.map((row) => {
                 const isSelected = sameOsRow(selected, row);
                 const isExpanded = isSelected && expanded;
@@ -270,52 +291,62 @@ export function PapelariaSpList({
                           | undefined),
                     );
                 return (
-                  <Fragment key={`${row.ano}-${row.nr_os}`}>
-                    <tr
+                  <div key={`${row.ano}-${row.nr_os}`}>
+                    <div
                       className={cn(
+                        LIST_COLUMNS,
                         "cursor-pointer border-b border-neutral-100 transition",
-                        isSelected
-                          ? "bg-secondary-blue/10"
-                          : "hover:bg-slate-50",
+                        isExpanded
+                          ? "sticky z-20 bg-[color-mix(in_srgb,var(--secondary-blue)_12%,white)] shadow-[0_2px_4px_rgba(15,23,42,0.12)]"
+                          : isSelected
+                            ? "bg-secondary-blue/10"
+                            : "hover:bg-slate-50",
                       )}
+                      style={isExpanded ? { top: headerOffset } : undefined}
                       onClick={() => onSelect(row)}
                       aria-selected={isSelected}
+                      role="row"
                       data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
                     >
-                    <td className="w-[calc(4ch+0.85rem)] px-1 py-1.5 text-center font-mono font-semibold tabular-nums text-secondary-blue">
+                    <div className="px-1 py-1.5 text-center font-mono font-semibold tabular-nums text-secondary-blue" role="cell">
                       {row.nr_os}
-                    </td>
-                    <td className="w-[calc(4ch+0.85rem)] px-1 py-1.5 text-center tabular-nums">
+                    </div>
+                    <div className="px-1 py-1.5 text-center tabular-nums" role="cell">
                       {row.ano}
-                    </td>
-                    <td
+                    </div>
+                    <div
                       className="min-w-0 truncate px-2 py-1.5"
                       title={row.produto ?? undefined}
+                      role="cell"
                     >
                       {row.produto ?? "—"}
-                    </td>
-                    <td
+                    </div>
+                    <div
                       className="min-w-0 truncate px-2 py-1.5"
                       title={row.solicitante ?? undefined}
+                      role="cell"
                     >
                       {row.solicitante ?? "—"}
-                    </td>
-                    <td
+                    </div>
+                    <div
                       className="min-w-0 truncate px-2 py-1.5"
                       title={row.situacao ?? undefined}
+                      role="cell"
                       data-testid={`papelaria-sp-situacao-${row.nr_os}`}
                     >
                       {row.situacao?.trim() || "—"}
-                    </td>
-                    <td
+                    </div>
+                    <div
                       className="whitespace-nowrap px-2 py-1.5 text-right font-mono tabular-nums"
+                      role="cell"
                       data-testid={`papelaria-sp-tiragem-${row.nr_os}`}
                     >
                       {formatTiragem(row.tiragem)}
-                    </td>
-                    <td
-                      className="w-14 px-1 py-1.5 text-center"
+                    </div>
+                    <div
+                      className="px-1 py-1.5 text-center"
                       title={provaCell?.label}
+                      role="cell"
                       data-testid={`papelaria-sp-prova-${row.nr_os}`}
                     >
                       {provaCell ? (
@@ -340,10 +371,11 @@ export function PapelariaSpList({
                           aria-label="Carregando status"
                         />
                       )}
-                    </td>
-                    <td
-                      className="w-14 px-1 py-1.5 text-center"
+                    </div>
+                    <div
+                      className="px-1 py-1.5 text-center"
                       title={imposicaoCell?.label || undefined}
+                      role="cell"
                       data-testid={`papelaria-sp-imposicao-${row.nr_os}`}
                     >
                       {imposicaoCell?.icon ? (
@@ -354,20 +386,17 @@ export function PapelariaSpList({
                           />
                         </span>
                       ) : null}
-                    </td>
-                    </tr>
+                    </div>
+                    </div>
                     {isExpanded ? (
-                      <tr className="border-b border-neutral-100 bg-secondary-blue/5">
-                        <td colSpan={8} className="w-full max-w-full p-0">
-                          <PapelariaSpTramitacao row={row} />
-                        </td>
-                      </tr>
+                      <div className="border-b border-neutral-100 bg-secondary-blue/5">
+                        <PapelariaSpTramitacao row={row} />
+                      </div>
                     ) : null}
-                  </Fragment>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+          </div>
         )}
       </div>
 

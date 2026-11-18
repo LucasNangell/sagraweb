@@ -40,11 +40,11 @@ ORDEM_VARIAVEIS = [
 
 ROTULOS_VARIAVEIS: dict[str, str] = {
     "nome_deputado": "Nome do deputado/deputada",
-    "genero": "Gênero/Cargo. Ex: Deputado Federal ou Deputada Federal",
-    "partido": "Partido. Ex: PT, PL, MDB",
-    "uf": "UF. Ex: DF, MG, SP",
-    "anexo": "Anexo. Ex: IV",
-    "gabinete": "Gabinete. Ex: 123",
+    "genero": "Gênero/Cargo",
+    "partido": "Partido",
+    "uf": "UF",
+    "anexo": "Anexo",
+    "gabinete": "Gabinete",
     "email": "E-mail",
     "nome_assessor": "Nome do assessor/assessora",
     "contato_assessor": "Contato do assessor/assessora",

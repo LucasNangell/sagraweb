@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import {
   approvePapelariaJobProva,
@@ -83,6 +84,10 @@ type Props = {
     jobId?: number | null,
     versao?: number | null,
   ) => void;
+  /** Quando informado, modelos e campos são renderizados neste elemento. */
+  formHost?: HTMLElement | null;
+  /** Reserva o formulário para o host, mesmo antes do elemento existir. */
+  dockForm?: boolean;
 };
 
 function buildPreviaTextual(
@@ -153,6 +158,8 @@ export function PapelariaCorelPanel({
   osId,
   osAno,
   onSpPipelineStatusChange,
+  formHost = null,
+  dockForm = false,
 }: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
@@ -1275,20 +1282,38 @@ export function PapelariaCorelPanel({
     waitingApogee,
   ]);
 
+  const formSlot = (node: ReactNode) =>
+    formHost ? createPortal(node, formHost) : null;
+
   if (!hasOs) {
     return (
-      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-8 text-center text-sm text-neutral-500">
-        Selecione uma SP na lista ao lado para preencher o formulário.
-      </div>
+      <>
+        {formSlot(
+          <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-4 text-center text-xs text-neutral-500">
+            Selecione uma SP para ver os modelos e preencher os campos.
+          </div>,
+        )}
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-8 text-center text-sm text-neutral-500">
+          Selecione uma SP na lista para ver a prévia.
+        </div>
+      </>
     );
   }
 
   if (contextQuery.isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-neutral-600">
-        <Loader2 className="size-5 animate-spin" aria-hidden />
-        Carregando contexto da OS...
-      </div>
+      <>
+        {formSlot(
+          <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-2 rounded-lg border border-sagra-border bg-white text-xs text-neutral-600">
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            Carregando modelos...
+          </div>,
+        )}
+        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-neutral-600">
+          <Loader2 className="size-5 animate-spin" aria-hidden />
+          Carregando contexto da OS...
+        </div>
+      </>
     );
   }
 
@@ -1298,7 +1323,16 @@ export function PapelariaCorelPanel({
         ? contextQuery.error.message
         : "Erro desconhecido.";
     return (
-      <div className="flex flex-1 items-center justify-center rounded-lg border border-sagra-danger/30 bg-red-50 p-6 text-center text-sm text-sagra-danger">
+      <>
+        {formSlot(
+          <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-sagra-danger/30 bg-red-50 p-4 text-center text-xs text-sagra-danger">
+            <div>
+              <p className="font-semibold">Erro ao carregar os modelos.</p>
+              <p className="mt-1 text-red-700/90">{detail}</p>
+            </div>
+          </div>,
+        )}
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-sagra-danger/30 bg-red-50 p-6 text-center text-sm text-sagra-danger">
         <div>
           <p className="font-semibold">Erro ao carregar contexto da OS.</p>
           <p className="mt-2 text-xs text-red-700/90">{detail}</p>
@@ -1310,7 +1344,8 @@ export function PapelariaCorelPanel({
             Tentar novamente
           </button>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
@@ -1331,7 +1366,7 @@ export function PapelariaCorelPanel({
 
   const mobilePanelClass = (panel: "form" | "preview") =>
     cn(
-      mobilePanel !== panel && "max-md:hidden",
+      !formHost && mobilePanel !== panel && "max-md:hidden",
       panel === "preview"
         ? "flex min-h-[min(50vh,480px)] min-w-0 flex-1 flex-col md:min-h-0"
         : "flex min-h-[min(50vh,480px)] w-full flex-col md:min-h-0 md:w-[288px] md:shrink-0",
@@ -1388,6 +1423,7 @@ export function PapelariaCorelPanel({
         ) : null}
       </section>
 
+      {formHost || dockForm ? null : (
       <div
         className="flex shrink-0 gap-1 rounded-lg border border-sagra-border bg-white p-1 shadow-sm md:hidden"
         role="tablist"
@@ -1416,8 +1452,141 @@ export function PapelariaCorelPanel({
           </button>
         ))}
       </div>
+      )}
 
       <div className="flex min-h-min flex-col gap-2 md:min-h-0 md:flex-1 md:flex-row md:gap-3 md:overflow-hidden">
+        {formHost
+          ? createPortal(
+              <section
+                className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm md:flex-row"
+                data-testid="papelaria-modelos-campos"
+              >
+                <div className="flex min-h-0 min-w-0 flex-col md:w-[42%] md:shrink-0 md:border-r md:border-sagra-border">
+                  <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
+                    <h2 className="text-xs font-bold text-secondary-blue">
+                      Modelos disponíveis
+                    </h2>
+                    <p className="text-[10px] text-neutral-500">
+                      {modelos.length === 0
+                        ? "Nenhum modelo para este produto"
+                        : `${modelos.length} opção(ões)`}
+                    </p>
+                  </div>
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
+                    {modelos.length === 0 ? (
+                      <p className="p-4 text-center text-xs text-neutral-500">
+                        Importe a planilha de modelos ou verifique o produto da OS.
+                      </p>
+                    ) : (
+                      modelos.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className={cn(
+                            "w-full rounded-lg border p-3 text-left text-xs transition-colors",
+                            selectedModelId === m.id
+                              ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
+                              : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
+                          )}
+                          onClick={() => handleSelectModel(m)}
+                        >
+                          <p className="font-semibold text-secondary-blue">
+                            {m.nome_exibicao}
+                          </p>
+                          <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
+                          <p className="text-neutral-500">{m.cores}</p>
+                          <p className="mt-1 font-mono text-[10px] text-neutral-400">
+                            {m.arquivo_modelo}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-sagra-border md:border-t-0">
+                  <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
+                    <h2 className="text-xs font-bold text-secondary-blue">
+                      Informações do cliente
+                    </h2>
+                    <p className="text-[10px] text-neutral-500">
+                      {selectedModelId == null
+                        ? "Selecione um modelo"
+                        : "Campos do modelo selecionado"}
+                    </p>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+                    {selectedModelId == null ? (
+                      <p className="p-4 text-center text-xs text-neutral-500">
+                        Selecione um modelo à esquerda para preencher os campos.
+                      </p>
+                    ) : (
+                      <>
+                        <DynamicFields
+                          fields={modelDetailQuery.data?.campos_formulario}
+                          isLoading={modelDetailQuery.isLoading}
+                          values={fieldValues}
+                          camposAlterados={camposAlteradosByKey}
+                          onChange={(key, value) =>
+                            setFieldValues((prev) => ({ ...prev, [key]: value }))
+                          }
+                          excludedFields={excludedFields}
+                          onToggleExclude={(key) =>
+                            setExcludedFields((prev) =>
+                              prev.includes(key)
+                                ? prev.filter((k) => k !== key)
+                                : [...prev, key],
+                            )
+                          }
+                        />
+                        {formError ? (
+                          <p className="mt-2 text-[11px] text-sagra-danger">{formError}</p>
+                        ) : null}
+                        {clienteAlteracaoPendente?.observacao ? (
+                          <div className="mt-3">
+                            <label className="mb-0.5 block text-[11px] font-medium text-amber-800">
+                              Observações do cliente (alteração solicitada
+                              {clienteAlteracaoPendente.versao
+                                ? ` — prova v${clienteAlteracaoPendente.versao}`
+                                : ""}
+                              )
+                            </label>
+                            <textarea
+                              readOnly
+                              disabled
+                              rows={3}
+                              value={clienteAlteracaoPendente.observacao}
+                              className="w-full resize-none rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950"
+                            />
+                          </div>
+                        ) : null}
+                        {corelEditMode ? (
+                          <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">
+                            Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
+                            use Finalizar na barra de ações para montar a visualização e aprovar.
+                          </p>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                  {selectedModelId !== null ? (
+                    <div className="flex h-24 min-w-0 shrink-0 flex-col border-t border-sagra-border p-2">
+                      <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
+                        Observações
+                      </label>
+                      <textarea
+                        readOnly
+                        disabled
+                        value={contextQuery.data?.os.observ ?? ""}
+                        className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
+                        placeholder="Sem observações na OS"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>,
+              formHost,
+            )
+          : (
         <section
           className={cn(
             mobilePanelClass("form"),
@@ -1426,7 +1595,7 @@ export function PapelariaCorelPanel({
         >
           <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
             <h2 className="text-xs font-bold text-secondary-blue">
-              Modelos compatíveis
+              Modelos disponíveis
             </h2>
             <p className="text-[10px] text-neutral-500">
               {modelos.length === 0
@@ -1469,7 +1638,7 @@ export function PapelariaCorelPanel({
               {selectedModelId !== null ? (
                 <div className="border-t border-neutral-200 pt-2">
                   <h3 className="mb-2 text-xs font-bold text-neutral-700">
-                    Campos do formulário
+                    Informações do cliente
                   </h3>
                   <DynamicFields
                     fields={modelDetailQuery.data?.campos_formulario}
@@ -1535,6 +1704,7 @@ export function PapelariaCorelPanel({
             ) : null}
           </div>
         </section>
+          )}
 
         <PapelariaActionBar
           className="max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
@@ -1772,6 +1942,46 @@ function formatCampoAlteracaoValor(value: string): string {
   return value.trim() || "—";
 }
 
+function fieldWidthClass(field: PapelariaField): string {
+  if (field.type === "textarea") return "w-full";
+  switch (field.key) {
+    case "uf":
+      return "w-[4.75rem]";
+    case "anexo":
+      return "w-[5.25rem]";
+    case "gabinete":
+      return "w-[6rem]";
+    case "partido":
+      return "w-[7.5rem]";
+    case "email":
+      return "w-[13rem] max-w-full";
+    case "genero":
+      return "min-w-[9.5rem] flex-1 basis-[12rem]";
+    case "nome_deputado":
+    case "nome_assessor":
+      return "min-w-[11rem] flex-1 basis-[14rem]";
+    default:
+      return "min-w-[8rem] flex-1 basis-[10rem]";
+  }
+}
+
+function fieldDisplayLabel(field: PapelariaField): string {
+  const withoutExample = field.label
+    .replace(/\s*\.\s*Ex:.*$/i, "")
+    .replace(/\s+Ex:.*$/i, "")
+    .trim();
+  switch (field.key) {
+    case "nome_deputado":
+      return "Nome";
+    case "genero":
+      return "Gênero";
+    case "partido":
+      return "Partido";
+    default:
+      return withoutExample || field.label;
+  }
+}
+
 function DynamicFields({
   fields,
   isLoading,
@@ -1806,12 +2016,13 @@ function DynamicFields({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
       {fields.map((field) => {
         const isExcluded = excludedFields.includes(field.key);
         const alteracao = camposAlterados?.[field.key];
+        const label = fieldDisplayLabel(field);
         const inputClassName = cn(
-          "w-full rounded border px-2 py-1 text-xs transition-colors",
+          "w-full rounded border px-2 py-0.5 text-xs transition-colors",
           alteracao
             ? "border-amber-400 bg-amber-50/60 ring-1 ring-amber-200"
             : "border-sagra-border",
@@ -1822,23 +2033,26 @@ function DynamicFields({
           <div
             key={field.key}
             className={cn(
-              "rounded-md border border-transparent p-1 transition-colors",
-              alteracao && "border-amber-200 bg-amber-50/40 p-2",
+              "min-w-0 rounded-md border border-transparent px-0.5 py-0 transition-colors",
+              fieldWidthClass(field),
+              alteracao && "border-amber-200 bg-amber-50/40 px-1.5 py-1",
               isExcluded && "bg-neutral-50/70 opacity-70",
             )}
           >
-            <div className="flex items-center justify-between mb-1">
+            <div className="mb-0.5 flex items-center justify-between gap-1">
               <label
+                title={label}
                 className={cn(
-                  "block text-[11px] font-medium text-neutral-700 transition-all",
+                  "min-w-0 text-[11px] font-medium text-neutral-700 transition-all",
+                  field.key === "uf" ? "whitespace-nowrap" : "flex-1 truncate",
                   isExcluded && "text-neutral-400 line-through",
                 )}
               >
-                {field.label}
+                {label}
                 {field.required && !isExcluded ? " *" : ""}
                 {alteracao ? (
                   <span className="ml-1.5 font-semibold text-amber-800">
-                    (alterado pelo cliente)
+                    (alterado)
                   </span>
                 ) : null}
               </label>
@@ -1847,7 +2061,7 @@ function DynamicFields({
                   type="button"
                   onClick={() => onToggleExclude(field.key)}
                   className={cn(
-                    "rounded px-1.5 py-0.5 text-[9px] font-semibold transition-colors border",
+                    "inline-flex size-5 shrink-0 items-center justify-center rounded border transition-colors",
                     isExcluded
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                       : "border-neutral-200 bg-white text-neutral-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200",
@@ -1857,15 +2071,24 @@ function DynamicFields({
                       ? "Restaurar campo no modelo"
                       : "Excluir campo do modelo"
                   }
+                  aria-label={
+                    isExcluded
+                      ? "Restaurar campo no modelo"
+                      : "Excluir campo do modelo"
+                  }
                 >
-                  {isExcluded ? "Restaurar" : "Excluir"}
+                  {isExcluded ? (
+                    <RotateCcw className="size-3" aria-hidden />
+                  ) : (
+                    <Trash2 className="size-3" aria-hidden />
+                  )}
                 </button>
               )}
             </div>
             {field.type === "textarea" ? (
               <textarea
                 className={inputClassName}
-                rows={field.rows ?? 2}
+                rows={2}
                 value={values[field.key] ?? ""}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 disabled={isExcluded}

@@ -322,6 +322,10 @@ export function PerfilImposicaoEditor({
         (p.altura === perfil.folha.largura_mm && p.largura === perfil.folha.altura_mm),
     )?.id ?? "custom";
   const juntadaRegra = REGRA_TIRAGEM_INFO[perfil.juntada.regra_tiragem];
+  const pastaSaida = (perfil.saida.pasta_pdf ?? "").trim();
+  const saidaResumo = pastaSaida
+    ? `PDF em ${pastaSaida}`
+    : `PDF em ${perfil.saida.destino_pdf === "offset" ? "Offset" : "Digital"}${perfil.saida.jdf_hotfolder ? " · hotfolder próprio" : ""}`;
   const resolvidos = resolverSlots(perfil, faceAtual);
   const selecionado = resolvidos.find((s) => s.id === selectedId);
   const outrosProdutos = produtos.filter(
@@ -897,7 +901,8 @@ export function PerfilImposicaoEditor({
           n={7}
           title="Saída"
           defaultOpen={false}
-          resumo={`PDF em ${perfil.saida.destino_pdf === "offset" ? "Offset" : "Digital"}${perfil.saida.jdf_hotfolder ? " · hotfolder próprio" : ""}`}
+          resumo={saidaResumo}
+          problems={errosDe("saida").length}
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={labelCls}>
@@ -912,7 +917,9 @@ export function PerfilImposicaoEditor({
                 <option value="digital">Digital</option>
                 <option value="offset">Offset</option>
               </select>
-              <span className={hintCls}>Para onde o PDF devolvido pelo Apogee é movido.</span>
+              <span className={hintCls}>
+                Pasta padrão na OS, usada quando o caminho abaixo está vazio. Também define o nome do arquivo.
+              </span>
             </label>
             <label className={labelCls}>
               Hotfolder JDF (Apogee)
@@ -925,7 +932,26 @@ export function PerfilImposicaoEditor({
               />
               <span className={hintCls}>Vazio = hotfolder padrão do servidor.</span>
             </label>
+            <label className={cn(labelCls, "sm:col-span-2")}>
+              Pasta de saída do PDF imposto
+              <input
+                type="text"
+                className={cn(inputCls, "font-mono")}
+                data-testid="imposicao-saida-pasta-pdf"
+                value={perfil.saida.pasta_pdf ?? ""}
+                placeholder={"\\\\servidor\\pasta\\saida"}
+                maxLength={512}
+                onChange={(e) =>
+                  set("saida", { ...perfil.saida, pasta_pdf: e.target.value.trim() ? e.target.value : null })
+                }
+              />
+              <span className={hintCls}>
+                Caminho absoluto (UNC ou unidade) para onde o PDF devolvido pelo Apogee é movido.
+                Em branco, usa a pasta Digital ou Offset da OS.
+              </span>
+            </label>
           </div>
+          <FieldMessages items={errosDe("saida")} tone="erro" />
         </Section>
       </div>
 

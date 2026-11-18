@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import os
 import re
 from pathlib import Path
 from unittest.mock import patch
@@ -46,6 +47,27 @@ def test_perfil_grade_simples_completo():
     assert val["erros"] == []
     assert val["completo"] is True
     assert perfil_svc.resumo_perfil(val["perfil"]) == "297×210 mm · 2 slots"
+
+
+def test_pasta_saida_pdf_aceita_unc_e_rejeita_relativo():
+    p = _perfil_grade()
+    p["saida"]["pasta_pdf"] = r"\\servidor\share\saida"
+    val = perfil_svc.validar_perfil(p, verificar_arquivos=False)
+    assert val["erros"] == []
+    assert val["perfil"]["saida"]["pasta_pdf"] == os.path.normpath(r"\\servidor\share\saida")
+
+    p["saida"]["pasta_pdf"] = r"D:\Impressao\Saida"
+    val = perfil_svc.validar_perfil(p, verificar_arquivos=False)
+    assert val["completo"] is True
+    assert val["perfil"]["saida"]["pasta_pdf"] == os.path.normpath(r"D:\Impressao\Saida")
+
+    p["saida"]["pasta_pdf"] = "Sefoc/Digital"
+    val = perfil_svc.validar_perfil(p, verificar_arquivos=False)
+    assert any(e["campo"] == "saida.pasta_pdf" for e in val["erros"])
+    assert val["completo"] is False
+
+    p["saida"]["pasta_pdf"] = "   "
+    assert perfil_svc.normalize_perfil(p)["saida"]["pasta_pdf"] is None
 
 
 def test_versao_errada_e_rotacao_invalida():

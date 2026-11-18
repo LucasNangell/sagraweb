@@ -79,7 +79,7 @@ def perfil_vazio() -> dict[str, Any]:
             "max_os": None,
             "preencher_todos_slots": False,
         },
-        "saida": {"destino_pdf": "digital", "jdf_hotfolder": None},
+        "saida": {"destino_pdf": "digital", "jdf_hotfolder": None, "pasta_pdf": None},
     }
 
 
@@ -324,11 +324,17 @@ def normalize_perfil(data: Any) -> dict[str, Any]:
     saida = data.get("saida") or {}
     if not isinstance(saida, dict):
         raise ValueError("saida deve ser um objeto.")
+    pasta_pdf = _text(saida.get("pasta_pdf"))
+    if pasta_pdf and len(pasta_pdf) > 512:
+        raise ValueError("Pasta de saída do PDF deve ter no máximo 512 caracteres.")
     base["saida"] = {
         "destino_pdf": _choice(
             saida.get("destino_pdf"), DESTINOS_PDF, "saida.destino_pdf", "digital"
         ),
         "jdf_hotfolder": _text(saida.get("jdf_hotfolder")),
+        # Caminho absoluto opcional. Vazio = pasta Digital/Offset da OS.
+        # O formato (UNC ou unidade) é conferido em validar_perfil.
+        "pasta_pdf": pasta_pdf,
     }
     return base
 
@@ -599,6 +605,18 @@ def validar_perfil(
             "avisos": [],
             "completo": False,
         }
+
+    pasta_pdf = perfil["saida"].get("pasta_pdf")
+    if pasta_pdf:
+        from services.papelaria_models_service import normalize_pasta_imposicao
+
+        try:
+            perfil["saida"]["pasta_pdf"] = normalize_pasta_imposicao(pasta_pdf)
+        except ValueError as exc:
+            err(
+                "saida.pasta_pdf",
+                str(exc).replace("Pasta de imposição", "Pasta de saída do PDF"),
+            )
 
     folha = folha_mm(perfil)
     if folha is None:

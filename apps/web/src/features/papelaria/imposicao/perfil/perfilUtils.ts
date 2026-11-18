@@ -44,7 +44,7 @@ export function perfilVazio(): PerfilImposicao {
       max_os: null,
       preencher_todos_slots: false,
     },
-    saida: { destino_pdf: "digital", jdf_hotfolder: null },
+    saida: { destino_pdf: "digital", jdf_hotfolder: null, pasta_pdf: null },
   };
 }
 

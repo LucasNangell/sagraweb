@@ -344,6 +344,7 @@ def create_imposicao_job_v2(
     if not validacao["completo"]:
         msgs = "; ".join(e["mensagem"] for e in validacao["erros"][:3])
         raise ValueError(f"Perfil de imposição {variante} com erros: {msgs}")
+    perfil = validacao["perfil"] or perfil
 
     membros: list[dict[str, Any]] = []
     seen: set[tuple[int, int]] = {(int(ano), int(nro))}
@@ -430,6 +431,7 @@ def create_imposicao_job_v2(
                 {"ano": ano, "nro": nro, "label": ancora_label}, membros_meta
             ),
             "jdf_import_root": perfil["saida"]["jdf_hotfolder"],
+            "imposicao_pasta_saida": perfil["saida"].get("pasta_pdf"),
             "compose_com_template": False,
             "jdf_sem_imposicao": False,
             "pasta_art_blank_pages": False,
@@ -506,6 +508,7 @@ def create_imposicao_job_v2(
         "imposicao_variante": variante,
         "usar_pre_impresso": False,
         "imposicao_destino": destino,
+        "imposicao_pasta_saida": perfil["saida"].get("pasta_pdf"),
         "jdf_path": artifacts["jdf_path"],
         "jdf_dir": artifacts["jdf_dir"],
         "jdf_name": artifacts["jdf_name"],
@@ -716,6 +719,7 @@ def opcoes_os(*, ano: int, nro: int, modelo: dict[str, Any]) -> dict[str, Any]:
                 "fonte": "perfil",
                 "resumo": perfil_svc.resumo_perfil(perfil),
                 "destino_pdf": perfil["saida"]["destino_pdf"],
+                "pasta_pdf": perfil["saida"].get("pasta_pdf"),
                 "erros": [e["mensagem"] for e in val["erros"]],
                 "aviso": aviso_paginas_os(ano=ano, nro=nro, perfil=perfil) if val["completo"] else None,
             }
@@ -733,6 +737,7 @@ def opcoes_os(*, ano: int, nro: int, modelo: dict[str, Any]) -> dict[str, Any]:
                 "fonte": "configuracao_antiga",
                 "resumo": _resumo_config_antiga(cfg),
                 "destino_pdf": "offset" if cfg.get("usar_pre_impresso") else "digital",
+                "pasta_pdf": None,
                 "erros": [],
             }
             # Fluxo antigo: juntada só com pré-impresso nos produtos que ele conhece.
@@ -747,6 +752,7 @@ def opcoes_os(*, ano: int, nro: int, modelo: dict[str, Any]) -> dict[str, Any]:
                 "fonte": None,
                 "resumo": None,
                 "destino_pdf": None,
+                "pasta_pdf": None,
                 "erros": ["Variante não configurada para este produto."],
             }
     return {

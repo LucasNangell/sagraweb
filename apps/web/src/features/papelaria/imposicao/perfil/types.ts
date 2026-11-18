@@ -76,7 +76,12 @@ export interface PerfilImposicao {
     max_os: number | null;
     preencher_todos_slots: boolean;
   };
-  saida: { destino_pdf: DestinoPdf; jdf_hotfolder: string | null };
+  saida: {
+    destino_pdf: DestinoPdf;
+    jdf_hotfolder: string | null;
+    /** Caminho absoluto. Vazio = pasta Digital ou Offset da OS. */
+    pasta_pdf: string | null;
+  };
 }
 
 export type ValidacaoItem = { campo: string; mensagem: string };
@@ -203,6 +208,8 @@ export type VarianteOpcao = {
   fonte: "perfil" | "configuracao_antiga" | null;
   resumo: string | null;
   destino_pdf: DestinoPdf | null;
+  /** Pasta absoluta para onde o PDF do Apogee é movido. */
+  pasta_pdf?: string | null;
   erros: string[];
   /** Ex.: PDF da OS só com a frente → "será gerado só frente". */
   aviso?: string | null;

@@ -189,6 +189,11 @@ export function PapelariaImposicaoVarianteDialog({
                           PDF em {info.destino_pdf === "offset" ? "Offset" : "Digital"}
                           {info.fonte === "configuracao_antiga" ? " · configuração antiga" : ""}
                         </span>
+                        {info.pasta_pdf ? (
+                          <span className="break-all text-[10px] text-slate-500">
+                            Mover para {info.pasta_pdf}
+                          </span>
+                        ) : null}
                         {info.aviso ? (
                           <span
                             className="text-[11px] font-medium text-amber-700"

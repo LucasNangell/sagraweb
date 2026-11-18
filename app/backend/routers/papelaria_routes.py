@@ -1216,7 +1216,7 @@ def poll_imposicao_resultado_job(
     job_id: int,
     _session: SessionData = Depends(_require_papelaria_access),
 ):
-    """Polling: aguarda PDF do Apogee em Sefoc, move para Digital e libera visualização."""
+    """Polling: aguarda PDF do Apogee e move para a pasta de saída configurada."""
     try:
         from services import papelaria_jobs_service as jobs_svc
 

@@ -3707,10 +3707,140 @@ def _finalize_imposicao_offset_pdf(
     }
 
 
+def _is_absolute_output_path(path: str) -> bool:
+    text = (path or "").strip()
+    return bool(
+        text.startswith("\\\\")
+        or text.startswith("//")
+        or re.match(r"^[A-Za-z]:[\\/]", text)
+    )
+
+
+def _path_is_under(path: str, root: str) -> bool:
+    try:
+        real_file = os.path.normcase(os.path.realpath(path))
+        real_base = os.path.normcase(os.path.realpath(root))
+    except OSError:
+        return False
+    if real_file == real_base:
+        return True
+    prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+    return real_file.startswith(prefix)
+
+
+def _pasta_saida_do_job(dados: dict[str, Any]) -> Optional[str]:
+    """
+    Pasta absoluta configurada no perfil para receber o PDF do Apogee.
+
+    Vazio = pasta Digital ou Offset da OS. Caminho inválido vira erro,
+    para não gravar o PDF no lugar errado.
+    """
+    raw = dados.get("imposicao_pasta_saida")
+    if raw is None or str(raw).strip() == "":
+        v2 = dados.get("imposicao_v2")
+        if isinstance(v2, dict):
+            perfil = v2.get("perfil")
+            saida = perfil.get("saida") if isinstance(perfil, dict) else None
+            if isinstance(saida, dict):
+                raw = saida.get("pasta_pdf")
+    if raw is None or str(raw).strip() == "":
+        return None
+    from services.papelaria_models_service import normalize_pasta_imposicao
+
+    try:
+        return normalize_pasta_imposicao(raw)
+    except ValueError as exc:
+        raise ValueError(
+            str(exc).replace("Pasta de imposição", "Pasta de saída do PDF")
+        ) from exc
+
+
+def _pdf_sob_pasta_saida(job: dict[str, Any], candidate: str) -> Optional[str]:
+    """Arquivo absoluto somente se estiver dentro da pasta de saída do job."""
+    dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    pasta = _pasta_saida_do_job(dados)
+    full = os.path.normpath((candidate or "").strip())
+    if not pasta or not full or not _path_is_under(full, pasta):
+        return None
+    if os.path.isfile(full):
+        return full
+    return None
+
+
+def _coluna_pdf_gerado(dest_abs: str, dest_name: str) -> str:
+    """ArquivoPdfGerado cabe em VARCHAR(512); senão guarda só o nome."""
+    norm = os.path.normpath(dest_abs)
+    if len(norm) <= 512:
+        return norm
+    return dest_name
+
+
+def _finalize_imposicao_pasta_pdf(
+    *,
+    job_id: int,
+    job: dict[str, Any],
+    src_path: str,
+    dest_abs: str,
+    dest_name: str,
+    pasta: str,
+) -> dict[str, Any]:
+    """Move o PDF do Apogee para a pasta de saída configurada no perfil."""
+    dados = dict(job.get("dados") or {})
+    try:
+        os.makedirs(os.path.dirname(dest_abs) or pasta, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(
+            f"Não foi possível criar a pasta de saída do PDF: {pasta}"
+        ) from exc
+    src_norm = os.path.normpath(src_path)
+    dest_norm = os.path.normpath(dest_abs)
+    if src_norm != dest_norm:
+        if os.path.isfile(dest_norm):
+            os.remove(dest_norm)
+        shutil.move(src_norm, dest_norm)
+    origem_name = os.path.basename(src_norm)
+    coluna = _coluna_pdf_gerado(dest_norm, dest_name)
+
+    dados["aguardando_apogee"] = False
+    dados["imposicao_pdf_origem"] = origem_name
+    dados["imposicao_pasta_saida"] = pasta
+    dados["imposicao_pdf_saida"] = dest_name
+    dados["imposicao_pdf_abs"] = dest_norm
+    _registrar_limpeza_imposicao(job_id, job, dados)
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET ArquivoPdfGerado = %(pdf)s,
+            DadosJson = %(dados)s
+        WHERE ID = %(id)s
+        """,
+        {
+            "pdf": coluna,
+            "dados": json.dumps(dados, ensure_ascii=False),
+            "id": job_id,
+        },
+    )
+    updated = get_job(job_id)
+    if not updated:
+        raise RuntimeError("Falha ao recuperar job após mover PDF de imposição.")
+    if src_norm == dest_norm:
+        log_msg = f"PDF Apogee já na pasta de saída: {dest_name} ({pasta})"
+    else:
+        log_msg = f"PDF Apogee movido para a pasta de saída: {dest_name} ({pasta})"
+    append_job_log(job_id, log_msg, "info")
+    broadcast_job_update(updated)
+    return {
+        "status": "ready",
+        "message": "PDF de imposição pronto.",
+        "job": updated,
+    }
+
+
 def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
     """
-    Verifica Sefoc/Digital por PDF do Apogee; normaliza para Digital com
-    nomenclatura Digit_NUp e atualiza o job.
+    Verifica a pasta da OS por PDF do Apogee e move para a pasta de saída
+    do perfil, ou para Digital/Offset da OS quando essa pasta não foi definida.
     """
     ensure_papelaria_jobs_tables()
     job = get_job(job_id)
@@ -3763,6 +3893,42 @@ def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
         destino_offset = (
             str(dados.get("imposicao_destino") or "").strip().lower() == "offset"
             or bool(dados.get("usar_pre_impresso"))
+        )
+
+    pasta_saida = _pasta_saida_do_job(dados)
+    if pasta_saida:
+        dest_name = (
+            build_imposicao_offset_pdf_name(ano=ano, nro=nro, config=config)
+            if destino_offset
+            else build_imposicao_digital_pdf_name(ano=ano, nro=nro, config=config)
+        )
+        dest_abs = os.path.normpath(os.path.join(pasta_saida, dest_name))
+        found = dest_abs if os.path.isfile(dest_abs) else None
+        if not found:
+            expected_stem = _imposicao_export_stem(ano, nro)
+            found = find_imposicao_pdf_in_sefoc(
+                sefoc_dir,
+                expected_stem=expected_stem,
+            )
+        if not found and not destino_offset:
+            digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
+            found = find_imposicao_pdf_in_digital(
+                digital_dir,
+                preferred_name=dest_name,
+            )
+        if not found:
+            return {
+                "status": "waiting_apogee",
+                "message": _waiting_apogee_message(),
+                "job": job,
+            }
+        return _finalize_imposicao_pasta_pdf(
+            job_id=job_id,
+            job=job,
+            src_path=found,
+            dest_abs=dest_abs,
+            dest_name=dest_name,
+            pasta=pasta_saida,
         )
 
     if destino_offset:
@@ -3852,6 +4018,12 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
     if not rel_path or (tipo_l == "pdf" and rel_path.lower().endswith(".jdf")):
         raise FileNotFoundError(waiting_msg)
 
+    if tipo_l == "pdf" and _is_absolute_output_path(rel_path):
+        externo = _pdf_sob_pasta_saida(job, rel_path)
+        if not externo:
+            raise FileNotFoundError(waiting_msg)
+        return externo, os.path.basename(externo)
+
     from routers.os_routes import _get_os_folder_path
 
     os_path = _get_os_folder_path(job["ano_protocolo"], job["nro_protocolo"])
@@ -3880,6 +4052,14 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
             raise ValueError("Caminho de arquivo inválido.")
     except OSError as exc:
         raise FileNotFoundError("Arquivo não encontrado.") from exc
+
+    if not os.path.isfile(full_path) and tipo_l == "pdf":
+        dados_job = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+        abs_saved = str(dados_job.get("imposicao_pdf_abs") or "").strip()
+        if abs_saved and os.path.basename(abs_saved) == os.path.basename(rel_path):
+            externo = _pdf_sob_pasta_saida(job, abs_saved)
+            if externo:
+                return externo, os.path.basename(externo)
 
     if not os.path.isfile(full_path):
         raise FileNotFoundError(waiting_msg)

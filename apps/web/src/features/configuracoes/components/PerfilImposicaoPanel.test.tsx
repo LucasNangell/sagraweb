@@ -71,6 +71,8 @@ describe("PerfilImposicaoPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Importar da configuração atual/ }));
     expect(screen.getByText("1. Folha")).toBeInTheDocument();
     expect(screen.getByText("7. Saída")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /7\. Saída/ }));
+    expect(screen.getByLabelText(/Pasta de saída do PDF imposto/)).toBeInTheDocument();
     expect(screen.getByTestId("perfil-imposicao-preview")).toBeInTheDocument();
     expect(screen.getAllByText("297×210 mm · 2 slots").length).toBeGreaterThan(0);
   });

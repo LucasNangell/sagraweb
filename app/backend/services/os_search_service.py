@@ -920,7 +920,11 @@ def _enrich_rows_with_details(
     if not pairs:
         return rows
     by_key: Dict[tuple, Dict[str, Any]] = {}
-    fields = ("titulo", "produto") if slim else ("titulo", "produto", "formato")
+    fields = (
+        ("titulo", "produto", "tiragem")
+        if slim
+        else ("titulo", "produto", "formato", "tiragem")
+    )
     select_formato = "" if slim else ",\n            d.FormatoLink AS formato"
     for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
         placeholders = ", ".join(["(%s, %s)"] * len(chunk))
@@ -931,7 +935,8 @@ def _enrich_rows_with_details(
             d.NroProtocoloLinkDet AS nr_os,
             d.AnoProtocoloLinkDet AS ano,
             d.Titulo AS titulo,
-            d.TipoPublicacaoLink AS produto
+            d.TipoPublicacaoLink AS produto,
+            d.Tiragem AS tiragem
             {select_formato}
         FROM tabDetalhesServico AS d
         WHERE (d.NroProtocoloLinkDet, d.AnoProtocoloLinkDet) IN ({placeholders})
@@ -1348,6 +1353,7 @@ def _execute_home_fetch_all(
     produto_select = (
         "d.TipoPublicacaoLink AS produto" if need_details_join else "NULL AS produto"
     )
+    tiragem_select = "d.Tiragem AS tiragem" if need_details_join else "NULL AS tiragem"
     order_clause = _build_os_search_order_clause(
         sort_by,
         sort_dir,
@@ -1370,6 +1376,7 @@ def _execute_home_fetch_all(
         NULL AS observacao,
         p.EntregPrazoLink AS prioridade,
         {produto_select},
+        {tiragem_select},
         NULL AS formato,
         p.DataEntrada AS data_entrada,
         p.EntregData AS data_entrega,
@@ -1974,6 +1981,7 @@ def execute_os_search(
         "d.TipoPublicacaoLink AS produto" if need_details_join else "NULL AS produto"
     )
     formato_select = "d.FormatoLink AS formato" if need_details_join else "NULL AS formato"
+    tiragem_select = "d.Tiragem AS tiragem" if need_details_join else "NULL AS tiragem"
 
     sub_os_scalar = _sub_os_count_scalar_sql()
 
@@ -1999,6 +2007,7 @@ def execute_os_search(
         p.EntregPrazoLink AS prioridade,
         {produto_select},
         {formato_select},
+        {tiragem_select},
         p.DataEntrada AS data_entrada,
         p.EntregData AS data_entrega,
         p.EntregPeriodo AS entreg_periodo,

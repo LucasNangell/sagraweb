@@ -175,6 +175,7 @@ class TestOsSearchDetailsEnrich:
                 "titulo": "Adesivo",
                 "produto": "Impresso",
                 "formato": "A4",
+                "tiragem": 1500,
             }
         ]
         rows = [
@@ -184,12 +185,16 @@ class TestOsSearchDetailsEnrich:
                 "titulo": None,
                 "produto": None,
                 "formato": None,
+                "tiragem": None,
             }
         ]
         out = _enrich_rows_with_details(rows)
         assert out[0]["titulo"] == "Adesivo"
         assert out[0]["produto"] == "Impresso"
         assert out[0]["formato"] == "A4"
+        assert out[0]["tiragem"] == 1500
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "d.Tiragem AS tiragem" in sql
 
 
 class TestOsSearchMaterializedAndamento:

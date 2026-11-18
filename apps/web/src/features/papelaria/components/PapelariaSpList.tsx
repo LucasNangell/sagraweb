@@ -50,6 +50,16 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
   };
 }
 
+function formatTiragem(value: string | number | null | undefined): string {
+  if (value == null || String(value).trim() === "") return "—";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(
+      value,
+    );
+  }
+  return String(value).trim();
+}
+
 function PipelineIcon({
   icon,
   label,
@@ -208,6 +218,7 @@ export function PapelariaSpList({
                 <th className="px-2 py-1.5 font-semibold">Ano</th>
                 <th className="px-2 py-1.5 font-semibold">Produto</th>
                 <th className="px-2 py-1.5 font-semibold">Solicitante</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Tiragem</th>
                 <th className="w-14 px-1 py-1.5 text-center font-semibold">
                   Prova
                 </th>
@@ -276,6 +287,12 @@ export function PapelariaSpList({
                       title={row.solicitante ?? undefined}
                     >
                       {row.solicitante ?? "—"}
+                    </td>
+                    <td
+                      className="whitespace-nowrap px-2 py-1.5 text-right font-mono tabular-nums"
+                      data-testid={`papelaria-sp-tiragem-${row.nr_os}`}
+                    >
+                      {formatTiragem(row.tiragem)}
                     </td>
                     <td
                       className="w-14 px-1 py-1.5 text-center"

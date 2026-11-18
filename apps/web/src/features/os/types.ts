@@ -7,6 +7,8 @@ export interface OsSearchRow {
   situacao?: string | null;
   prioridade?: string | null;
   produto?: string | null;
+  /** Tiragem de tabDetalhesServico, preenchida por GET /api/os/search. */
+  tiragem?: string | number | null;
   formato?: string | null;
   setor?: string | null;
   data_entrada?: string | null;

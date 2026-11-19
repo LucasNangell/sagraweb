@@ -53,6 +53,8 @@ def _ensure_inspect_layout_column() -> None:
         ("LayoutJson", "JSON NULL"),
         ("OcorrenciasJson", "JSON NULL"),
         ("ModeloArquivo", "VARCHAR(255) NULL"),
+        ("NomesJson", "JSON NULL"),
+        ("OrigemChave", "VARCHAR(64) NULL"),
     ):
         rows = db.execute_query(
             """
@@ -162,10 +164,46 @@ def _row_to_inspect(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def find_reusable_inspect(origem_chave: str, max_age_hours: int = INSPECT_TTL_HOURS) -> Optional[dict[str, Any]]:
+    """Leitura do mesmo arquivo (mesma data/tamanho/modelo) ainda válida — evita reler no Corel."""
+    if not origem_chave:
+        return None
+    ensure_papelaria_cdr_inspect_table()
+    cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    try:
+        rows = db.execute_query(
+            """
+            SELECT Token
+            FROM tabPapelariaCdrInspect
+            WHERE OrigemChave = %(chave)s
+              AND Status IN (%(pending)s, %(processing)s, %(completed)s)
+              AND CriadoEm >= %(cutoff)s
+            ORDER BY CriadoEm DESC
+            LIMIT 1
+            """,
+            {
+                "chave": origem_chave,
+                "pending": STATUS_PENDING,
+                "processing": STATUS_PROCESSING,
+                "completed": STATUS_COMPLETED,
+                "cutoff": cutoff.strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        )
+    except Exception as exc:
+        logger.warning("Reuso de inspeção indisponível: %s", exc)
+        return None
+    if not rows:
+        return None
+    return get_inspect_request(rows[0]["Token"])
+
+
 def create_inspect_request(
     content: bytes,
     filename: str,
     modelo_arquivo: Optional[str] = None,
+    *,
+    nomes: Optional[list[str]] = None,
+    origem_chave: Optional[str] = None,
 ) -> dict[str, Any]:
     ensure_papelaria_cdr_inspect_table()
     if not content:
@@ -190,14 +228,23 @@ def create_inspect_request(
             "status": STATUS_PENDING,
         },
     )
-    if modelo_arquivo:
+    if modelo_arquivo or nomes or origem_chave:
         try:
             db.execute_query(
-                "UPDATE tabPapelariaCdrInspect SET ModeloArquivo = %(m)s WHERE Token = %(t)s",
-                {"m": str(modelo_arquivo)[:255], "t": token},
+                """
+                UPDATE tabPapelariaCdrInspect
+                SET ModeloArquivo = %(m)s, NomesJson = %(n)s, OrigemChave = %(c)s
+                WHERE Token = %(t)s
+                """,
+                {
+                    "m": str(modelo_arquivo or "")[:255] or None,
+                    "n": json.dumps(list(nomes), ensure_ascii=False) if nomes else None,
+                    "c": (origem_chave or "")[:64] or None,
+                    "t": token,
+                },
             )
         except Exception as exc:
-            logger.warning("Inspeção %s: modelo não registrado: %s", token, exc)
+            logger.warning("Inspeção %s: metadados não registrados: %s", token, exc)
     return get_inspect_request(token) or {"inspect_id": token, "status": STATUS_PENDING}
 
 
@@ -292,7 +339,18 @@ def claim_inspect_for_worker(worker_id: str) -> Optional[dict[str, Any]]:
         "filename": row.get("NomeArquivo") or cdr_path.name,
         # Modelo do produto: o worker usa o formato para achar Frente/Verso.
         "modelo_arquivo": row.get("ModeloArquivo") or "",
+        # Comparação: só estes objetos (busca nativa, sem layout de prévia).
+        "nomes": _json_list(row.get("NomesJson")),
     }
+
+
+def _json_list(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+    return [str(x) for x in raw] if isinstance(raw, list) else []
 
 
 def resolve_inspect_cdr_for_worker(token: str, worker_id: str) -> tuple[Path, str]:

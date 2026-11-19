@@ -125,11 +125,12 @@ def test_iniciar_envia_corel_para_inspecao(monkeypatch, tmp_path):
     )
     sent = {}
 
-    def fake_create(content, filename, modelo_arquivo=None):
+    def fake_create(content, filename, modelo_arquivo=None, *, nomes=None, origem_chave=None):
         sent.update(content=content, filename=filename)
         return {"inspect_id": "tok", "status": "pending"}
 
     monkeypatch.setattr("services.papelaria_cdr_inspect_service.create_inspect_request", fake_create)
+    monkeypatch.setattr("services.papelaria_cdr_inspect_service.find_reusable_inspect", lambda chave: None)
     out = svc.iniciar_comparacao(2025, 6592)
     assert out == {"status": "pending", "inspect_id": "tok", "arquivo": "x_Base.cdr", "relative_path": "Sefoc/x_Base.cdr"}
     assert sent == {"content": b"cdr-bytes", "filename": "x_Base.cdr"}
@@ -253,3 +254,46 @@ def test_parear_ocorrencias_um_para_um_por_face():
     pares = parear_ocorrencias(ocs, entradas)
     assert pares[0]["key"] == "obj_e_2" and pares[1]["key"] == "obj_e_1"
     assert 2 not in pares
+
+
+def test_iniciar_reaproveita_leitura_do_mesmo_arquivo(monkeypatch, tmp_path):
+    from services import papelaria_corel_dados_service as svc
+
+    cdr = tmp_path / "x_Base.cdr"
+    cdr.write_bytes(b"cdr-bytes")
+    base = {"filename": "x_Base.cdr", "relative_path": "Sefoc/x_Base.cdr", "absolute_path": str(cdr)}
+    monkeypatch.setattr("services.papelaria_jobs_service.find_os_base_cdr", lambda ano, nro: base)
+    monkeypatch.setattr(
+        "services.papelaria_models_service.get_modelo_by_id",
+        lambda mid: {"arquivo_modelo": "CtVisitaFV.cdr", "campos": MODELO["campos"]},
+    )
+    criadas = []
+
+    def fake_create(content, filename, modelo_arquivo=None, *, nomes=None, origem_chave=None):
+        criadas.append({"modelo": modelo_arquivo, "nomes": nomes, "chave": origem_chave})
+        return {"inspect_id": f"tok{len(criadas)}", "status": "pending"}
+
+    existentes: dict = {}
+    monkeypatch.setattr("services.papelaria_cdr_inspect_service.create_inspect_request", fake_create)
+    monkeypatch.setattr(
+        "services.papelaria_cdr_inspect_service.find_reusable_inspect",
+        lambda chave: existentes.get(chave),
+    )
+
+    primeira = svc.iniciar_comparacao(2025, 6592, 12)
+    assert primeira["inspect_id"] == "tok1"
+    assert criadas[0]["modelo"] == "CtVisitaFV.cdr"
+    assert criadas[0]["nomes"] == sorted(MODELO["campos"])  # só os objetos do modelo
+    chave = criadas[0]["chave"]
+    assert chave and len(chave) == 64
+
+    existentes[chave] = {"inspect_id": "tok1", "status": "completed"}
+    segunda = svc.iniciar_comparacao(2025, 6592, 12)
+    assert segunda["inspect_id"] == "tok1" and segunda["reaproveitada"] is True
+    assert len(criadas) == 1
+
+    # Arquivo mudou (tamanho/data): nova leitura.
+    cdr.write_bytes(b"cdr-bytes-editado")
+    terceira = svc.iniciar_comparacao(2025, 6592, 12)
+    assert terceira["inspect_id"] == "tok2"
+    assert criadas[1]["chave"] != chave

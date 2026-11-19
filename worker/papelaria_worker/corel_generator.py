@@ -459,6 +459,29 @@ def _indexar_shapes_recursivo(
             pass
 
 
+def construir_indice_por_nomes(
+    doc: Any,
+    nomes: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    Índice só dos objetos pedidos, pela busca nativa do Corel (FindShapes).
+
+    Percorrer o documento inteiro via COM custa ~3 ms por objeto (18 s num
+    cartão antigo com brasão e 1.700 objetos); buscar os ~5 campos do modelo
+    leva ~0,2 s. Mesma estrutura de ``construir_indice_shapes_documento``.
+    """
+    import cdr_formato_legado as legado
+
+    indice: dict[str, list[dict[str, Any]]] = {}
+    unicos = [n for n in dict.fromkeys((n or "").strip() for n in nomes) if n]
+    for p in range(1, doc.Pages.Count + 1):
+        page = doc.Pages.Item(p)
+        for nome in unicos:
+            for shape in legado.buscar_por_nome(page, nome):
+                indice.setdefault(nome, []).append({"pagina": p, "shape": shape})
+    return indice
+
+
 def construir_indice_shapes_documento(doc) -> dict[str, list[dict[str, Any]]]:
     """
     Percorre o documento uma única vez e indexa shapes por nome.
@@ -1079,6 +1102,8 @@ def inspecionar_cdr(
     *,
     corel_visible: bool = False,
     modelo_produto_path: Optional[str] = None,
+    nomes: Optional[list[str]] = None,
+    cache_dir: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Abre o .cdr no CorelDRAW e retorna objetos nomeados com conteúdo textual.
@@ -1096,7 +1121,12 @@ def inspecionar_cdr(
         doc = corel.OpenDocument(os.path.abspath(caminho_cdr))
         logs.append(f"Documento aberto para inspeção — {doc.Pages.Count} página(s).")
 
-        indice = construir_indice_shapes_documento(doc)
+        # Comparação Corel × formulário: só os objetos do modelo (busca nativa).
+        modo_comparacao = bool(nomes)
+        if modo_comparacao:
+            indice = construir_indice_por_nomes(doc, list(nomes or []))
+        else:
+            indice = construir_indice_shapes_documento(doc)
         logs.append(f"Objetos nomeados encontrados: {len(indice)}.")
 
         campos: dict[str, str] = {}
@@ -1119,18 +1149,20 @@ def inspecionar_cdr(
         for texto in campos.values():
             vars_set.update(extrair_variaveis(texto))
 
-        preview_layout = extrair_preview_layout_documento(doc, indice, campos)
-        logs.append(
-            f"Layout prévia: canvas {preview_layout['canvas']['width']}×"
-            f"{preview_layout['canvas']['height']}, "
-            f"{len(preview_layout.get('elementos') or [])} elemento(s)."
-        )
+        preview_layout: Optional[dict[str, Any]] = None
+        if not modo_comparacao:
+            preview_layout = extrair_preview_layout_documento(doc, indice, campos)
+            logs.append(
+                f"Layout prévia: canvas {preview_layout['canvas']['width']}×"
+                f"{preview_layout['canvas']['height']}, "
+                f"{len(preview_layout.get('elementos') or [])} elemento(s)."
+            )
 
         ocorrencias_faces: dict[str, list[dict[str, Any]]] = {}
         if modelo_produto_path:
             try:
                 ocorrencias_faces = _ocorrencias_por_face(
-                    corel, doc, indice, modelo_produto_path, logs
+                    corel, doc, indice, modelo_produto_path, logs, cache_dir=cache_dir
                 )
             except Exception as exc:
                 logs.append(f"Aviso: faces das ocorrências não identificadas: {exc}")
@@ -1156,13 +1188,15 @@ def _ocorrencias_por_face(
     indice: dict[str, list[dict[str, Any]]],
     modelo_produto_path: str,
     logs: list[str],
+    *,
+    cache_dir: Optional[str] = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Texto, face e posição (no arquivo final) de cada ocorrência nomeada."""
     import cdr_formato_legado as legado
 
     esperado: Optional[tuple[float, float]] = None
     if os.path.isfile(modelo_produto_path):
-        esperado = legado.ler_tamanho_primeira_pagina(corel, modelo_produto_path)
+        esperado = legado.tamanho_modelo_com_cache(corel, modelo_produto_path, cache_dir)
     out: dict[str, list[dict[str, Any]]] = {}
     with legado.unidade_mm(doc):
         localizar = legado.localizador_faces(doc, esperado)
@@ -2895,7 +2929,9 @@ def _preparar_corel_da_os(
     esperado: Optional[tuple[float, float]] = None
     if modelo_produto_path and os.path.isfile(modelo_produto_path):
         try:
-            esperado = legado.ler_tamanho_primeira_pagina(corel, modelo_produto_path)
+            esperado = legado.tamanho_modelo_com_cache(
+                corel, modelo_produto_path, os.path.dirname(modelo_produto_path)
+            )
         except Exception as exc:
             logs.append(f"Aviso: não foi possível ler o formato do modelo: {exc}")
     precisa, tamanho = legado.precisa_reconstruir(doc, esperado)
@@ -3087,7 +3123,13 @@ def _gerar_arquivo_corel_impl(
                 elif not campos and not objetos_produto:
                     raise CorelGenerationError("Modelo sem campos configurados.")
 
-                indice_shapes = construir_indice_shapes_documento(doc)
+                nomes_usados = (
+                    list(campos)
+                    + list(exclusoes or [])
+                    + list((carimbo or {}).keys())
+                    + list((objetos_produto or {}).keys())
+                )
+                indice_shapes = construir_indice_por_nomes(doc, nomes_usados)
                 logs.append(f"Índice de shapes: {len(indice_shapes)} nome(s) únicos.")
 
                 for nome_campo, texto_modelo in campos.items():

@@ -18,6 +18,7 @@ import {
   fetchPapelariaJobsForOs,
   fetchPapelariaOsContext,
   finalizarCorelPapelariaOs,
+  iniciarComparacaoCorelPapelariaOs,
 } from "@/api/papelaria";
 import { fetchImposicaoVariantesOs } from "@/api/imposicaoPerfil";
 import { fetchDeputadoLookup } from "@/api/auxLookups";
@@ -887,6 +888,24 @@ export function PapelariaCorelPanel({
     });
     setCorelEditMode(false);
   };
+
+  /**
+   * Pré-leitura: assim que a SP abre com modelo e Corel na pasta, o worker já lê
+   * os textos (o servidor reaproveita a leitura enquanto o arquivo não mudar).
+   * Ao clicar em «Criar prova» a comparação sai na hora.
+   */
+  const preLeituraCorelRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasOs || !selectedModelId) return;
+    const arquivo = usableCdrFiles(cdrPathQuery.data)[0];
+    if (!arquivo) return;
+    const chave = `${selectedModelId}|${arquivo.relative_path}|${arquivo.mtime}`;
+    if (preLeituraCorelRef.current === chave) return;
+    preLeituraCorelRef.current = chave;
+    void iniciarComparacaoCorelPapelariaOs(anoNum, nroNum, selectedModelId).catch(
+      () => undefined,
+    );
+  }, [hasOs, anoNum, nroNum, selectedModelId, cdrPathQuery.data]);
 
   /** Corel já na pasta: compara os textos dele com o formulário antes de criar a prova. */
   const verificarDadosCorelThenGerar = async () => {

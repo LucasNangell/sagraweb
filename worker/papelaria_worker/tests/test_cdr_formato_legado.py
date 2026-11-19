@@ -153,3 +153,87 @@ def test_planejar_troca_de_linhas_preserva_estrutura():
     # Número de linhas diferente: troca o texto inteiro (None).
     assert planejar_troca_de_linhas(antigo, "Só uma linha") is None
     assert planejar_troca_de_linhas("uma linha", "outra") is None
+
+
+class _FakeRange:
+    def __init__(self, itens):
+        self.itens = itens
+        self.Count = len(itens)
+
+    def Item(self, i):
+        return self.itens[i - 1]
+
+
+class _FakeShape:
+    def __init__(self, nome, tipo=6, filhos=()):
+        self.Name = nome
+        self.Type = tipo
+        self.Shapes = _FakeRange(list(filhos))
+        self.LeftX, self.BottomY, self.SizeWidth, self.SizeHeight = 0.0, 0.0, 10.0, 10.0
+        self.Text = type("T", (), {"Story": type("S", (), {"Text": nome})()})()
+
+
+class _FakePageShapes:
+    def __init__(self, por_nome):
+        self.por_nome = por_nome
+        self.chamadas = []
+
+    def FindShapes(self, nome):
+        self.chamadas.append(nome)
+        return _FakeRange(self.por_nome.get(nome, []))
+
+
+class _FakePage:
+    def __init__(self, por_nome):
+        self.Shapes = _FakePageShapes(por_nome)
+
+
+def test_variantes_nome_cobrem_maiusculas_e_espacos():
+    assert leg.variantes_nome("Nome Dep")[:3] == ["Nome Dep", "NomeDep", "nome dep"]
+    assert "NOMEDEP" in leg.variantes_nome("nomedep")
+    assert leg.variantes_nome("") == []
+
+
+def test_buscar_por_nome_tenta_variantes_e_para_no_primeiro_achado():
+    alvo = _FakeShape("nomedep")
+    page = _FakePage({"nomedep": [alvo]})
+    assert leg.buscar_por_nome(page, "NomeDep") == [alvo]
+    assert page.Shapes.chamadas == ["NomeDep", "nomedep"]
+    assert leg.buscar_por_nome(_FakePage({}), "X") == []
+
+
+def test_expandir_grupos_so_abre_grupo_que_envolve_borda():
+    borda = leg.Borda("Frente", (0, 0, 85, 50))
+    filho = _FakeShape("NomeDep")
+    grande = ShapeInfo("", 7, (0, 0, 100, 60), "Arte", ref=_FakeShape("", 7, [filho]))
+    pequeno = ShapeInfo("", 7, (10, 10, 20, 20), "Arte", ref=_FakeShape("", 7, [filho]))
+    leg.expandir_grupos([grande, pequeno], [borda])
+    assert [f.nome for f in grande.filhos] == ["NomeDep"]
+    assert pequeno.filhos == []
+
+
+def test_tamanho_modelo_com_cache(tmp_path, monkeypatch):
+    modelo = tmp_path / "CtVisitaFV.cdr"
+    modelo.write_bytes(b"cdr")
+    chamadas = []
+    monkeypatch.setattr(leg, "ler_tamanho_primeira_pagina", lambda corel, p: chamadas.append(p) or (85.0, 50.0))
+    cache = tmp_path / "cache"
+    assert leg.tamanho_modelo_com_cache(None, str(modelo), str(cache)) == (85.0, 50.0)
+    assert leg.tamanho_modelo_com_cache(None, str(modelo), str(cache)) == (85.0, 50.0)
+    assert len(chamadas) == 1  # segunda vez veio do cache
+    modelo.write_bytes(b"cdr alterado")
+    leg.tamanho_modelo_com_cache(None, str(modelo), str(cache))
+    assert len(chamadas) == 2  # arquivo mudou: relê
+
+
+def test_indice_por_nomes_usa_busca_nativa(monkeypatch):
+    import corel_generator as cg
+
+    nome1 = _FakeShape("NomeDep")
+    nome2 = _FakeShape("NomeDep")
+    paginas = [_FakePage({"NomeDep": [nome1]}), _FakePage({"NomeDep": [nome2], "Contato": []})]
+    doc = type("D", (), {})()
+    doc.Pages = type("P", (), {"Count": 2, "Item": lambda self, i: paginas[i - 1]})()
+    idx = cg.construir_indice_por_nomes(doc, ["NomeDep", "Contato", "NomeDep"])
+    assert [o["pagina"] for o in idx["NomeDep"]] == [1, 2]
+    assert "Contato" not in idx

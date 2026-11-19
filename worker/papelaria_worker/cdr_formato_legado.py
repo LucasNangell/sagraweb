@@ -304,28 +304,101 @@ def _texto_com(shape: Any) -> str:
     return ""
 
 
-def _info_com(shape: Any, camada: str, profundidade: int = 0) -> ShapeInfo:
+CDR_GROUP_SHAPE = 7  # cdrGroupShape
+
+
+def _info_com(
+    shape: Any,
+    camada: str,
+    profundidade: int = 0,
+    profundidade_max: int = 0,
+) -> ShapeInfo:
+    """
+    Resumo do objeto. Cada propriedade é uma chamada COM (~3 ms): por padrão
+    só o nível de cima; grupos são abertos sob demanda (ver ``expandir_grupos``).
+    """
     try:
         tipo = int(shape.Type)
     except Exception:
         tipo = -1
     filhos: list[ShapeInfo] = []
-    if profundidade < 2:
+    if tipo == CDR_GROUP_SHAPE and profundidade < profundidade_max:
         try:
             filhos = [
-                _info_com(f, camada, profundidade + 1) for f in _itens(shape.Shapes)
+                _info_com(f, camada, profundidade + 1, profundidade_max)
+                for f in _itens(shape.Shapes)
             ]
         except Exception:
             filhos = []
+    texto = ""
+    if tipo == CDR_TEXT_SHAPE:
+        try:
+            texto = str(shape.Text.Story.Text or "").strip()
+        except Exception:
+            texto = ""
     return ShapeInfo(
         nome=str(getattr(shape, "Name", "") or ""),
         tipo=tipo,
         bounds=_bounds_com(shape),
         camada=camada,
-        texto=_texto_com(shape),
+        texto=texto,
         ref=shape,
         filhos=filhos,
     )
+
+
+def expandir_grupos(infos: list[ShapeInfo], bordas: list[Borda], nivel: int = 0) -> None:
+    """Abre só os grupos que envolvem uma borda (a borda pode estar agrupada com a arte)."""
+    if nivel > 3:
+        return
+    for info in infos:
+        if info.tipo != CDR_GROUP_SHAPE or info.filhos or not info.bounds:
+            continue
+        if not any(contem_area(info.bounds, b.bounds) for b in bordas):
+            continue
+        info.filhos = [_info_com(f, info.camada) for f in _itens(info.ref.Shapes)]
+        expandir_grupos(info.filhos, bordas, nivel + 1)
+
+
+def variantes_nome(nome: str) -> list[str]:
+    """FindShapes diferencia maiúsculas: tenta também as grafias usuais."""
+    base = (nome or "").strip()
+    out: list[str] = []
+    for v in (
+        base,
+        "".join(base.split()),
+        base.lower(),
+        base.upper(),
+        base[:1].upper() + base[1:],
+        base[:1].upper() + base[1:].lower(),
+    ):
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def buscar_por_nome(page: Any, nome: str) -> list[Any]:
+    """
+    Objetos com o nome na página (inclusive dentro de grupos), pela busca
+    nativa do Corel — ~100× mais rápida que percorrer os objetos via COM.
+    """
+    for variante in variantes_nome(nome):
+        try:
+            encontrados = _itens(page.Shapes.FindShapes(variante))
+        except Exception:
+            encontrados = []
+        if encontrados:
+            return encontrados
+    return []
+
+
+def bordas_nomeadas(page: Any) -> list[ShapeInfo]:
+    """BordaF/BordaV da página (onde estiverem), como ShapeInfo."""
+    out: list[ShapeInfo] = []
+    for nome in ("BordaF", "BordaV"):
+        for shape in buscar_por_nome(page, nome):
+            out.append(_info_com(shape, ""))
+    return out
 
 
 def _camadas_da_pagina(page: Any) -> list[Any]:
@@ -344,6 +417,7 @@ def _camadas_da_pagina(page: Any) -> list[Any]:
 
 
 def _shapes_da_pagina(page: Any) -> list[tuple[Any, list[ShapeInfo]]]:
+    """Objetos do nível de cima de cada camada (sem abrir grupos)."""
     return [
         (layer, [_info_com(s, str(layer.Name)) for s in _itens(layer.Shapes)])
         for layer in _camadas_da_pagina(page)
@@ -378,6 +452,42 @@ def salvar_documento_como(doc: Any, caminho: str, logs: list[str], corel: Any = 
     _save_document_as(doc, caminho, logs, corel)
 
 
+def tamanho_modelo_com_cache(
+    corel: Any,
+    caminho_cdr: str,
+    cache_dir: Optional[str] = None,
+) -> tuple[float, float]:
+    """Tamanho da página 1 do modelo; guarda por arquivo+data (abrir custa ~1,6 s)."""
+    import json
+
+    try:
+        st = os.stat(caminho_cdr)
+        chave = f"{os.path.normcase(os.path.abspath(caminho_cdr))}|{int(st.st_mtime)}|{st.st_size}"
+    except OSError:
+        chave = ""
+    arquivo_cache = os.path.join(cache_dir, "tamanhos_modelos.json") if cache_dir else ""
+    cache: dict[str, Any] = {}
+    if chave and arquivo_cache and os.path.isfile(arquivo_cache):
+        try:
+            with open(arquivo_cache, encoding="utf-8") as fh:
+                cache = json.load(fh) or {}
+        except (OSError, ValueError):
+            cache = {}
+        valor = cache.get(chave)
+        if isinstance(valor, list) and len(valor) == 2:
+            return float(valor[0]), float(valor[1])
+    tamanho = ler_tamanho_primeira_pagina(corel, caminho_cdr)
+    if chave and arquivo_cache:
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            cache[chave] = [tamanho[0], tamanho[1]]
+            with open(arquivo_cache, "w", encoding="utf-8") as fh:
+                json.dump(cache, fh)
+        except OSError:
+            pass
+    return tamanho
+
+
 def ler_tamanho_primeira_pagina(corel: Any, caminho_cdr: str) -> tuple[float, float]:
     """Tamanho (mm) da página 1 de um .cdr (ex.: modelo do produto)."""
     doc = corel.OpenDocument(os.path.abspath(caminho_cdr))
@@ -403,9 +513,8 @@ def precisa_reconstruir(
     tamanho = (float(page.SizeWidth), float(page.SizeHeight))
     if formato_difere(tamanho, esperado_mm):
         return True, tamanho
-    for _layer, infos in _shapes_da_pagina(page):
-        if any(eh_nome_borda(s.nome) for s in _achatar(infos)):
-            return True, tamanho
+    if bordas_nomeadas(page):
+        return True, tamanho
     return False, tamanho
 
 
@@ -529,7 +638,9 @@ def reconstruir_documento_no_formato(
     origem = doc.Pages.Item(1)
     camadas = _shapes_da_pagina(origem)
     todos = [info for _layer, infos in camadas for info in infos]
-    bordas = detectar_bordas(todos, esperado_mm, pagina=1)
+    bordas = detectar_bordas(todos + bordas_nomeadas(origem), esperado_mm, pagina=1)
+    for _layer, infos in camadas:
+        expandir_grupos(infos, bordas)
     if not bordas:
         raise FormatoLegadoError(
             "Corel da pasta fora do formato do produto e sem BordaF/BordaV "
@@ -666,8 +777,9 @@ def localizador_faces(
     """
     precisa, _tamanho = precisa_reconstruir(doc, esperado_mm)
     if precisa:
-        infos = [i for _l, lista in _shapes_da_pagina(doc.Pages.Item(1)) for i in lista]
-        bordas = detectar_bordas(infos, esperado_mm, pagina=1)
+        pagina1 = doc.Pages.Item(1)
+        infos = [i for _l, lista in _shapes_da_pagina(pagina1) for i in lista]
+        bordas = detectar_bordas(infos + bordas_nomeadas(pagina1), esperado_mm, pagina=1)
         if bordas:
             tamanho = esperado_mm or largura_altura(bordas[0].bounds)
             destino = (0.0, 0.0, float(tamanho[0]), float(tamanho[1]))

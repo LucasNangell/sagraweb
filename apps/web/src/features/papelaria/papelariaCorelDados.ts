@@ -19,7 +19,7 @@ const defaultDeps: CompararCorelDeps = {
   now: () => Date.now(),
 };
 
-export const COMPARAR_COREL_INTERVALO_MS = 1_500;
+export const COMPARAR_COREL_INTERVALO_MS = 1_000;
 /** Worker pode estar ocupado com outra geração: espera razoável. */
 export const COMPARAR_COREL_TIMEOUT_MS = 180_000;
 

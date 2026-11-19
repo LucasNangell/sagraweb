@@ -327,10 +327,15 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
                 )
             except FileNotFoundError:
                 modelo_inspect = None
+        nomes_inspect = [
+            str(n) for n in (inspect.get("nomes") or []) if str(n or "").strip()
+        ]
         result = inspecionar_cdr(
             local_cdr,
             corel_visible=cfg.corel_visible,
             modelo_produto_path=modelo_inspect,
+            nomes=nomes_inspect or None,
+            cache_dir=os.path.join(cfg.temp_dir, "_models_cache"),
         )
         api.complete_inspect(
             inspect_id,
@@ -1084,13 +1089,15 @@ def _run_loop_inner(api: PapelariaWorkerApiClient, cfg: WorkerConfig) -> int:
                 time.sleep(max(3, cfg.poll_interval_sec))
                 continue
             _reset_load_wait_log()
-            job = api.claim()
-            if job:
-                process_job(api, cfg, job)
-                continue
+            # Leitura de .cdr é interativa (usuário esperando o modal) e curta:
+            # vem antes das gerações da fila.
             inspect = api.claim_inspect()
             if inspect:
                 process_inspect(api, cfg, inspect)
+                continue
+            job = api.claim()
+            if job:
+                process_job(api, cfg, job)
                 continue
             _maybe_auto_update(cfg)
             time.sleep(max(2, cfg.poll_interval_sec))

@@ -10,6 +10,7 @@ manter os dados originais ou aplicar os do formulário.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, Optional
 
@@ -261,16 +262,36 @@ def iniciar_comparacao(ano: int, nro: int, modelo_id: Optional[int] = None) -> d
     if not base:
         return {"status": STATUS_SEM_COREL}
     modelo_arquivo = ""
+    nomes: list[str] = []
     if modelo_id:
         from services import papelaria_models_service as models_svc
 
         modelo = models_svc.get_modelo_by_id(int(modelo_id))
         modelo_arquivo = str((modelo or {}).get("arquivo_modelo") or "").strip()
+        nomes = sorted(str(k) for k in ((modelo or {}).get("campos") or {}))
+
+    # Mesma versão do arquivo + mesmo modelo: reaproveita a leitura (o texto do
+    # Corel não depende do formulário; a comparação é feita na hora).
+    chave = _origem_chave(base, modelo_arquivo, nomes)
+    existente = inspect_svc.find_reusable_inspect(chave) if chave else None
+    if existente:
+        return {
+            "status": existente.get("status") or inspect_svc.STATUS_PENDING,
+            "inspect_id": existente["inspect_id"],
+            "arquivo": base["filename"],
+            "relative_path": base["relative_path"],
+            "reaproveitada": True,
+        }
+
     with open(base["absolute_path"], "rb") as handle:
         content = handle.read()
     # O modelo dá o formato do produto: o worker identifica Frente/Verso.
     inspect = inspect_svc.create_inspect_request(
-        content, base["filename"], modelo_arquivo=modelo_arquivo or None
+        content,
+        base["filename"],
+        modelo_arquivo=modelo_arquivo or None,
+        nomes=nomes or None,
+        origem_chave=chave or None,
     )
     return {
         "status": inspect.get("status") or inspect_svc.STATUS_PENDING,
@@ -278,6 +299,26 @@ def iniciar_comparacao(ano: int, nro: int, modelo_id: Optional[int] = None) -> d
         "arquivo": base["filename"],
         "relative_path": base["relative_path"],
     }
+
+
+def _origem_chave(base: dict[str, Any], modelo_arquivo: str, nomes: list[str]) -> str:
+    import hashlib
+
+    try:
+        st = os.stat(base["absolute_path"])
+    except OSError:
+        return ""
+    raw = "|".join(
+        [
+            os.path.normcase(str(base["absolute_path"])),
+            str(int(st.st_mtime)),
+            str(st.st_size),
+            modelo_arquivo,
+            ",".join(nomes),
+            "v2",  # formato das ocorrências (face/posição)
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def resultado_comparacao(

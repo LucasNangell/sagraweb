@@ -52,6 +52,7 @@ class WorkerInspectCompletePayload(BaseModel):
     campos: Dict[str, str] = Field(default_factory=dict)
     variaveis: list[str] = Field(default_factory=list)
     preview_layout: Optional[Dict[str, Any]] = None
+    ocorrencias: Optional[Dict[str, list[str]]] = None
 
 
 class WorkerInspectFailPayload(BaseModel):
@@ -211,6 +212,7 @@ def worker_complete_inspect(inspect_id: str, payload: WorkerInspectCompletePaylo
             payload.campos,
             payload.variaveis,
             payload.preview_layout,
+            payload.ocorrencias,
         )
     except LookupError:
         raise HTTPException(404, "Inspeção não encontrada.")

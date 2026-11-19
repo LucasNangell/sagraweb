@@ -2,6 +2,7 @@ import { apiFetch, apiUrl } from "@/api/client";
 
 import type {
   PapelariaApproveProvaResponse,
+  PapelariaCompararCorelResponse,
   PapelariaCorelModelDetail,
   PapelariaCorelModelSummary,
   PapelariaCreateJobPayload,
@@ -88,6 +89,34 @@ export async function createPapelariaJob(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+/** Pede ao worker a leitura dos textos do Corel já existente na pasta da SP. */
+export async function iniciarComparacaoCorelPapelariaOs(
+  ano: number,
+  nro: number,
+): Promise<PapelariaCompararCorelResponse> {
+  return apiFetch<PapelariaCompararCorelResponse>(
+    `/papelaria/os/${ano}/${nro}/comparar-corel`,
+    { method: "POST" },
+  );
+}
+
+/** Estado da leitura; concluída, traz as diferenças Corel × formulário. */
+export async function resultadoComparacaoCorelPapelariaOs(
+  ano: number,
+  nro: number,
+  inspectId: string,
+  payload: { modelo_id: number; dados: Record<string, string> },
+): Promise<PapelariaCompararCorelResponse> {
+  return apiFetch<PapelariaCompararCorelResponse>(
+    `/papelaria/os/${ano}/${nro}/comparar-corel/${encodeURIComponent(inspectId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function createPapelariaTimbradoA4DigitalJob(

@@ -38,6 +38,8 @@ CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
 # Create: .cdr já existente na pasta da OS usado no lugar do modelo (relativo à OS).
 BASE_CDR_DADOS_KEY = "__base_cdr"
+# Usuário escolheu manter os textos do Corel da pasta (não aplicar o formulário).
+MANTER_DADOS_COREL_KEY = "__manter_dados_corel"
 ARTEFATOS_DADOS_KEY = "__artefatos"
 
 OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
@@ -285,7 +287,7 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
                 raise ValueError("Lista de exclusões deve ser uma lista.")
             cleaned[key_stripped] = value.strip()
             continue
-        if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY):
+        if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY, MANTER_DADOS_COREL_KEY):
             # Definidos só pelo servidor (nunca aceitar caminho vindo do cliente).
             continue
         if value is None:
@@ -408,6 +410,7 @@ def create_job(
     solicitado_por: str,
     tipo_job: str = "create",
     job_pai_id: Optional[int] = None,
+    manter_dados_corel: bool = False,
 ) -> dict[str, Any]:
     ensure_papelaria_jobs_tables()
     from services import papelaria_models_service as models_svc
@@ -434,6 +437,8 @@ def create_job(
         base_cdr = find_os_base_cdr(ano, nro)
         if base_cdr:
             dados_clean[BASE_CDR_DADOS_KEY] = base_cdr["relative_path"]
+            if manter_dados_corel:
+                dados_clean[MANTER_DADOS_COREL_KEY] = "1"
 
     ordem = next_queue_position()
     produto_os = (os_row.get("produto") or modelo["produto"] or "").strip()
@@ -480,7 +485,11 @@ def create_job(
             job_id,
             (
                 f"Prova a partir do Corel da pasta da OS ({base_cdr['filename']}); "
-                "os campos do formulário serão aplicados sobre ele."
+                + (
+                    "mantendo os dados originais do Corel (escolha do usuário)."
+                    if manter_dados_corel
+                    else "os campos do formulário serão aplicados sobre ele."
+                )
             ),
             "info",
         )
@@ -2684,6 +2693,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
     input_cdr_rel = dados.pop(INPUT_CDR_DADOS_KEY, None)
     base_cdr_rel = dados.pop(BASE_CDR_DADOS_KEY, None)
+    manter_dados_corel = str(dados.pop(MANTER_DADOS_COREL_KEY, "") or "") == "1"
 
     preview_config: dict[str, Any] | None = None
     preview_raw = modelo.get("preview_config_json")
@@ -2760,6 +2770,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
                     job["nro_protocolo"],
                     str(base_cdr_rel),
                 )
+                if manter_dados_corel:
+                    payload["manter_dados_corel"] = True
             except (LookupError, FileNotFoundError, ValueError) as exc:
                 append_job_log(
                     job_id,

@@ -986,14 +986,20 @@ def inspecionar_cdr(
         logs.append(f"Objetos nomeados encontrados: {len(indice)}.")
 
         campos: dict[str, str] = {}
+        # Todos os textos por nome (ex.: NomeDep na frente e no verso).
+        ocorrencias_texto: dict[str, list[str]] = {}
         for nome, ocorrencias in sorted(indice.items()):
             if not ocorrencias:
                 continue
-            shape = ocorrencias[0]["shape"]
-            texto = ler_texto_shape(shape)
-            if texto is None:
+            textos: list[str] = []
+            for occ in ocorrencias[:20]:
+                texto_occ = ler_texto_shape(occ["shape"])
+                if texto_occ is not None:
+                    textos.append(texto_occ.strip())
+            if not textos:
                 continue
-            campos[nome] = texto.strip()
+            campos[nome] = textos[0]
+            ocorrencias_texto[nome] = textos
 
         vars_set: set[str] = set()
         for texto in campos.values():
@@ -1008,6 +1014,7 @@ def inspecionar_cdr(
 
         return {
             "campos": campos,
+            "ocorrencias": ocorrencias_texto,
             "variaveis": sorted(vars_set),
             "preview_layout": preview_layout,
             "logs": logs,
@@ -2835,6 +2842,7 @@ def _gerar_arquivo_corel_impl(
     result_meta: Optional[dict[str, Any]] = None,
     base_cdr_da_os: bool = False,
     modelo_produto_path: Optional[str] = None,
+    aplicar_campos: bool = True,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
@@ -2917,7 +2925,11 @@ def _gerar_arquivo_corel_impl(
                     modelo.get("campos") or {},
                     preview_config,
                 )
-                if not campos:
+                if not aplicar_campos:
+                    # Usuário optou por manter os dados originais do Corel da pasta.
+                    logs.append("Mantendo os dados originais do Corel — campos do formulário não aplicados.")
+                    campos = {}
+                elif not campos:
                     raise CorelGenerationError("Modelo sem campos configurados.")
 
                 indice_shapes = construir_indice_shapes_documento(doc)
@@ -2946,13 +2958,14 @@ def _gerar_arquivo_corel_impl(
                     )
 
                 try:
-                    aplicar_campos_dinamicos(
-                        doc,
-                        dados,
-                        preview_config,
-                        campos_dinamicos_layout,
-                        logs,
-                    )
+                    if aplicar_campos:
+                        aplicar_campos_dinamicos(
+                            doc,
+                            dados,
+                            preview_config,
+                            campos_dinamicos_layout,
+                            logs,
+                        )
                 except CorelGenerationError:
                     raise
                 except Exception as exc:
@@ -3093,6 +3106,7 @@ def gerar_arquivo_corel(
     pdf_somente_primeira_pagina: bool = False,
     base_cdr_da_os: bool = False,
     modelo_produto_path: Optional[str] = None,
+    aplicar_campos: bool = True,
 ) -> GenerationResult:
     """
     Gera CDR e PDF a partir de cópia temporária do modelo.
@@ -3154,6 +3168,7 @@ def gerar_arquivo_corel(
             result_meta=result_meta,
             base_cdr_da_os=base_cdr_da_os,
             modelo_produto_path=modelo_produto_local,
+            aplicar_campos=aplicar_campos or not base_cdr_da_os,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))

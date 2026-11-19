@@ -33,6 +33,13 @@ class PapelariaCreateJobPayload(BaseModel):
     modelo_id: int = Field(..., ge=1)
     dados: Dict[str, Any] = Field(default_factory=dict)
     lancar_andamento: bool = False
+    # Corel já na pasta da SP: True = manter os textos dele (não aplicar campos).
+    manter_dados_corel: bool = False
+
+
+class PapelariaCompararCorelPayload(BaseModel):
+    modelo_id: int = Field(..., ge=1)
+    dados: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PapelariaFinalizeCorelPayload(BaseModel):
@@ -781,6 +788,7 @@ def criar_job_papelaria(
                 modelo_id=payload.modelo_id,
                 dados=payload.dados,
                 solicitado_por=str(session.ponto),
+                manter_dados_corel=payload.manter_dados_corel,
             )
     except LookupError as e:
         raise HTTPException(404, str(e))
@@ -789,6 +797,50 @@ def criar_job_papelaria(
     except Exception as e:
         logger.exception("Erro ao criar job papelaria: %s", e)
         raise HTTPException(500, "Erro ao criar solicitação de geração.")
+
+
+@router.post("/os/{ano}/{nro}/comparar-corel")
+def iniciar_comparacao_corel_os(
+    ano: int,
+    nro: int,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Lê (via worker) os textos do Corel da pasta para comparar com o formulário."""
+    try:
+        from services import papelaria_corel_dados_service as dados_svc
+
+        return dados_svc.iniciar_comparacao(ano, nro)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except (OSError, ValueError) as e:
+        raise HTTPException(400, f"Não foi possível ler o Corel da pasta: {e}")
+    except Exception as e:
+        logger.exception("Erro ao iniciar comparação Corel OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao ler o Corel da pasta.")
+
+
+@router.post("/os/{ano}/{nro}/comparar-corel/{inspect_id}")
+def resultado_comparacao_corel_os(
+    ano: int,
+    nro: int,
+    inspect_id: str,
+    payload: PapelariaCompararCorelPayload,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Estado da leitura; concluída, traz as diferenças Corel × formulário."""
+    try:
+        from services import papelaria_corel_dados_service as dados_svc
+
+        return dados_svc.resultado_comparacao(
+            inspect_id,
+            modelo_id=payload.modelo_id,
+            dados=payload.dados,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.exception("Erro na comparação Corel OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao comparar os dados do Corel.")
 
 
 @router.post("/jobs/timbrado-a4-digital")

@@ -325,6 +325,7 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
             campos=result.get("campos") or {},
             variaveis=result.get("variaveis") or [],
             preview_layout=result.get("preview_layout"),
+            ocorrencias=result.get("ocorrencias"),
         )
         logging.info(
             "Inspeção %s concluída — %s campo(s), %s variável(is).",
@@ -835,6 +836,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 base_cdr_da_os=usa_corel_da_os,
                 modelo_produto_path=(
                     _caminho_modelo_produto(cfg, job) if usa_corel_da_os else None
+                ),
+                aplicar_campos=not (
+                    usa_corel_da_os and bool(job.get("manter_dados_corel"))
                 ),
             )
             if prova_email and not cancel_requested.is_set():

@@ -90,6 +90,31 @@ export interface PapelariaCreateJobPayload {
   modelo_id: number;
   dados: Record<string, string>;
   lancar_andamento?: boolean;
+  /** Corel já na pasta: true mantém os textos dele (não aplica o formulário). */
+  manter_dados_corel?: boolean;
+}
+
+/** Objeto do Corel da pasta cujo texto difere do que o formulário aplicaria. */
+export interface PapelariaCorelDiferenca {
+  campo: string;
+  rotulo: string;
+  original: string[];
+  novo: string[];
+}
+
+export type PapelariaCompararCorelStatus =
+  | "sem_corel"
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export interface PapelariaCompararCorelResponse {
+  status: PapelariaCompararCorelStatus;
+  inspect_id?: string;
+  arquivo?: string;
+  erro?: string | null;
+  diferencas?: PapelariaCorelDiferenca[];
 }
 
 export interface PapelariaOsContext {

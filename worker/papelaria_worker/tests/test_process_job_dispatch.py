@@ -305,6 +305,22 @@ class TestProcessJobDispatch:
         assert gerar.call_args.kwargs["dados"] == {"nome_deputado": "Fulano"}
         assert any("Corel da pasta da OS" in msg for msg in api.logs)
 
+    def test_create_mantem_dados_do_corel_quando_usuario_escolhe(self, patched_runtime):
+        gerar, _exportar, cfg = patched_runtime
+        base_cdr = r"\\server\os\Sefoc\x_Base.cdr"
+        worker_mod._process_job_body(
+            FakeApi(),
+            cfg,
+            _job(tipo_job="create", base_cdr_path=base_cdr, manter_dados_corel=True),
+        )
+        assert gerar.call_args.kwargs["aplicar_campos"] is False
+        assert gerar.call_args.kwargs["base_cdr_da_os"] is True
+
+        worker_mod._process_job_body(
+            FakeApi(), cfg, _job(tipo_job="create", base_cdr_path=base_cdr)
+        )
+        assert gerar.call_args.kwargs["aplicar_campos"] is True
+
     def test_create_sem_corel_na_pasta_usa_modelo(self, patched_runtime, tmp_path):
         gerar, _exportar, cfg = patched_runtime
         worker_mod._process_job_body(FakeApi(), cfg, _job(tipo_job="create"))

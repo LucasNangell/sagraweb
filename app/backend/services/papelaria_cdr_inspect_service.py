@@ -49,21 +49,25 @@ def ensure_papelaria_cdr_inspect_table() -> None:
 
 
 def _ensure_inspect_layout_column() -> None:
-    rows = db.execute_query(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'tabPapelariaCdrInspect'
-          AND COLUMN_NAME = 'LayoutJson'
-        """
-    )
-    if rows and rows[0].get("cnt"):
-        return
-    try:
-        db.execute_query("ALTER TABLE tabPapelariaCdrInspect ADD COLUMN LayoutJson JSON NULL")
-    except Exception as exc:
-        logger.warning("Migração coluna LayoutJson em tabPapelariaCdrInspect: %s", exc)
+    for coluna in ("LayoutJson", "OcorrenciasJson"):
+        rows = db.execute_query(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'tabPapelariaCdrInspect'
+              AND COLUMN_NAME = %(coluna)s
+            """,
+            {"coluna": coluna},
+        )
+        if rows and rows[0].get("cnt"):
+            continue
+        try:
+            db.execute_query(
+                f"ALTER TABLE tabPapelariaCdrInspect ADD COLUMN {coluna} JSON NULL"
+            )
+        except Exception as exc:
+            logger.warning("Migração coluna %s em tabPapelariaCdrInspect: %s", coluna, exc)
 
 
 def _inspect_dir() -> Path:
@@ -132,6 +136,12 @@ def _row_to_inspect(row: dict[str, Any]) -> dict[str, Any]:
             layout = json.loads(layout)
         except json.JSONDecodeError:
             layout = None
+    ocorrencias = row.get("OcorrenciasJson")
+    if isinstance(ocorrencias, str):
+        try:
+            ocorrencias = json.loads(ocorrencias)
+        except json.JSONDecodeError:
+            ocorrencias = None
     return {
         "inspect_id": row["Token"],
         "filename": row.get("NomeArquivo") or "",
@@ -139,6 +149,8 @@ def _row_to_inspect(row: dict[str, Any]) -> dict[str, Any]:
         "campos": campos if isinstance(campos, dict) else {},
         "variaveis": variaveis if isinstance(variaveis, list) else [],
         "preview_layout": layout if isinstance(layout, dict) else None,
+        # Todos os textos por objeto (nomes repetidos em Frente/Verso).
+        "ocorrencias": ocorrencias if isinstance(ocorrencias, dict) else None,
         "erro": row.get("Erro"),
         "worker_id": row.get("WorkerID"),
         "criado_em": row.get("CriadoEm"),
@@ -177,8 +189,7 @@ def get_inspect_request(token: str) -> Optional[dict[str, Any]]:
     ensure_papelaria_cdr_inspect_table()
     rows = db.execute_query(
         """
-        SELECT Token, NomeArquivo, CaminhoCdr, Status, CamposJson, VariaveisJson,
-               Erro, WorkerID, CriadoEm, ConcluidoEm
+        SELECT *
         FROM tabPapelariaCdrInspect
         WHERE Token = %(token)s
         LIMIT 1
@@ -297,6 +308,7 @@ def complete_inspect(
     campos: dict[str, str],
     variaveis: list[str],
     preview_layout: Optional[dict[str, Any]] = None,
+    ocorrencias: Optional[dict[str, list[str]]] = None,
 ) -> dict[str, Any]:
     ensure_papelaria_cdr_inspect_table()
     _assert_worker_owns_inspect(token, worker_id)
@@ -347,10 +359,46 @@ def complete_inspect(
             """,
             params,
         )
+    if isinstance(ocorrencias, dict) and ocorrencias:
+        limpas = {
+            str(k): [str(t) for t in (v or [])][:20]
+            for k, v in ocorrencias.items()
+            if isinstance(v, list)
+        }
+        try:
+            db.execute_query(
+                """
+                UPDATE tabPapelariaCdrInspect
+                SET OcorrenciasJson = %(ocorrencias)s
+                WHERE Token = %(token)s
+                """,
+                {"token": token, "ocorrencias": json.dumps(limpas, ensure_ascii=False)},
+            )
+        except Exception as exc:
+            logger.warning("Inspeção %s: ocorrências não gravadas: %s", token, exc)
     result = get_inspect_request(token)
     if not result or result["status"] != STATUS_COMPLETED:
         raise ValueError("Inspeção não pôde ser concluída (status alterado).")
     return result
+
+
+def discard_inspect_file(token: str) -> None:
+    """Remove a cópia do .cdr guardada para a inspeção (dados ficam no banco)."""
+    rows = db.execute_query(
+        "SELECT CaminhoCdr FROM tabPapelariaCdrInspect WHERE Token = %(token)s LIMIT 1",
+        {"token": token},
+    )
+    if not rows:
+        return
+    try:
+        path = _resolve_stored_cdr_path(rows[0].get("CaminhoCdr") or "")
+    except FileNotFoundError:
+        return
+    if path.is_file():
+        try:
+            path.unlink()
+        except OSError as exc:
+            logger.debug("Cópia da inspeção %s não removida: %s", token, exc)
 
 
 def fail_inspect(token: str, worker_id: str, erro: str) -> dict[str, Any]:

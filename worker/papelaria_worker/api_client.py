@@ -221,6 +221,7 @@ class PapelariaWorkerApiClient:
         campos: dict[str, str],
         variaveis: list[str],
         preview_layout: dict[str, Any] | None = None,
+        ocorrencias: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "worker_id": self.worker_id,
@@ -229,6 +230,8 @@ class PapelariaWorkerApiClient:
         }
         if preview_layout:
             payload["preview_layout"] = preview_layout
+        if ocorrencias:
+            payload["ocorrencias"] = ocorrencias
         return self._request(
             "POST",
             f"/papelaria/worker/inspect/{inspect_id}/complete",

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS tabPapelariaCdrInspect (
     CamposJson JSON NULL,
     VariaveisJson JSON NULL,
     LayoutJson JSON NULL,
+    OcorrenciasJson JSON NULL,
     Erro TEXT NULL,
     WorkerID VARCHAR(64) NULL,
     CriadoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

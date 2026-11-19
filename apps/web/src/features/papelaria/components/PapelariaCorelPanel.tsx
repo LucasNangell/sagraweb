@@ -34,6 +34,10 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
 import { PapelariaActionBar } from "./PapelariaActionBar";
+import {
+  PapelariaCorelDadosModal,
+  type PapelariaCorelDadosEstado,
+} from "./PapelariaCorelDadosModal";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import type {
@@ -59,6 +63,7 @@ import {
   isWaitingImposicaoApogee,
 } from "../papelariaImposicaoStatus";
 import { isTimbradoA4DigitalProduct } from "../papelariaSession";
+import { compararDadosCorel } from "../papelariaCorelDados";
 import {
   resolveDefaultPapelariaViewMode,
   type PapelariaViewMode,
@@ -173,6 +178,13 @@ export function PapelariaCorelPanel({
     "gerar" | "digital" | "corel" | "imposicao" | null
   >(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
+  const [corelDados, setCorelDados] = useState<PapelariaCorelDadosEstado | null>(
+    null,
+  );
+  /** Escolha do usuário: manter os textos do Corel da pasta. */
+  const manterDadosCorelRef = useRef(false);
+  const corelDadosAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => corelDadosAbortRef.current?.abort(), []);
   const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
   const [imposicaoOpcoes, setImposicaoOpcoes] =
     useState<ImposicaoVariantesResponse | null>(null);
@@ -812,8 +824,56 @@ export function PapelariaCorelPanel({
       modelo_id: selectedModelId,
       dados: dadosForJob,
       lancar_andamento: lancarAndamento,
+      manter_dados_corel: manterDadosCorelRef.current,
     });
     setCorelEditMode(false);
+  };
+
+  /** Corel já na pasta: compara os textos dele com o formulário antes de criar a prova. */
+  const verificarDadosCorelThenGerar = async () => {
+    if (!selectedModelId) return;
+    corelDadosAbortRef.current?.abort();
+    const controller = new AbortController();
+    corelDadosAbortRef.current = controller;
+    const arquivo = usableCdrFiles(cdrPathQuery.data)[0]?.filename ?? null;
+    setCorelDados({ fase: "lendo", arquivo });
+    const res = await compararDadosCorel({
+      ano: anoNum,
+      nro: nroNum,
+      modeloId: selectedModelId,
+      dados: dadosForJob,
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) return;
+    if (
+      res.status === "sem_corel" ||
+      (res.status === "completed" && !(res.diferencas?.length ?? 0))
+    ) {
+      setCorelDados(null);
+      void ensureOsFolderThen("gerar");
+      return;
+    }
+    if (res.status === "completed") {
+      setCorelDados({
+        fase: "diferente",
+        arquivo: res.arquivo ?? arquivo,
+        diferencas: res.diferencas ?? [],
+      });
+      return;
+    }
+    setCorelDados({ fase: "falhou", arquivo: res.arquivo ?? arquivo, erro: res.erro });
+  };
+
+  const escolherDadosCorel = (manter: boolean) => {
+    manterDadosCorelRef.current = manter;
+    setCorelDados(null);
+    void ensureOsFolderThen("gerar");
+  };
+
+  const cancelarDadosCorel = () => {
+    corelDadosAbortRef.current?.abort();
+    corelDadosAbortRef.current = null;
+    setCorelDados(null);
   };
 
   const runTimbradoA4Digital = (lancarAndamento: boolean) => {
@@ -846,6 +906,11 @@ export function PapelariaCorelPanel({
 
   const handleGerarArquivo = () => {
     if (!validateFormForAction()) return;
+    manterDadosCorelRef.current = false;
+    if (usableCdrFiles(cdrPathQuery.data).length > 0) {
+      void verificarDadosCorelThenGerar();
+      return;
+    }
     void ensureOsFolderThen("gerar");
   };
 
@@ -1582,6 +1647,15 @@ export function PapelariaCorelPanel({
           />
         </div>
       </div>
+
+      {corelDados ? (
+        <PapelariaCorelDadosModal
+          estado={corelDados}
+          onManterOriginais={() => escolherDadosCorel(true)}
+          onUsarFormulario={() => escolherDadosCorel(false)}
+          onCancelar={cancelarDadosCorel}
+        />
+      ) : null}
 
       {andamentoModal ? (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">

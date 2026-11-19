@@ -2805,7 +2805,7 @@ class TestCriarProvaComCorelDaPasta:
 
         assert svc._is_backup_cdr_filename(name) is expected
 
-    def _run_create(self, monkeypatch, cdrs):
+    def _run_create(self, monkeypatch, cdrs, manter=False):
         from services import papelaria_jobs_service as svc
 
         inserted: dict = {}
@@ -2851,8 +2851,10 @@ class TestCriarProvaComCorelDaPasta:
                     "nome_deputado": "Fulano",
                     "email": "a@b.c",
                     svc.BASE_CDR_DADOS_KEY: "../../segredo.cdr",
+                    svc.MANTER_DADOS_COREL_KEY: "1",
                 },
                 solicitado_por="918713",
+                manter_dados_corel=manter,
             )
         return json.loads(inserted["dados"]), logs
 
@@ -2928,3 +2930,64 @@ class TestCriarProvaComCorelDaPasta:
         assert payload["campos"] == {"nome_deputado": "{nome_deputado}"}
         assert "input_cdr_path" not in payload
         assert payload["output_cdr_name"] == "05024-Nome-BaseSefoc.cdr"
+
+
+class TestManterDadosDoCorel:
+    CDRS = [
+        {
+            "filename": "x_Base.cdr",
+            "relative_path": "Sefoc/x_Base.cdr",
+            "absolute_path": "/srv/os/Sefoc/x_Base.cdr",
+            "mtime": 1.0,
+        }
+    ]
+
+    def test_create_marca_manter_so_por_parametro(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        helper = TestCriarProvaComCorelDaPasta()
+        dados, logs = helper._run_create(monkeypatch, self.CDRS)
+        # Valor vindo do cliente em «dados» é ignorado.
+        assert svc.MANTER_DADOS_COREL_KEY not in dados
+
+        dados, logs = helper._run_create(monkeypatch, self.CDRS, manter=True)
+        assert dados[svc.MANTER_DADOS_COREL_KEY] == "1"
+        assert any("mantendo os dados originais" in msg for msg in logs)
+
+        dados, _ = helper._run_create(monkeypatch, [], manter=True)
+        assert svc.MANTER_DADOS_COREL_KEY not in dados
+
+    def test_payload_envia_manter_dados_corel(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "x_Base.cdr").write_bytes(b"cdr")
+        job = {
+            "id": 89,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_CREATE,
+            "produto": "Ct Visita",
+            "modelo_id": 1,
+            "arquivo_modelo": "CtVisitaFV.cdr",
+            "dados": {
+                svc.BASE_CDR_DADOS_KEY: "Sefoc/x_Base.cdr",
+                svc.MANTER_DADOS_COREL_KEY: "1",
+                "nome_deputado": "Fulano",
+            },
+            "tentativas": 0,
+        }
+        modelo = {**MODEL_SAMPLE, "campos": {"NomeDep": "{nome_deputado}"}}
+        monkeypatch.setattr(svc, "get_job", lambda job_id: job)
+        monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda ano, nro, create=False: str(sefoc))
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05024-Nome")
+        monkeypatch.setattr("routers.os_routes._get_os_folder_path", lambda ano, nro: str(tmp_path))
+        monkeypatch.setattr("services.papelaria_prova_modo.get_modo", lambda: "prova_web")
+        monkeypatch.setattr(svc, "build_prova_web_pdf_name", lambda ano, nro: "05024-Nome-Prova2.pdf")
+        monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: None)
+        with patch("services.papelaria_models_service.get_modelo_by_id", return_value=modelo):
+            payload = svc.build_worker_job_payload(89)
+        assert payload["manter_dados_corel"] is True
+        assert payload["base_cdr_path"].endswith("x_Base.cdr")
+        assert svc.MANTER_DADOS_COREL_KEY not in payload["dados"]

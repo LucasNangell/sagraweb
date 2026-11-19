@@ -6,6 +6,7 @@ tab_os_ultimo_andamento_operacional só entra com OS_SEARCH_PREFER_MATERIALIZED=
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 from datetime import date, datetime, timedelta
@@ -40,19 +41,19 @@ OS_SEARCH_MAX_MULTI_FILTER_ITEMS = 20
 
 
 def build_os_search_etag(result: Dict[str, Any]) -> str:
-    """Fingerprint estável do dump (ids + andamento) para If-None-Match / 304."""
-    digest = hashlib.sha1()
-    data = result.get("data") or []
-    digest.update(str(len(data)).encode("utf-8"))
-    for row in data:
-        digest.update(b"\0")
-        digest.update(str(row.get("nr_os") or "").encode("utf-8"))
-        digest.update(str(row.get("ano") or "").encode("utf-8"))
-        digest.update(str(row.get("last_update") or "").encode("utf-8"))
-        digest.update(str(row.get("situacao") or "").encode("utf-8"))
-        digest.update(str(row.get("setor") or "").encode("utf-8"))
-        digest.update(str(row.get("sub_os_id") or "").encode("utf-8"))
-    return f'"{digest.hexdigest()}"'
+    """Fingerprint do payload inteiro. 304 só quando o JSON visto pelo cliente não muda."""
+    body = result.get("json")
+    if isinstance(body, (bytes, bytearray)):
+        return f'"{hashlib.sha1(body).hexdigest()}"'
+    payload = {
+        "data": result.get("data") or [],
+        "meta": {
+            "total_records": (result.get("meta") or {}).get("total_records"),
+            "has_next": (result.get("meta") or {}).get("has_next"),
+        },
+    }
+    raw = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False, separators=(",", ":"))
+    return f'"{hashlib.sha1(raw.encode("utf-8")).hexdigest()}"'
 
 _HOME_FETCH_ALL_FAST_SORTS = frozenset(
     {

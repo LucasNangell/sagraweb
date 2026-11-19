@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { defaultOsFilters } from "./osFiltersStore";
 import {
   lastOsSearchRow,
+  resolveOsHomeListQuery,
   shouldAutoSelectLastOsRow,
 } from "./osHomeListSelection";
 import type { OsSearchRow } from "./types";
@@ -17,6 +18,36 @@ describe("defaultOsFilters", () => {
     expect(filters.sortDir).toBe("asc");
     expect(filters.sorts).toEqual([{ column: "ano", dir: "asc" }]);
     expect(filters.fetchAll).toBe(true);
+  });
+});
+
+describe("resolveOsHomeListQuery", () => {
+  const full = { data: { data: [{ nr_os: 1 }] }, isPlaceholderData: false };
+  const fast = { data: { data: [{ nr_os: 2 }] }, isPlaceholderData: false };
+
+  it("prefere a lista completa quando ela já é do filtro atual", () => {
+    expect(resolveOsHomeListQuery(full, fast)).toEqual({
+      source: full,
+      showingFastOnly: false,
+      hideStalePlaceholder: false,
+    });
+  });
+
+  it("usa a página rápida em vez do placeholder da busca anterior", () => {
+    const staleFull = { ...full, isPlaceholderData: true };
+    expect(resolveOsHomeListQuery(staleFull, fast)).toEqual({
+      source: fast,
+      showingFastOnly: true,
+      hideStalePlaceholder: false,
+    });
+  });
+
+  it("esconde o placeholder enquanto nenhuma busca do filtro novo chegou", () => {
+    const staleFull = { ...full, isPlaceholderData: true };
+    const staleFast = { ...fast, isPlaceholderData: true };
+    expect(resolveOsHomeListQuery(staleFull, staleFast).hideStalePlaceholder).toBe(
+      true,
+    );
   });
 });
 

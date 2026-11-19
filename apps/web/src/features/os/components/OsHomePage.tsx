@@ -32,6 +32,7 @@ import { useOsRealtimeSync } from "../hooks/useOsRealtimeSync";
 import { isParentOsInSearchResults } from "../osTableRows";
 import {
   lastOsSearchRow,
+  resolveOsHomeListQuery,
   shouldAutoSelectLastOsRow,
 } from "../osHomeListSelection";
 import {
@@ -290,8 +291,9 @@ export function OsHomePage() {
 
   const fullQuery = useOsSearch(datasetFilters, true);
   const fastQuery = useOsSearch(fastFilters, true);
-  const listSource = fullQuery.data ? fullQuery : fastQuery;
-  const showingFastOnly = Boolean(fastQuery.data) && !fullQuery.data;
+  const listQuery = resolveOsHomeListQuery(fullQuery, fastQuery);
+  const listSource = listQuery.source;
+  const showingFastOnly = listQuery.showingFastOnly;
 
   const registerActiveSearch = useOsActiveSearchStore((s) => s.register);
   const clearActiveSearch = useOsActiveSearchStore((s) => s.clear);
@@ -343,12 +345,15 @@ export function OsHomePage() {
   }, [filters.anos, patchFilters, yearsQuery.data]);
 
   const localView = useMemo(() => {
-    const raw = listSource.data?.data ?? [];
+    const raw = listQuery.hideStalePlaceholder ? [] : (listSource.data?.data ?? []);
     return applyOsHomeLocalView(raw, searchFilters);
-  }, [listSource.data, searchFilters]);
+  }, [listQuery.hideStalePlaceholder, listSource.data, searchFilters]);
 
   const rows = localView.rows;
   const meta = useMemo(() => {
+    if (listQuery.hideStalePlaceholder) {
+      return undefined;
+    }
     const base = listSource.data?.meta;
     if (!base) {
       return undefined;
@@ -361,7 +366,7 @@ export function OsHomePage() {
       total_records: localView.totalRecords,
       total_pages: localView.totalRecords ? 1 : 0,
     };
-  }, [listSource.data?.meta, localView.totalRecords]);
+  }, [listQuery.hideStalePlaceholder, listSource.data?.meta, localView.totalRecords]);
 
   const markUserListFetch = useCallback(() => {
     setUserListFetchPending(true);
@@ -377,6 +382,7 @@ export function OsHomePage() {
     manualRefresh ||
     isTextFilterPending ||
     isChoiceFilterPending ||
+    listQuery.hideStalePlaceholder ||
     (showingFastOnly && fullQuery.isFetching) ||
     (userListFetchPending && (fullQuery.isFetching || fastQuery.isFetching));
 
@@ -759,8 +765,9 @@ export function OsHomePage() {
             rows={rows}
             meta={meta}
             isLoading={
-              !listSource.data &&
-              (fastQuery.isLoading || fullQuery.isLoading)
+              listQuery.hideStalePlaceholder ||
+              (!listSource.data &&
+                (fastQuery.isLoading || fullQuery.isLoading))
             }
             isFetching={isListFetching}
             isError={Boolean(listSource.isError) && !listSource.data}

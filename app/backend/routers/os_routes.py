@@ -1337,7 +1337,7 @@ def search_os(
         rendered, etag, from_cache = get_or_compute(
             make_key(search_kwargs),
             lambda: _render_os_search(execute_os_search(**search_kwargs)),
-            lambda r: build_os_search_etag(r["result"]),
+            lambda r: build_os_search_etag(r),
         )
         result = rendered["result"]
         if fetch_all and not from_cache:
@@ -1359,7 +1359,15 @@ def search_os(
         }
         inm = (request.headers.get("if-none-match") or "").strip()
         if fetch_all and inm and inm == etag:
-            return Response(status_code=304, headers={"ETag": etag})
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": etag,
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
         accepts_gzip = "gzip" in (request.headers.get("accept-encoding") or "").lower()
         if accepts_gzip and rendered["gzip"] is not None:
             headers["Content-Encoding"] = "gzip"

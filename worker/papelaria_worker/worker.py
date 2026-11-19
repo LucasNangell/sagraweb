@@ -273,6 +273,17 @@ def base_cdr_da_os(job: dict) -> str:
     return str(job.get("base_cdr_path") or "").strip()
 
 
+def _caminho_modelo_produto(cfg: WorkerConfig, job: dict) -> str | None:
+    """Modelo do produto (formato esperado) — None se indisponível."""
+    try:
+        return _resolve_model_path(
+            resolve_create_models_dir(cfg, job),
+            resolve_create_arquivo(job),
+        )
+    except FileNotFoundError:
+        return None
+
+
 def _caminho_modelo_create(cfg: WorkerConfig, job: dict) -> str:
     base = base_cdr_da_os(job)
     if base:
@@ -822,6 +833,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 carimbo=None,
                 pdf_somente_primeira_pagina=False,
                 base_cdr_da_os=usa_corel_da_os,
+                modelo_produto_path=(
+                    _caminho_modelo_produto(cfg, job) if usa_corel_da_os else None
+                ),
             )
             if prova_email and not cancel_requested.is_set():
                 prova_name = str(job.get("prova_email_pdf_name") or "").strip()

@@ -2716,6 +2716,105 @@ def nome_saida(modelo: dict[str, Any], dados: dict[str, Any]) -> str:
     return "_".join(partes)
 
 
+def _preparar_corel_da_os(
+    corel: Any,
+    doc: Any,
+    *,
+    temp_cdr_path: str,
+    modelo_produto_path: Optional[str],
+    logs: list[str],
+    meta: dict[str, Any],
+) -> tuple[Any, bool, bool]:
+    """
+    Corel da pasta fora do formato do produto (ou com BordaF/BordaV): recria
+    num documento novo no tamanho do modelo. Retorna (doc, reconstruido, usou_modelo).
+    """
+    import cdr_formato_legado as legado
+
+    esperado: Optional[tuple[float, float]] = None
+    if modelo_produto_path and os.path.isfile(modelo_produto_path):
+        try:
+            esperado = legado.ler_tamanho_primeira_pagina(corel, modelo_produto_path)
+        except Exception as exc:
+            logs.append(f"Aviso: não foi possível ler o formato do modelo: {exc}")
+    precisa, tamanho = legado.precisa_reconstruir(doc, esperado)
+    if not precisa:
+        if esperado:
+            logs.append(
+                f"Corel da pasta já no formato do produto ({tamanho[0]:.1f}×{tamanho[1]:.1f} mm)."
+            )
+        return doc, False, False
+
+    logs.append(
+        f"Corel da pasta com página {tamanho[0]:.1f}×{tamanho[1]:.1f} mm"
+        + (
+            f" (produto: {esperado[0]:.1f}×{esperado[1]:.1f} mm)"
+            if esperado
+            else " (padrão antigo com BordaF)"
+        )
+        + " — criando novo .cdr no formato correto."
+    )
+    try:
+        novo = legado.reconstruir_documento_no_formato(corel, doc, esperado, logs)
+    except legado.FormatoLegadoError as exc:
+        if not (modelo_produto_path and os.path.isfile(modelo_produto_path)):
+            raise CorelGenerationError(str(exc)) from exc
+        logs.append(f"Aviso: {exc} Usando o modelo do produto.")
+        _fechar_documento_sem_salvar(doc, logs)
+        shutil.copy(modelo_produto_path, temp_cdr_path)
+        meta["usou_modelo_produto"] = True
+        return corel.OpenDocument(os.path.abspath(temp_cdr_path)), False, True
+
+    _fechar_documento_sem_salvar(doc, logs)
+    legado.salvar_documento_como(novo, temp_cdr_path, logs, corel)
+    meta["converted_legacy"] = True
+    meta["formato_reconstruido"] = True
+    return novo, True, False
+
+
+def _gravar_cdr_reconstruido(
+    temp_cdr_path: str,
+    output_cdr_path: str,
+    *,
+    corel_antigo: str,
+    logs: list[str],
+    meta: dict[str, Any],
+) -> None:
+    """Grava o CDR novo e move o antigo para AdminDocs (mesma pasta do antigo)."""
+    import cdr_formato_legado as legado
+
+    mesmo_arquivo = False
+    try:
+        mesmo_arquivo = os.path.normcase(os.path.realpath(corel_antigo)) == os.path.normcase(
+            os.path.realpath(output_cdr_path)
+        )
+    except OSError:
+        pass
+
+    movido: Optional[str] = None
+    if mesmo_arquivo and os.path.isfile(corel_antigo):
+        # O antigo é o próprio BaseSefoc: precisa sair antes de ser sobrescrito.
+        try:
+            movido = legado.mover_para_admin_docs(corel_antigo)
+        except OSError as exc:
+            raise CorelGenerationError(
+                f"Não foi possível mover o Corel antigo para AdminDocs: {exc}"
+            ) from exc
+
+    _copiar_arquivo_final(temp_cdr_path, output_cdr_path, logs, rotulo="CDR")
+
+    if not mesmo_arquivo and os.path.isfile(corel_antigo):
+        try:
+            movido = legado.mover_para_admin_docs(corel_antigo)
+        except OSError as exc:
+            logs.append(f"Aviso: Corel antigo não foi movido para AdminDocs: {exc}")
+    if movido:
+        meta["corel_antigo_movido_para"] = movido
+        logs.append(
+            f"Corel antigo movido para AdminDocs: {os.path.basename(movido)}."
+        )
+
+
 def _gerar_arquivo_corel_impl(
     modelo: dict[str, Any],
     dados: dict[str, Any],
@@ -2735,6 +2834,7 @@ def _gerar_arquivo_corel_impl(
     pdf_somente_primeira_pagina: bool = False,
     result_meta: Optional[dict[str, Any]] = None,
     base_cdr_da_os: bool = False,
+    modelo_produto_path: Optional[str] = None,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
@@ -2797,6 +2897,22 @@ def _gerar_arquivo_corel_impl(
                 doc = corel.OpenDocument(os.path.abspath(temp_cdr_path))
                 logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
 
+                usou_modelo = False
+                if base_cdr_da_os:
+                    doc, convertido_legado, usou_modelo = _preparar_corel_da_os(
+                        corel,
+                        doc,
+                        temp_cdr_path=temp_cdr_path,
+                        modelo_produto_path=modelo_produto_path,
+                        logs=logs,
+                        meta=meta,
+                    )
+                    # Nova tentativa (COM caiu) reabre o temp já reconstruído.
+                    convertido_legado = convertido_legado or bool(
+                        meta.get("formato_reconstruido")
+                    )
+                ignorar_ausentes = base_cdr_da_os and not usou_modelo
+
                 campos = overlay_campos_com_templates_preview(
                     modelo.get("campos") or {},
                     preview_config,
@@ -2826,7 +2942,7 @@ def _gerar_arquivo_corel_impl(
                         dados,
                         logs,
                         indice_shapes=indice_shapes,
-                        ignorar_ausente=base_cdr_da_os,
+                        ignorar_ausente=ignorar_ausentes,
                     )
 
                 try:
@@ -2854,15 +2970,6 @@ def _gerar_arquivo_corel_impl(
                             indice_shapes=indice_shapes,
                         )
 
-                if base_cdr_da_os and documento_tem_borda_f(doc):
-                    logs.append(
-                        "Corel da pasta no padrão antigo (BordaF) — convertendo arte "
-                        "para páginas Frente/Verso (BaseSefoc)."
-                    )
-                    _montar_imposicao_no_documento(corel, doc, logs)
-                    convertido_legado = True
-                    meta["converted_legacy"] = True
-
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
 
                 # sync → Save → fechar → copiar CDR (antes do PDF).
@@ -2876,9 +2983,18 @@ def _gerar_arquivo_corel_impl(
 
                 os.makedirs(os.path.dirname(output_cdr_path), exist_ok=True)
                 os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
-                _copiar_arquivo_final(
-                    temp_cdr_path, output_cdr_path, logs, rotulo="CDR"
-                )
+                if convertido_legado:
+                    _gravar_cdr_reconstruido(
+                        temp_cdr_path,
+                        output_cdr_path,
+                        corel_antigo=caminho_modelo,
+                        logs=logs,
+                        meta=meta,
+                    )
+                else:
+                    _copiar_arquivo_final(
+                        temp_cdr_path, output_cdr_path, logs, rotulo="CDR"
+                    )
 
                 if modelo_page1_bytes and not convertido_legado:
                     saida_p1 = _tamanho_pagina1_cdr(output_cdr_path)
@@ -2976,6 +3092,7 @@ def gerar_arquivo_corel(
     carimbo: Optional[dict[str, str]] = None,
     pdf_somente_primeira_pagina: bool = False,
     base_cdr_da_os: bool = False,
+    modelo_produto_path: Optional[str] = None,
 ) -> GenerationResult:
     """
     Gera CDR e PDF a partir de cópia temporária do modelo.
@@ -3002,6 +3119,14 @@ def gerar_arquivo_corel(
 
     models_cache_dir = "" if base_cdr_da_os else os.path.join(temp_dir, "_models_cache")
     result_meta: dict[str, Any] = {}
+    modelo_produto_local: Optional[str] = None
+    if base_cdr_da_os and modelo_produto_path:
+        try:
+            modelo_produto_local = resolver_modelo_em_cache(
+                modelo_produto_path, os.path.join(temp_dir, "_models_cache")
+            )
+        except Exception as exc:
+            logs.append(f"Aviso: modelo do produto indisponível ({exc}).")
     validar_acesso_job(
         caminho_modelo,
         os.path.dirname(output_cdr_path) or output_cdr_path,
@@ -3028,6 +3153,7 @@ def gerar_arquivo_corel(
             pdf_somente_primeira_pagina=pdf_somente_primeira_pagina,
             result_meta=result_meta,
             base_cdr_da_os=base_cdr_da_os,
+            modelo_produto_path=modelo_produto_local,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))

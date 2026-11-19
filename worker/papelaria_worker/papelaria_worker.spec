@@ -67,6 +67,7 @@ a = Analysis(
         "api_client",
         "config",
         "corel_generator",
+        "cdr_formato_legado",
         "credenciais_depol_generator",
         "timbrado_a4_digital_generator",
         "runtime",

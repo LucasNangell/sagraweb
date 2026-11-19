@@ -754,6 +754,13 @@ def generate_preview_disabled(
 # --- Fila de jobs Corel (sem geração no servidor) ---
 
 
+def _sp_activity(targets, lane: str, label: str, session: SessionData):
+    """Marca SP(s) como «processando» para todos os usuários (lista de SPs)."""
+    from services.papelaria_sp_activity import sp_activity
+
+    return sp_activity(targets, lane, label, str(getattr(session, "ponto", "") or ""))
+
+
 @router.post("/jobs")
 def criar_job_papelaria(
     payload: PapelariaCreateJobPayload,
@@ -762,18 +769,19 @@ def criar_job_papelaria(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        if payload.lancar_andamento:
-            jobs_svc.register_preparando_prova_andamento(
-                payload.ano, payload.nro, str(session.ponto)
-            )
+        with _sp_activity([(payload.ano, payload.nro)], "prova", "Enviando prova para geração", session):
+            if payload.lancar_andamento:
+                jobs_svc.register_preparando_prova_andamento(
+                    payload.ano, payload.nro, str(session.ponto)
+                )
 
-        return jobs_svc.create_job(
-            ano=payload.ano,
-            nro=payload.nro,
-            modelo_id=payload.modelo_id,
-            dados=payload.dados,
-            solicitado_por=str(session.ponto),
-        )
+            return jobs_svc.create_job(
+                ano=payload.ano,
+                nro=payload.nro,
+                modelo_id=payload.modelo_id,
+                dados=payload.dados,
+                solicitado_por=str(session.ponto),
+            )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
@@ -791,18 +799,19 @@ def criar_job_timbrado_a4_digital(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        if payload.lancar_andamento:
-            jobs_svc.register_preparando_prova_andamento(
-                payload.ano, payload.nro, str(session.ponto)
-            )
+        with _sp_activity([(payload.ano, payload.nro)], "prova", "Enviando Timbrado Digital para geração", session):
+            if payload.lancar_andamento:
+                jobs_svc.register_preparando_prova_andamento(
+                    payload.ano, payload.nro, str(session.ponto)
+                )
 
-        return jobs_svc.create_timbrado_a4_digital_job(
-            ano=payload.ano,
-            nro=payload.nro,
-            modelo_id=payload.modelo_id,
-            dados=payload.dados,
-            solicitado_por=str(session.ponto),
-        )
+            return jobs_svc.create_timbrado_a4_digital_job(
+                ano=payload.ano,
+                nro=payload.nro,
+                modelo_id=payload.modelo_id,
+                dados=payload.dados,
+                solicitado_por=str(session.ponto),
+            )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
@@ -917,13 +926,14 @@ def finalizar_corel_os(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        return jobs_svc.finalize_manual_corel_job(
-            ano=payload.ano,
-            nro=payload.nro,
-            modelo_id=payload.modelo_id,
-            dados=payload.dados,
-            solicitado_por=str(session.ponto),
-        )
+        with _sp_activity([(payload.ano, payload.nro)], "prova", "Finalizando edição no Corel", session):
+            return jobs_svc.finalize_manual_corel_job(
+                ano=payload.ano,
+                nro=payload.nro,
+                modelo_id=payload.modelo_id,
+                dados=payload.dados,
+                solicitado_por=str(session.ponto),
+            )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except FileNotFoundError as e:
@@ -952,17 +962,18 @@ def gerar_prova_cdr_existente_os(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        if payload.lancar_andamento:
-            jobs_svc.register_preparando_prova_andamento(ano, nro, str(session.ponto))
+        with _sp_activity([(payload.ano, payload.nro)], "prova", "Enviando prova para geração", session):
+            if payload.lancar_andamento:
+                jobs_svc.register_preparando_prova_andamento(ano, nro, str(session.ponto))
 
-        return jobs_svc.create_export_existing_cdr_job(
-            ano=payload.ano,
-            nro=payload.nro,
-            modelo_id=payload.modelo_id,
-            dados=payload.dados,
-            solicitado_por=str(session.ponto),
-            arquivo_cdr=payload.arquivo_cdr,
-        )
+            return jobs_svc.create_export_existing_cdr_job(
+                ano=payload.ano,
+                nro=payload.nro,
+                modelo_id=payload.modelo_id,
+                dados=payload.dados,
+                solicitado_por=str(session.ponto),
+                arquivo_cdr=payload.arquivo_cdr,
+            )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except FileNotFoundError as e:
@@ -1039,20 +1050,24 @@ def gerar_imposicao_os(
             juntada_os = [
                 {"ano": int(j.ano), "nro": int(j.nro)} for j in payload.juntada_os
             ]
-        return jobs_svc.create_imposicao_job(
-            ano=payload.ano,
-            nro=payload.nro,
-            solicitado_por=str(session.ponto),
-            arquivo_cdr=payload.arquivo_cdr,
-            modelo_id=payload.modelo_id,
-            variante=payload.variante,
-            imposicao_config=(
-                payload.imposicao_config
-                if isinstance(payload.imposicao_config, dict)
-                else None
-            ),
-            juntada_os=juntada_os,
-        )
+        alvos = [(payload.ano, payload.nro)] + [
+            (int(j["ano"]), int(j["nro"])) for j in (juntada_os or [])
+        ]
+        with _sp_activity(alvos, "imposicao", "Gerando imposição (JDF)", session):
+            return jobs_svc.create_imposicao_job(
+                ano=payload.ano,
+                nro=payload.nro,
+                solicitado_por=str(session.ponto),
+                arquivo_cdr=payload.arquivo_cdr,
+                modelo_id=payload.modelo_id,
+                variante=payload.variante,
+                imposicao_config=(
+                    payload.imposicao_config
+                    if isinstance(payload.imposicao_config, dict)
+                    else None
+                ),
+                juntada_os=juntada_os,
+            )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except FileNotFoundError as e:
@@ -1133,7 +1148,12 @@ def aprovar_prova_job_papelaria(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        return jobs_svc.approve_job_prova(job_id, str(session.ponto))
+        job = jobs_svc.get_job(job_id)
+        alvos = (
+            [(int(job["ano_protocolo"]), int(job["nro_protocolo"]))] if job else []
+        )
+        with _sp_activity(alvos, "prova", "Aprovando prova (gerando envio)", session):
+            return jobs_svc.approve_job_prova(job_id, str(session.ponto))
     except LookupError:
         raise HTTPException(404, "Job não encontrado.")
     except ValueError as e:

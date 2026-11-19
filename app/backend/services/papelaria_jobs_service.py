@@ -351,6 +351,16 @@ def _product_match_warning(os_produto: str, modelo_produto: str) -> Optional[str
 
 def broadcast_job_update(job: dict[str, Any]) -> None:
     try:
+        from services.papelaria_sp_status_service import invalidate_folder_signals
+
+        invalidate_folder_signals(job["ano_protocolo"], job["nro_protocolo"])
+        dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+        for membro in dados.get("juntada_membros") or []:
+            if isinstance(membro, dict) and membro.get("ano") and membro.get("nro"):
+                invalidate_folder_signals(int(membro["ano"]), int(membro["nro"]))
+    except Exception:
+        pass
+    try:
         from routers.realtime import schedule_broadcast
 
         schedule_broadcast(
@@ -2367,12 +2377,25 @@ def _max_prova_sefoc_version(sefoc_dir: str, prefix: str, nro: int) -> int:
     max_ver = 0
     if not os.path.isdir(sefoc_dir):
         return max_ver
+    from services.proof_files_service import (
+        extract_prova_version_from_filename as _extract_any,
+        is_prova_filename,
+    )
+
     for fname in os.listdir(sefoc_dir):
+        matched = False
         for pattern in patterns:
             match = pattern.match(fname)
             if match:
                 max_ver = max(max_ver, int(match.group(1)))
+                matched = True
                 break
+        if not matched and is_prova_filename(fname):
+            # Qualquer outro PDF «Prova N» na pasta conta para a numeração
+            # (mesma regra da lista de SPs e da visualização de prova).
+            ver = _extract_any(fname)
+            if ver is not None:
+                max_ver = max(max_ver, ver)
     return max_ver
 
 
@@ -4345,6 +4368,28 @@ def discard_job_prova(job_id: int, descartado_por: str) -> dict[str, Any]:
         real_base = real_base + os.sep
     if real_file.startswith(real_base) and os.path.isfile(pdf_abs):
         os.remove(pdf_abs)
+
+    # Prova web / e-mail: o worker grava também {prefix}-ProvaN.pdf (ou
+    # ProvaSefoc N). Sem remover essa cópia, a contagem de provas da pasta
+    # ficaria inflada pela prova descartada.
+    dados_job = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    for key in ("prova_web_pdf_name", "prova_email_pdf_name"):
+        extra_name = os.path.basename(str(dados_job.get(key) or "").strip())
+        if not extra_name or extra_name == os.path.basename(pdf_name):
+            continue
+        extra_abs = os.path.normpath(os.path.join(output_dir, extra_name))
+        try:
+            if os.path.realpath(extra_abs).startswith(real_base) and os.path.isfile(
+                extra_abs
+            ):
+                os.remove(extra_abs)
+        except OSError as exc:
+            logger.warning(
+                "Não foi possível remover %s ao descartar job %s: %s",
+                extra_name,
+                job_id,
+                exc,
+            )
 
     _cleanup_job_preview_cache(job)
 

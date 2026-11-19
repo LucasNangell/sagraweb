@@ -13,6 +13,7 @@ import type {
   PapelariaPreviewPagesResponse,
   PapelariaPreviewPayload,
 } from "@/features/papelaria/types";
+import type { PapelariaSpStatusResumoItem } from "@/features/papelaria/papelariaSpPipelineUi";
 
 async function parsePapelariaError(res: Response): Promise<string> {
   const text = await res.text().catch(() => res.statusText);
@@ -256,19 +257,7 @@ export async function fetchPapelariaJobsForOs(
 }
 
 export type PapelariaSpStatusResumoResponse = {
-  items: Array<{
-    ano: number;
-    nro: number;
-    prova: {
-      phase: string;
-      versao: number | null;
-      job_id?: number | null;
-    };
-    imposicao: {
-      phase: string;
-      job_id?: number | null;
-    };
-  }>;
+  items: PapelariaSpStatusResumoItem[];
 };
 
 export async function fetchPapelariaSpStatusResumo(

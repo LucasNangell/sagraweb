@@ -1507,6 +1507,26 @@ def register_pendencia_andamento(
 
 @router.post("/send-pt")
 def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(require_session)):
+    """Envio de e-mail (PT / prova / Timbrado / Apogee / resposta).
+
+    Envio de prova marca a SP como «enviando» para todos os usuários
+    (lista de SPs da Papelaria) enquanto o EWS processa.
+    """
+    email_type = (request.type or "pt").strip()
+    if email_type in ("proof", "timbrado_digital") and request.os and request.ano:
+        from services.papelaria_sp_activity import sp_activity
+
+        with sp_activity(
+            [(int(request.ano), int(request.os))],
+            "prova",
+            "Enviando prova ao cliente",
+            str(session.ponto or ""),
+        ):
+            return _send_pt_email_impl(request, session)
+    return _send_pt_email_impl(request, session)
+
+
+def _send_pt_email_impl(request: EmailPTRequest, session: SessionData):
     """
     Envia e-mail de Problemas Técnicos usando HTML salvo no banco de dados via EWS
     """

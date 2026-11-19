@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractProvaVersionFromFilename,
+  isProvaFilename,
   osRelativePathToProofFilename,
   shouldAdoptSuggestedProof,
 } from "./proofFilePicker";
@@ -41,6 +42,17 @@ describe("extractProvaVersionFromFilename", () => {
 
   it("retorna null sem padrão", () => {
     expect(extractProvaVersionFromFilename("prova_livre.pdf")).toBeNull();
+  });
+
+  it("aceita «Prova N» com espaço e usa o maior número", () => {
+    expect(extractProvaVersionFromFilename("06247 Nome Prova 3.pdf")).toBe(3);
+    expect(extractProvaVersionFromFilename("x-Prova1-ProvaSefoc 2.pdf")).toBe(2);
+  });
+
+  it("não confunde Aprovado com prova", () => {
+    expect(extractProvaVersionFromFilename("x-Aprovado2.pdf")).toBeNull();
+    expect(isProvaFilename("x-Aprovado.pdf")).toBe(false);
+    expect(isProvaFilename("x-Prova.pdf")).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PAPELARIA_SP_SITUACOES_KEY } from "../papelariaSpSituacoesPrefs";
@@ -30,8 +30,16 @@ vi.mock("@/api/hooks/useAuxLookups", () => ({
   useSetoresLookup: () => ({ data: ["SEFOC"], isLoading: false }),
 }));
 
+const statusResumo = vi.hoisted(() => ({
+  items: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock("@/api/papelaria", () => ({
-  fetchPapelariaSpStatusResumo: vi.fn(async () => ({ items: [] })),
+  fetchPapelariaSpStatusResumo: vi.fn(async () => statusResumo),
+}));
+
+vi.mock("@/hooks/useSagraWebSocket", () => ({
+  useSagraWebSocket: () => ({ status: "connected" }),
 }));
 
 vi.mock("@/api/hooks/useOsHistory", () => ({
@@ -88,8 +96,54 @@ function renderList(selected: typeof searchRow | null = null) {
   );
 }
 
+describe("PapelariaSpList colunas Prova/Imposição", () => {
+  beforeEach(() => {
+    localStorage.setItem(
+      PAPELARIA_SP_SITUACOES_KEY,
+      JSON.stringify(["Em execução"]),
+    );
+  });
+
+  it("mostra o estado do servidor: prova aprovada e imposição pendente", async () => {
+    statusResumo.items = [
+      {
+        ano: 2026,
+        nro: 6100,
+        prova: { phase: "approved", versao: 2, count: 2 },
+        imposicao: { phase: "pending", job_id: null },
+      },
+    ];
+    renderList();
+    const prova = await screen.findByTestId("papelaria-sp-prova-6100");
+    await waitFor(() =>
+      expect(prova.querySelector('[data-icon="check"]')).not.toBeNull(),
+    );
+    expect(prova).toHaveTextContent("2");
+    const imposicao = screen.getByTestId("papelaria-sp-imposicao-6100");
+    expect(imposicao.querySelector('[data-icon="alert"]')).not.toBeNull();
+  });
+
+  it("mostra loading quando outro usuário está processando", async () => {
+    statusResumo.items = [
+      {
+        ano: 2026,
+        nro: 6100,
+        prova: { phase: "approved", versao: 1 },
+        imposicao: { phase: "processing", por: "123456" },
+      },
+    ];
+    renderList();
+    const imposicao = await screen.findByTestId("papelaria-sp-imposicao-6100");
+    await waitFor(() =>
+      expect(imposicao.querySelector('[data-icon="loader"]')).not.toBeNull(),
+    );
+    expect(imposicao.getAttribute("title")).toContain("123456");
+  });
+});
+
 describe("PapelariaSpList coluna Tiragem", () => {
   beforeEach(() => {
+    statusResumo.items = [];
     localStorage.setItem(
       PAPELARIA_SP_SITUACOES_KEY,
       JSON.stringify(["Em execução"]),

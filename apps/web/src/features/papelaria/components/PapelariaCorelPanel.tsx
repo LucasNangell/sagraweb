@@ -64,7 +64,6 @@ import {
   resolveDefaultPapelariaViewMode,
   type PapelariaViewMode,
 } from "../papelariaViewMode";
-import type { PapelariaSpPipelineLane } from "../papelariaSpPipelineUi";
 import type {
   PapelariaCorelModelSummary,
   PapelariaField,
@@ -76,14 +75,6 @@ import type {
 type Props = {
   osId: string | null;
   osAno: string | null;
-  onSpPipelineStatusChange?: (
-    ano: number,
-    nro: number,
-    lane: PapelariaSpPipelineLane,
-    phase: string | null,
-    jobId?: number | null,
-    versao?: number | null,
-  ) => void;
   /** Quando informado, modelos e campos são renderizados neste elemento. */
   formHost?: HTMLElement | null;
   /** Reserva o formulário para o host, mesmo antes do elemento existir. */
@@ -157,7 +148,6 @@ export function dadosForProvaCdrExistente(
 export function PapelariaCorelPanel({
   osId,
   osAno,
-  onSpPipelineStatusChange,
   formHost = null,
   dockForm = false,
 }: Props) {
@@ -421,9 +411,17 @@ export function PapelariaCorelPanel({
     }
   }, [hasOs, jobsQuery.data, anoNum, nroNum]);
 
+  /** Lista de SPs: o estado (compartilhado) mudou no servidor. */
+  const invalidateSpStatusResumo = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["papelaria", "spStatusResumo"],
+    });
+  }, [queryClient]);
+
   const createJobMutation = useMutation({
     mutationFn: createPapelariaJob,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       if (!job?.id) {
         setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
         void queryClient.invalidateQueries({
@@ -451,6 +449,7 @@ export function PapelariaCorelPanel({
   const createDigitalJobMutation = useMutation({
     mutationFn: createPapelariaTimbradoA4DigitalJob,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       if (!job?.id) {
         setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
         void queryClient.invalidateQueries({
@@ -478,6 +477,7 @@ export function PapelariaCorelPanel({
   const exportCdrMutation = useMutation({
     mutationFn: gerarProvaCdrExistentePapelariaOs,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       if (!job?.id) {
         setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
         void queryClient.invalidateQueries({
@@ -506,6 +506,7 @@ export function PapelariaCorelPanel({
   const imposicaoMutation = useMutation({
     mutationFn: criarPapelariaImposicaoJob,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       if (!job?.id) {
         setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
         void queryClient.invalidateQueries({
@@ -534,6 +535,7 @@ export function PapelariaCorelPanel({
   const cancelJobMutation = useMutation({
     mutationFn: cancelPapelariaJob,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
       });
@@ -568,25 +570,7 @@ export function PapelariaCorelPanel({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
-      void queryClient.invalidateQueries({
-        queryKey: ["papelaria", "spStatusResumo"],
-      });
-      onSpPipelineStatusChange?.(
-        anoNum,
-        nroNum,
-        "prova",
-        "approved",
-        result.job.id,
-        result.prova_versao,
-      );
-      onSpPipelineStatusChange?.(
-        anoNum,
-        nroNum,
-        "imposicao",
-        "pending",
-        null,
-        null,
-      );
+      invalidateSpStatusResumo();
     },
     onError: (err: Error) => {
       setFormError(err.message || "Não foi possível aprovar a prova.");
@@ -596,6 +580,7 @@ export function PapelariaCorelPanel({
   const discardProvaMutation = useMutation({
     mutationFn: discardPapelariaJobProva,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       setFormError(null);
       setProvaReviewMessage(null);
       void queryClient.setQueryData(queryKeys.papelaria.job(job.id), job);
@@ -614,6 +599,7 @@ export function PapelariaCorelPanel({
   const finalizeCorelMutation = useMutation({
     mutationFn: finalizarCorelPapelariaOs,
     onSuccess: (job) => {
+      invalidateSpStatusResumo();
       if (!job?.id) {
         setFormError("Finalização concluída, mas a resposta da API veio inválida.");
         return;
@@ -1193,94 +1179,6 @@ export function PapelariaCorelPanel({
         .sort((a, b) => b.id - a.id)[0] ?? null
     );
   }, [jobsQuery.data]);
-
-  useEffect(() => {
-    if (!onSpPipelineStatusChange || !hasOs) return;
-
-    const pipelineJob =
-      activeJob &&
-      (activeJob.status === "pending" || activeJob.status === "processing")
-        ? activeJob
-        : listInFlightJob;
-    const apogeeJob =
-      waitingApogee
-        ? isWaitingImposicaoApogee(activeJob)
-          ? activeJob
-          : listWaitingApogeeJob
-        : null;
-
-    if (pipelineJob?.status === "processing") {
-      const lane: PapelariaSpPipelineLane =
-        pipelineJob.tipo_job === "imposicao" ? "imposicao" : "prova";
-      onSpPipelineStatusChange(
-        anoNum,
-        nroNum,
-        lane,
-        "processing",
-        pipelineJob.id,
-        pipelineJob.versao,
-      );
-      return;
-    }
-    if (mutationGenerating) {
-      const lane: PapelariaSpPipelineLane = imposicaoMutation.isPending
-        ? "imposicao"
-        : "prova";
-      onSpPipelineStatusChange(
-        anoNum,
-        nroNum,
-        lane,
-        "queued",
-        pipelineJob?.id ?? activeJobId,
-        pipelineJob?.versao ?? null,
-      );
-      return;
-    }
-    if (pipelineJob?.status === "pending") {
-      const lane: PapelariaSpPipelineLane =
-        pipelineJob.tipo_job === "imposicao" ? "imposicao" : "prova";
-      onSpPipelineStatusChange(
-        anoNum,
-        nroNum,
-        lane,
-        "queued",
-        pipelineJob.id,
-        pipelineJob.versao,
-      );
-      return;
-    }
-    if (apogeeJob) {
-      onSpPipelineStatusChange(
-        anoNum,
-        nroNum,
-        "imposicao",
-        "waiting_apogee",
-        apogeeJob.id,
-        null,
-      );
-      return;
-    }
-    if (
-      activeJob?.status === "failed" ||
-      activeJob?.status === "cancelled"
-    ) {
-      const lane: PapelariaSpPipelineLane =
-        activeJob.tipo_job === "imposicao" ? "imposicao" : "prova";
-      onSpPipelineStatusChange(anoNum, nroNum, lane, null, activeJob.id, null);
-    }
-  }, [
-    onSpPipelineStatusChange,
-    hasOs,
-    anoNum,
-    nroNum,
-    mutationGenerating,
-    imposicaoMutation.isPending,
-    activeJob,
-    activeJobId,
-    listInFlightJob,
-    listWaitingApogeeJob,
-    waitingApogee,
-  ]);
 
   const formSlot = (node: ReactNode) =>
     formHost ? createPortal(node, formHost) : null;

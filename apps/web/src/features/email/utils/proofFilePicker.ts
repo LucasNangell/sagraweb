@@ -14,23 +14,33 @@ export function osRelativePathToProofFilename(relative: string): string | null {
   return withinSefoc;
 }
 
-const PROVA_SEFOC_RE = /ProvaSefoc (\d+)\.pdf$/i;
-const PROVA_SEFOC_LEGACY_RE = /Prova(\d+)_SEFOC\.pdf$/i;
-/** Access / fluxo antigo: 06247-Nome-Prova1.pdf */
-const PROVA_SHORT_RE = /(?:^|[-_])Prova(\d+)\.pdf$/i;
+/** PDF com «Prova» no nome (não confunde com «Aprovado»). */
+const PROVA_NAME_RE = /(?<![a-z])prova/i;
+/** ProvaSefoc 3, Prova3_SEFOC, -Prova3, Prova 3, Prova_3 … */
+const PROVA_NUM_RE = /(?<![a-z])prova(?:\s*sefoc)?[\s_-]*(\d{1,3})(?!\d)/gi;
 
-/** Espelho de extract_prova_version_from_filename no backend. */
+function baseName(filename: string): string {
+  return filename.replace(/\\/g, "/").split("/").pop() ?? filename;
+}
+
+/** Espelho de is_prova_filename no backend. */
+export function isProvaFilename(filename: string): boolean {
+  const base = baseName(filename);
+  if (!/\.pdf$/i.test(base)) return false;
+  return PROVA_NAME_RE.test(base.slice(0, -4));
+}
+
+/** Espelho de extract_prova_version_from_filename no backend (maior número). */
 export function extractProvaVersionFromFilename(
   filename: string,
 ): number | null {
-  const base = filename.replace(/\\/g, "/").split("/").pop() ?? filename;
-  const m1 = PROVA_SEFOC_RE.exec(base);
-  if (m1) return Number.parseInt(m1[1], 10);
-  const m2 = PROVA_SEFOC_LEGACY_RE.exec(base);
-  if (m2) return Number.parseInt(m2[1], 10);
-  const m3 = PROVA_SHORT_RE.exec(base);
-  if (m3) return Number.parseInt(m3[1], 10);
-  return null;
+  const base = baseName(filename).replace(/\.pdf$/i, "");
+  let best: number | null = null;
+  for (const match of base.matchAll(PROVA_NUM_RE)) {
+    const value = Number.parseInt(match[1], 10);
+    if (value > 0 && (best == null || value > best)) best = value;
+  }
+  return best;
 }
 
 /**

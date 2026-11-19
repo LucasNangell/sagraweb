@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Check, Clock, Loader2, Send, Settings2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Loader2,
+  Send,
+  Settings2,
+  X,
+} from "lucide-react";
 import { cn } from "@sagra/ui";
 
 import { fetchPapelariaSpStatusResumo } from "@/api/papelaria";
@@ -8,15 +16,19 @@ import { useOsSearch } from "@/api/hooks/useOsSearch";
 import { useSituacoesLookup } from "@/api/hooks/useAuxLookups";
 import { queryKeys } from "@/api/query-keys";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { useAuthStore } from "@/features/auth/authStore";
 import { defaultOsFilters } from "@/features/os/osFiltersStore";
+import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
+import { authenticatedWsPath } from "@/lib/websocket";
 import type { OsSearchFilters, OsSearchRow } from "@/features/os/types";
 import { sameOsRow } from "../papelariaSelection";
 import {
+  isSpStatusInFlight,
   papelariaSpStatusKey,
   resolveSpImposicaoCell,
   resolveSpProvaCell,
-  type PapelariaSpLaneOverlay,
   type PapelariaSpStatusResumoItem,
+  type SpPipelineIcon,
 } from "../papelariaSpPipelineUi";
 import {
   loadPapelariaSpSituacoes,
@@ -29,10 +41,21 @@ type Props = {
   /** Lista de andamentos aberta no item selecionado. */
   expanded?: boolean;
   onSelect: (row: OsSearchRow) => void;
-  provaOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
-  imposicaoOverlayBySp?: Record<string, PapelariaSpLaneOverlay>;
   className?: string;
 };
+
+/** Eventos WS que mudam Prova/Imposição de uma SP (de qualquer usuário). */
+type SpStatusWsMessage = {
+  type?: string;
+  action?: string;
+  ano?: number;
+  nro?: number;
+  id?: number;
+};
+
+const STATUS_REFRESH_DEBOUNCE_MS = 600;
+const STATUS_POLL_IDLE_MS = 30_000;
+const STATUS_POLL_IN_FLIGHT_MS = 5_000;
 
 export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
   return {
@@ -69,30 +92,59 @@ function formatTiragem(value: string | number | null | undefined): string {
 function PipelineIcon({
   icon,
   label,
+  muted = false,
 }: {
-  icon: "clock" | "loader" | "send" | "check";
+  icon: SpPipelineIcon;
   label: string;
+  muted?: boolean;
 }) {
+  const common = "size-3.5 shrink-0";
+  if (icon === "alert") {
+    return (
+      <AlertTriangle
+        className={cn(common, "text-amber-500")}
+        aria-label={label}
+        data-icon="alert"
+      />
+    );
+  }
   if (icon === "clock") {
     return (
-      <Clock className="size-3.5 shrink-0 text-amber-600" aria-label={label} />
+      <Clock
+        className={cn(common, "text-amber-600")}
+        aria-label={label}
+        data-icon="clock"
+      />
     );
   }
   if (icon === "loader") {
     return (
       <Loader2
-        className="size-3.5 shrink-0 animate-spin text-secondary-blue"
+        className={cn(
+          common,
+          "animate-spin",
+          muted ? "text-neutral-400" : "text-secondary-blue",
+        )}
         aria-label={label}
+        data-icon="loader"
       />
     );
   }
   if (icon === "send") {
     return (
-      <Send className="size-3.5 shrink-0 text-secondary-blue" aria-label={label} />
+      <Send
+        className={cn(common, "text-secondary-blue")}
+        aria-label={label}
+        data-icon="send"
+      />
     );
   }
   return (
-    <Check className="size-3.5 shrink-0 text-emerald-600" aria-label={label} />
+    <Check
+      className={cn(common, "text-emerald-600")}
+      aria-label={label}
+      data-icon="check"
+    />
   );
 }
 
@@ -100,8 +152,6 @@ export function PapelariaSpList({
   selected,
   expanded = true,
   onSelect,
-  provaOverlayBySp = {},
-  imposicaoOverlayBySp = {},
   className,
 }: Props) {
   const [situacoes, setSituacoes] = useState<string[]>(() =>
@@ -134,12 +184,70 @@ export function PapelariaSpList({
     [statusItems],
   );
 
+  const queryClient = useQueryClient();
   const statusQuery = useQuery({
     queryKey: queryKeys.papelaria.spStatusResumo(statusFingerprint || "empty"),
     queryFn: () => fetchPapelariaSpStatusResumo(statusItems),
     enabled: statusItems.length > 0,
-    refetchInterval: 20_000,
-    staleTime: 10_000,
+    // Estado é do servidor (compartilhado): com algo processando, consulta
+    // mais rápido; o WebSocket antecipa as mudanças feitas por qualquer usuário.
+    refetchInterval: (query) =>
+      query.state.data?.items.some(isSpStatusInFlight)
+        ? STATUS_POLL_IN_FLIGHT_MS
+        : STATUS_POLL_IDLE_MS,
+    staleTime: 2_000,
+  });
+
+  const listedKeys = useMemo(
+    () =>
+      new Set(
+        statusItems.map((item) => papelariaSpStatusKey(item.ano, item.nro)),
+      ),
+    [statusItems],
+  );
+  const listedKeysRef = useRef(listedKeys);
+  listedKeysRef.current = listedKeys;
+  const refreshTimerRef = useRef<number | null>(null);
+
+  const scheduleStatusRefresh = useCallback(() => {
+    if (refreshTimerRef.current != null) return;
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: ["papelaria", "spStatusResumo"],
+      });
+    }, STATUS_REFRESH_DEBOUNCE_MS);
+  }, [queryClient]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current != null) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const ponto = useAuthStore((s) => s.user?.ponto);
+  useSagraWebSocket<SpStatusWsMessage>({
+    path: authenticatedWsPath(ponto != null ? String(ponto) : null),
+    enabled: statusItems.length > 0,
+    onMessage: (data) => {
+      const type = data?.type;
+      if (
+        type !== "papelaria_job_update" &&
+        type !== "papelaria_sp_activity" &&
+        type !== "system_update"
+      ) {
+        return;
+      }
+      const nro = data.nro ?? data.id;
+      if (typeof data.ano !== "number" || typeof nro !== "number") return;
+      if (!listedKeysRef.current.has(papelariaSpStatusKey(data.ano, nro))) {
+        return;
+      }
+      scheduleStatusRefresh();
+    },
   });
 
   const statusBySp = useMemo(() => {
@@ -266,33 +374,13 @@ export function PapelariaSpList({
                 const isExpanded = isSelected && expanded;
                 const key = papelariaSpStatusKey(row.ano, row.nr_os);
                 const resumo = statusBySp[key];
-                const hasOverlay =
-                  Boolean(provaOverlayBySp[key]) ||
-                  Boolean(imposicaoOverlayBySp[key]);
-                // Sem resumo do servidor e sem overlay: não inventar "pendente".
-                const statusPending =
-                  !resumo &&
-                  !hasOverlay &&
-                  (statusQuery.isLoading ||
-                    statusQuery.isFetching ||
-                    statusQuery.isError);
-                const provaCell = statusPending
-                  ? null
-                  : resolveSpProvaCell(
-                      resumo?.prova,
-                      provaOverlayBySp[key],
-                    );
-                const imposicaoCell = statusPending
-                  ? null
-                  : resolveSpImposicaoCell(
-                      resumo?.imposicao,
-                      imposicaoOverlayBySp[key],
-                      resumo?.prova.phase ??
-                        (provaOverlayBySp[key]?.phase as
-                          | "approved"
-                          | "none"
-                          | undefined),
-                    );
+                // Sem resumo do servidor ainda: não inventar "pendente".
+                const provaCell = resumo
+                  ? resolveSpProvaCell(resumo.prova)
+                  : null;
+                const imposicaoCell = resumo
+                  ? resolveSpImposicaoCell(resumo.imposicao)
+                  : null;
                 return (
                   <div key={`${row.ano}-${row.nr_os}`}>
                     <div
@@ -362,6 +450,7 @@ export function PapelariaSpList({
                           <PipelineIcon
                             icon={provaCell.icon}
                             label={provaCell.label}
+                            muted={provaCell.muted}
                           />
                         </span>
                       ) : statusQuery.isError ? (
@@ -386,6 +475,7 @@ export function PapelariaSpList({
                           <PipelineIcon
                             icon={imposicaoCell.icon}
                             label={imposicaoCell.label}
+                            muted={imposicaoCell.muted}
                           />
                         </span>
                       ) : null}

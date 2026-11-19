@@ -13,26 +13,78 @@ _INVALID_PROOF_NAME = re.compile(r"[/\\]|\.\.")
 
 _MAX_FILENAME_LEN = 512
 
-_PROVA_SEFOC_RE = re.compile(r"ProvaSefoc (\d+)\.pdf$", re.IGNORECASE)
-_PROVA_SEFOC_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
-# Access / fluxo antigo: 06247-Nome-Prova1.pdf (não confundir com ProvaSefoc)
-_PROVA_SHORT_RE = re.compile(r"(?:^|[-_])Prova(\d+)\.pdf$", re.IGNORECASE)
+# Qualquer PDF com «Prova» no nome (não confundir com «Aprovado»/«Aprovação»).
+_PROVA_NAME_RE = re.compile(r"(?<![a-z])prova", re.IGNORECASE)
+# Número da prova: ProvaSefoc 3, Prova3_SEFOC, -Prova3, Prova 3, Prova_3 …
+_PROVA_NUM_RE = re.compile(
+    r"(?<![a-z])prova(?:\s*sefoc)?[\s_\-]*(\d{1,3})(?!\d)",
+    re.IGNORECASE,
+)
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 
 
-def extract_prova_version_from_filename(filename: str) -> Optional[int]:
-    """Extrai o número x de ProvaSefoc, legado ProvaN_SEFOC ou *-ProvaN.pdf."""
+def is_prova_filename(filename: str) -> bool:
+    """PDF cujo nome contém «Prova» (Prova1, ProvaSefoc 2, …)."""
     base = os.path.basename((filename or "").strip())
-    match = _PROVA_SEFOC_RE.search(base)
-    if match:
-        return int(match.group(1))
-    match = _PROVA_SEFOC_LEGACY_RE.search(base)
-    if match:
-        return int(match.group(1))
-    match = _PROVA_SHORT_RE.search(base)
-    if match:
-        return int(match.group(1))
-    return None
+    if not base.lower().endswith(".pdf"):
+        return False
+    return bool(_PROVA_NAME_RE.search(base[:-4]))
+
+
+def extract_prova_version_from_filename(filename: str) -> Optional[int]:
+    """Maior número que acompanha «Prova» no nome (ProvaSefoc N, ProvaN_SEFOC, *-ProvaN…)."""
+    base = os.path.basename((filename or "").strip())
+    if base.lower().endswith(".pdf"):
+        base = base[:-4]
+    best: Optional[int] = None
+    for match in _PROVA_NUM_RE.finditer(base):
+        val = int(match.group(1))
+        if val > 0 and (best is None or val > best):
+            best = val
+    return best
+
+
+def summarize_prova_files(entries: list[tuple[str, float]]) -> dict[str, Any]:
+    """
+    Resumo das provas a partir de (nome, mtime) dos PDFs da pasta Sefoc.
+
+    - ``count``: quantos PDFs têm «Prova» no nome;
+    - ``versao``: maior número de prova no nome; sem número, a contagem;
+    - ``latest``: PDF da última prova (maior número, depois o mais recente);
+    - ``latest_mtime``: mtime mais recente entre os PDFs de prova.
+    """
+    count = 0
+    best_versioned: Optional[tuple[int, float, str]] = None
+    best_plain: Optional[tuple[float, str]] = None
+    latest_mtime: Optional[float] = None
+    for name, mtime in entries:
+        if not is_prova_filename(name):
+            continue
+        count += 1
+        mt = float(mtime or 0.0)
+        if latest_mtime is None or mt > latest_mtime:
+            latest_mtime = mt
+        ver = extract_prova_version_from_filename(name)
+        if ver is not None:
+            cand = (ver, mt, name)
+            if best_versioned is None or cand[:2] > best_versioned[:2]:
+                best_versioned = cand
+        elif best_plain is None or mt > best_plain[0]:
+            best_plain = (mt, name)
+    if count == 0:
+        return {"count": 0, "versao": None, "latest": None, "latest_mtime": None}
+    if best_versioned is not None:
+        versao: Optional[int] = best_versioned[0]
+        latest = best_versioned[2]
+    else:
+        versao = count
+        latest = best_plain[1] if best_plain else None
+    return {
+        "count": count,
+        "versao": versao,
+        "latest": latest,
+        "latest_mtime": latest_mtime,
+    }
 
 
 def _max_attachment_bytes() -> int:
@@ -129,13 +181,14 @@ def resolve_proof_pdf_path(ano: int, os_id: int, filename: str) -> str:
 def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
     """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC).
 
-    ``suggested`` prefere o maior número ProvaSefoc N; sem padrão, usa mtime.
+    ``suggested`` = última prova (PDF com «Prova» no nome de maior número; sem
+    número, a mais recente). Sem nenhuma prova, usa o PDF mais recente.
     Também lista PDFs de imposição em ``Sefoc/Digital/*.pdf``.
     """
     sefoc_path = _sefoc_dir(ano, os_id)
     files: list[dict[str, Any]] = []
     suggested: Optional[str] = None
-    best_versioned: Optional[tuple[int, float, str]] = None
+    prova_entries: list[tuple[str, float]] = []
     best_mtime: Optional[tuple[float, str]] = None
     imposicao_files: list[dict[str, Any]] = []
     imposicao_suggested: Optional[str] = None
@@ -164,16 +217,13 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
                     "modified_at": modified_at,
                 }
             )
-            ver = extract_prova_version_from_filename(name)
-            if ver is not None:
-                candidate = (ver, mtime, name)
-                if best_versioned is None or candidate[:2] > best_versioned[:2]:
-                    best_versioned = candidate
+            prova_entries.append((name, mtime))
             if best_mtime is None or mtime > best_mtime[0]:
                 best_mtime = (mtime, name)
 
-        if best_versioned is not None:
-            suggested = best_versioned[2]
+        prova_summary = summarize_prova_files(prova_entries)
+        if prova_summary["latest"]:
+            suggested = prova_summary["latest"]
         elif best_mtime is not None:
             suggested = best_mtime[1]
 

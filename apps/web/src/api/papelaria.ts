@@ -137,24 +137,6 @@ export async function finalizarCorelPapelariaOs(payload: {
   });
 }
 
-export async function gerarProvaCdrExistentePapelariaOs(payload: {
-  ano: number;
-  nro: number;
-  modelo_id: number;
-  dados?: Record<string, string>;
-  lancar_andamento?: boolean;
-  arquivo_cdr?: string;
-}): Promise<PapelariaJob> {
-  return apiFetch<PapelariaJob>(
-    `/papelaria/os/${payload.ano}/${payload.nro}/gerar-prova-cdr-existente`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
 export type PapelariaImposicaoCandidata = {
   ano: number;
   nro: number;

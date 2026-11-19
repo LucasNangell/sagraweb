@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateRequiredFields, dadosForProvaCdrExistente } from "./components/PapelariaCorelPanel";
+import { validateRequiredFields } from "./components/PapelariaCorelPanel";
 import {
   isPapelariaCorelOs,
   isPapelariaProduct,
@@ -114,13 +114,3 @@ describe("validateRequiredFields", () => {
   });
 });
 
-describe("dadosForProvaCdrExistente", () => {
-  it("não envia valores dos campos do formulário", () => {
-    expect(
-      dadosForProvaCdrExistente({
-        nome_deputado: "Fulano",
-        email: "a@b.c",
-      }),
-    ).toEqual({});
-  });
-});

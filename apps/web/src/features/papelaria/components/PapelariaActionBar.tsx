@@ -4,7 +4,6 @@ import { cn } from "@sagra/ui";
 export type PapelariaActionBarProps = {
   showAbrirPasta: boolean;
   showTimbradoA4Digital: boolean;
-  showGerarProvaCdr: boolean;
   showFinalizar: boolean;
   busy: boolean;
   folderCheckPending: boolean;
@@ -12,21 +11,20 @@ export type PapelariaActionBarProps = {
   isJobGenerating: boolean;
   createJobPending: boolean;
   createDigitalPending: boolean;
-  exportCdrPending: boolean;
   imposicaoPending: boolean;
   abrirCorelPending: boolean;
   abrirPastaPending: boolean;
   finalizeCorelPending: boolean;
   hasOs: boolean;
   selectedModelId: number | null;
-  cdrDisponivel: boolean;
+  /** .cdr utilizável já na pasta da SP: «Criar prova» parte dele. */
+  corelDaPasta?: string | null;
   canImposicao: boolean;
   onAbrirPasta: () => void;
   onGerarArquivo: () => void;
   onTimbradoA4Digital: () => void;
   onAbrirCorel: () => void;
   onFinalizarCorel: () => void;
-  onGerarProvaCdr: () => void;
   onImposicao: () => void;
   className?: string;
 };
@@ -73,7 +71,6 @@ function ActionButton({
 export function PapelariaActionBar({
   showAbrirPasta,
   showTimbradoA4Digital,
-  showGerarProvaCdr,
   showFinalizar,
   busy,
   folderCheckPending,
@@ -81,21 +78,19 @@ export function PapelariaActionBar({
   isJobGenerating,
   createJobPending,
   createDigitalPending,
-  exportCdrPending,
   imposicaoPending,
   abrirCorelPending,
   abrirPastaPending,
   finalizeCorelPending,
   hasOs,
   selectedModelId,
-  cdrDisponivel: _cdrDisponivel,
+  corelDaPasta = null,
   canImposicao,
   onAbrirPasta,
   onGerarArquivo,
   onTimbradoA4Digital,
   onAbrirCorel,
   onFinalizarCorel,
-  onGerarProvaCdr,
   onImposicao,
   className,
 }: PapelariaActionBarProps) {
@@ -107,7 +102,6 @@ export function PapelariaActionBar({
     !canImposicao ||
     createJobPending ||
     createDigitalPending ||
-    exportCdrPending ||
     imposicaoPending ||
     abrirCorelPending ||
     finalizeCorelPending ||
@@ -135,11 +129,15 @@ export function PapelariaActionBar({
         label="Criar prova"
         tone="primary"
         pending={createJobPending}
+        title={
+          corelDaPasta
+            ? `Criar prova a partir do Corel da pasta (${corelDaPasta}), aplicando os campos do formulário`
+            : "Criar prova a partir do modelo"
+        }
         disabled={
           baseDisabled ||
           createDigitalPending ||
-          exportCdrPending ||
-          imposicaoPending ||
+                imposicaoPending ||
           abrirCorelPending
         }
         onClick={onGerarArquivo}
@@ -151,8 +149,7 @@ export function PapelariaActionBar({
           disabled={
             baseDisabled ||
             createJobPending ||
-            exportCdrPending ||
-            imposicaoPending ||
+                    imposicaoPending ||
             abrirCorelPending
           }
           onClick={onTimbradoA4Digital}
@@ -165,8 +162,7 @@ export function PapelariaActionBar({
           baseDisabled ||
           createJobPending ||
           createDigitalPending ||
-          exportCdrPending ||
-          imposicaoPending ||
+                imposicaoPending ||
           finalizeCorelPending
         }
         onClick={onAbrirCorel}
@@ -179,24 +175,6 @@ export function PapelariaActionBar({
           disabled={finalizeCorelPending}
           title="Finalizar edição no Corel e montar a prova"
           onClick={onFinalizarCorel}
-        />
-      ) : null}
-      {showGerarProvaCdr ? (
-        <ActionButton
-          label="Prova do Corel pronto"
-          tone="violet"
-          pending={exportCdrPending}
-          disabled={
-            baseDisabled ||
-            createJobPending ||
-            exportCdrPending ||
-            imposicaoPending ||
-            abrirCorelPending ||
-            finalizeCorelPending ||
-            isJobGenerating
-          }
-          title="Gerar prova do Corel pronto"
-          onClick={onGerarProvaCdr}
         />
       ) : null}
       <ActionButton

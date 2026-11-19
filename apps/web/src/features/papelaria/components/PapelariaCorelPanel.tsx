@@ -18,7 +18,6 @@ import {
   fetchPapelariaJobsForOs,
   fetchPapelariaOsContext,
   finalizarCorelPapelariaOs,
-  gerarProvaCdrExistentePapelariaOs,
 } from "@/api/papelaria";
 import { fetchImposicaoVariantesOs } from "@/api/imposicaoPerfil";
 import { fetchDeputadoLookup } from "@/api/auxLookups";
@@ -139,12 +138,6 @@ export function validateRequiredFields(
     .map((f) => f.label);
 }
 
-export function dadosForProvaCdrExistente(
-  _fieldValues?: Record<string, string>,
-): Record<string, string> {
-  return {};
-}
-
 export function PapelariaCorelPanel({
   osId,
   osAno,
@@ -174,18 +167,12 @@ export function PapelariaCorelPanel({
   );
   const [corelEditMode, setCorelEditMode] = useState(false);
   const [andamentoModal, setAndamentoModal] = useState<
-    "gerar" | "digital" | "corel" | "export" | null
+    "gerar" | "digital" | "corel" | null
   >(null);
   const [folderGateAction, setFolderGateAction] = useState<
-    "gerar" | "digital" | "corel" | "export" | "imposicao" | null
+    "gerar" | "digital" | "corel" | "imposicao" | null
   >(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
-  const [exportCdrRel, setExportCdrRel] = useState<string | null>(null);
-  const [cdrPickerOpen, setCdrPickerOpen] = useState(false);
-  const [cdrPickerChoice, setCdrPickerChoice] = useState("");
-  const [cdrPickerMode, setCdrPickerMode] = useState<"export" | "imposicao">(
-    "export",
-  );
   const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
   const [imposicaoOpcoes, setImposicaoOpcoes] =
     useState<ImposicaoVariantesResponse | null>(null);
@@ -471,35 +458,6 @@ export function PapelariaCorelPanel({
     },
     onError: (err: Error) => {
       setFormError(err.message || "Erro ao criar Timbrado A4 Digital.");
-    },
-  });
-
-  const exportCdrMutation = useMutation({
-    mutationFn: gerarProvaCdrExistentePapelariaOs,
-    onSuccess: (job) => {
-      invalidateSpStatusResumo();
-      if (!job?.id) {
-        setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
-        });
-        return;
-      }
-      setActiveJobId(job.id);
-      setCorelEditMode(false);
-      setFormError(null);
-      setProvaReviewMessage(null);
-      setViewMode("prova");
-      setMobilePanel("preview");
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
-      });
-    },
-    onError: (err: Error) => {
-      setFormError(err.message || "Erro ao solicitar exportação de prova.");
     },
   });
 
@@ -815,7 +773,7 @@ export function PapelariaCorelPanel({
   };
 
   const ensureOsFolderThen = async (
-    action: "gerar" | "digital" | "corel" | "export",
+    action: "gerar" | "digital" | "corel",
   ) => {
     setFolderCheckPending(true);
     setFormError(null);
@@ -870,24 +828,6 @@ export function PapelariaCorelPanel({
     setCorelEditMode(false);
   };
 
-  const runExportCdrExistente = (lancarAndamento: boolean) => {
-    if (!selectedModelId) return;
-    const arquivoCdr = exportCdrRel?.trim();
-    if (!arquivoCdr) {
-      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
-      return;
-    }
-    exportCdrMutation.mutate({
-      ano: anoNum,
-      nro: nroNum,
-      modelo_id: selectedModelId,
-      dados: dadosForProvaCdrExistente(dadosForJob),
-      lancar_andamento: lancarAndamento,
-      arquivo_cdr: arquivoCdr,
-    });
-    setCorelEditMode(false);
-  };
-
   const runAbrirCorel = (lancarAndamento: boolean) => {
     abrirCorelMutation.mutate(lancarAndamento);
   };
@@ -901,8 +841,6 @@ export function PapelariaCorelPanel({
       runTimbradoA4Digital(lancarAndamento);
     } else if (action === "corel") {
       runAbrirCorel(lancarAndamento);
-    } else if (action === "export") {
-      runExportCdrExistente(lancarAndamento);
     }
   };
 
@@ -927,27 +865,6 @@ export function PapelariaCorelPanel({
     void openNetworkFolder({ ano: anoNum, nr_os: nroNum }, (input) =>
       pathMutation.mutateAsync(input),
     ).finally(() => setAbrirPastaPending(false));
-  };
-
-  const handleGerarProvaCdrExistente = () => {
-    if (!selectedModelId) {
-      setFormError("Selecione um modelo antes de gerar a prova.");
-      return;
-    }
-    const files = usableCdrFiles(cdrPathQuery.data);
-    if (files.length === 0) {
-      setFormError("Nenhum arquivo Corel utilizável encontrado na pasta desta OS.");
-      return;
-    }
-    setFormError(null);
-    setCdrPickerMode("export");
-    if (files.length === 1) {
-      setExportCdrRel(files[0].relative_path);
-      void ensureOsFolderThen("export");
-      return;
-    }
-    setCdrPickerChoice(files[0].relative_path);
-    setCdrPickerOpen(true);
   };
 
   const openImposicaoModal = async () => {
@@ -1058,18 +975,6 @@ export function PapelariaCorelPanel({
     void ensureOsFolderThenImposicao();
   };
 
-  const handleConfirmCdrPicker = () => {
-    const choice = cdrPickerChoice.trim();
-    if (!choice) {
-      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
-      return;
-    }
-    setExportCdrRel(choice);
-    setCdrPickerOpen(false);
-    setFormError(null);
-    void ensureOsFolderThen("export");
-  };
-
   const handleFinalizarCorel = () => {
     if (!selectedModelId) return;
     if (!validateFormForAction()) return;
@@ -1155,7 +1060,6 @@ export function PapelariaCorelPanel({
   const mutationGenerating =
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
-    exportCdrMutation.isPending ||
     imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending;
   const jobPipelineBusy = Boolean(
@@ -1253,7 +1157,6 @@ export function PapelariaCorelPanel({
   const isJobGenerating =
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
-    exportCdrMutation.isPending ||
     imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending ||
     (!!activeJob &&
@@ -1608,13 +1511,11 @@ export function PapelariaCorelPanel({
           className="max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
           showAbrirPasta={canOpenOsFolder}
           showTimbradoA4Digital={showTimbradoA4Digital}
-          showGerarProvaCdr={cdrFiles.length > 0}
           showFinalizar={corelEditMode}
           busy={
             createJobMutation.isPending ||
             createDigitalJobMutation.isPending ||
-            exportCdrMutation.isPending ||
-            imposicaoMutation.isPending ||
+                    imposicaoMutation.isPending ||
             abrirCorelMutation.isPending
           }
           folderCheckPending={folderCheckPending}
@@ -1622,14 +1523,13 @@ export function PapelariaCorelPanel({
           isJobGenerating={isJobGenerating}
           createJobPending={createJobMutation.isPending}
           createDigitalPending={createDigitalJobMutation.isPending}
-          exportCdrPending={exportCdrMutation.isPending}
           imposicaoPending={imposicaoMutation.isPending}
           abrirCorelPending={abrirCorelMutation.isPending}
           abrirPastaPending={abrirPastaPending}
           finalizeCorelPending={finalizeCorelMutation.isPending}
           hasOs={hasOs}
           selectedModelId={selectedModelId}
-          cdrDisponivel={cdrFiles.length > 0}
+          corelDaPasta={cdrFiles[0]?.filename ?? null}
           canImposicao={Boolean(
             selectedModelId &&
               (
@@ -1643,7 +1543,6 @@ export function PapelariaCorelPanel({
           onTimbradoA4Digital={handleTimbradoA4Digital}
           onAbrirCorel={handleAbrirCorel}
           onFinalizarCorel={handleFinalizarCorel}
-          onGerarProvaCdr={handleGerarProvaCdrExistente}
           onImposicao={handleImposicao}
         />
 
@@ -1684,61 +1583,6 @@ export function PapelariaCorelPanel({
         </div>
       </div>
 
-      {cdrPickerOpen ? (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-center text-lg font-bold text-slate-800">
-              Qual arquivo Corel usar?
-            </h3>
-            <p className="mt-2 text-center text-sm text-slate-600">
-              Há mais de um .cdr na pasta desta OS. Escolha o arquivo pronto para
-              gerar a prova (PDF e mockup), sem reaplicar os campos nem alterar o
-              Corel.
-            </p>
-            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
-              {cdrFiles.map((file) => (
-                <label
-                  key={file.relative_path}
-                  className="flex cursor-pointer items-start gap-2 rounded border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  <input
-                    type="radio"
-                    name="cdr-picker"
-                    className="mt-0.5"
-                    checked={cdrPickerChoice === file.relative_path}
-                    onChange={() => setCdrPickerChoice(file.relative_path)}
-                  />
-                  <span>
-                    <span className="block font-mono text-xs text-slate-900">
-                      {file.filename}
-                    </span>
-                    <span className="block text-[11px] text-slate-500">
-                      {file.relative_path}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
-                onClick={() => setCdrPickerOpen(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="sagra-btn sagra-btn--secondary sagra-btn--md"
-                onClick={handleConfirmCdrPicker}
-              >
-                Usar este arquivo
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {andamentoModal ? (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
@@ -1756,8 +1600,7 @@ export function PapelariaCorelPanel({
                 disabled={
                   createJobMutation.isPending ||
                   createDigitalJobMutation.isPending ||
-                  exportCdrMutation.isPending ||
-                  abrirCorelMutation.isPending
+                                abrirCorelMutation.isPending
                 }
                 className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
                 onClick={() => handleAndamentoChoice(false)}
@@ -1769,8 +1612,7 @@ export function PapelariaCorelPanel({
                 disabled={
                   createJobMutation.isPending ||
                   createDigitalJobMutation.isPending ||
-                  exportCdrMutation.isPending ||
-                  abrirCorelMutation.isPending
+                                abrirCorelMutation.isPending
                 }
                 className="sagra-btn sagra-btn--secondary sagra-btn--md"
                 onClick={() => handleAndamentoChoice(true)}

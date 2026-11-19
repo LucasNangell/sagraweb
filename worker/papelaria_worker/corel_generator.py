@@ -1032,11 +1032,19 @@ def aplicar_campo(
     logs: list[str],
     *,
     indice_shapes: Optional[dict[str, list[dict[str, Any]]]] = None,
+    ignorar_ausente: bool = False,
 ) -> None:
     ocorrencias = encontrar_shapes_no_documento(
         doc, nome_campo_corel, indice=indice_shapes
     )
     if not ocorrencias:
+        if ignorar_ausente:
+            # Corel já existente na pasta da OS: o objeto pode ter sido
+            # convertido/renomeado na edição manual — mantém a arte como está.
+            logs.append(
+                f"Objeto '{nome_campo_corel}' não existe no Corel da pasta — mantido sem alteração."
+            )
+            return
         if nome_campo_corel in CAMPOS_COREL_OPCIONAIS:
             logs.append(
                 f"Objeto '{nome_campo_corel}' não encontrado — ignorado."
@@ -2726,6 +2734,7 @@ def _gerar_arquivo_corel_impl(
     carimbo: Optional[dict[str, str]] = None,
     pdf_somente_primeira_pagina: bool = False,
     result_meta: Optional[dict[str, Any]] = None,
+    base_cdr_da_os: bool = False,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
@@ -2735,7 +2744,7 @@ def _gerar_arquivo_corel_impl(
         raise CorelGenerationError(f"Modelo não encontrado: {caminho_modelo}")
 
     fonte_modelo = caminho_modelo
-    if models_cache_dir:
+    if models_cache_dir and not base_cdr_da_os:
         fonte_modelo = resolver_modelo_em_cache(caminho_modelo, models_cache_dir)
         if fonte_modelo != caminho_modelo:
             logs.append(f"Modelo em cache local: {os.path.basename(fonte_modelo)}.")
@@ -2748,7 +2757,14 @@ def _gerar_arquivo_corel_impl(
     if os.path.exists(temp_cdr_path):
         os.remove(temp_cdr_path)
     shutil.copy(fonte_modelo, temp_cdr_path)
-    logs.append("Cópia do modelo criada em temp.")
+    if base_cdr_da_os:
+        logs.append(
+            f"Cópia do Corel da pasta da OS criada em temp ({os.path.basename(fonte_modelo)}) "
+            "— campos do formulário aplicados sobre ele."
+        )
+    else:
+        logs.append("Cópia do modelo criada em temp.")
+    convertido_legado = False
 
     corel_reused = reuse_corel_session and _corel_session.has_application()
 
@@ -2810,6 +2826,7 @@ def _gerar_arquivo_corel_impl(
                         dados,
                         logs,
                         indice_shapes=indice_shapes,
+                        ignorar_ausente=base_cdr_da_os,
                     )
 
                 try:
@@ -2837,6 +2854,15 @@ def _gerar_arquivo_corel_impl(
                             indice_shapes=indice_shapes,
                         )
 
+                if base_cdr_da_os and documento_tem_borda_f(doc):
+                    logs.append(
+                        "Corel da pasta no padrão antigo (BordaF) — convertendo arte "
+                        "para páginas Frente/Verso (BaseSefoc)."
+                    )
+                    _montar_imposicao_no_documento(corel, doc, logs)
+                    convertido_legado = True
+                    meta["converted_legacy"] = True
+
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
 
                 # sync → Save → fechar → copiar CDR (antes do PDF).
@@ -2854,7 +2880,7 @@ def _gerar_arquivo_corel_impl(
                     temp_cdr_path, output_cdr_path, logs, rotulo="CDR"
                 )
 
-                if modelo_page1_bytes:
+                if modelo_page1_bytes and not convertido_legado:
                     saida_p1 = _tamanho_pagina1_cdr(output_cdr_path)
                     logs.append(f"Saída page1.dat: {saida_p1 // 1024} KB.")
                     if saida_p1 < int(modelo_page1_bytes * 0.6):
@@ -2949,9 +2975,14 @@ def gerar_arquivo_corel(
     exclusoes: Optional[list[str]] = None,
     carimbo: Optional[dict[str, str]] = None,
     pdf_somente_primeira_pagina: bool = False,
+    base_cdr_da_os: bool = False,
 ) -> GenerationResult:
     """
     Gera CDR e PDF a partir de cópia temporária do modelo.
+
+    Com ``base_cdr_da_os`` o ``caminho_modelo`` é o .cdr já existente na pasta
+    da OS: os campos do formulário são aplicados sobre ele (objetos ausentes
+    ficam como estão) e o original não é alterado — a saída é o BaseSefoc.
     Retorna caminhos absolutos dos arquivos finais.
     """
     logs: list[str] = []
@@ -2969,7 +3000,7 @@ def gerar_arquivo_corel(
         if not dados_norm.get("anexo"):
             dados_norm["anexo"] = "IV"
 
-    models_cache_dir = os.path.join(temp_dir, "_models_cache")
+    models_cache_dir = "" if base_cdr_da_os else os.path.join(temp_dir, "_models_cache")
     result_meta: dict[str, Any] = {}
     validar_acesso_job(
         caminho_modelo,
@@ -2996,6 +3027,7 @@ def gerar_arquivo_corel(
             carimbo=carimbo,
             pdf_somente_primeira_pagina=pdf_somente_primeira_pagina,
             result_meta=result_meta,
+            base_cdr_da_os=base_cdr_da_os,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))

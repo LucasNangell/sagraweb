@@ -290,6 +290,29 @@ class TestProcessJobDispatch:
         assert gerar.call_args.kwargs["pdf_somente_primeira_pagina"] is False
         assert api.completed
 
+    def test_create_usa_corel_da_pasta_no_lugar_do_modelo(self, patched_runtime):
+        gerar, exportar, cfg = patched_runtime
+        api = FakeApi()
+        base_cdr = r"\\server\os\Sefoc\05024-Nome-BaseSefoc.cdr"
+        worker_mod._process_job_body(
+            api, cfg, _job(tipo_job="create", base_cdr_path=base_cdr)
+        )
+        exportar.assert_not_called()
+        gerar.assert_called_once()
+        assert gerar.call_args.kwargs["caminho_modelo"] == base_cdr
+        assert gerar.call_args.kwargs["base_cdr_da_os"] is True
+        # Os campos do formulário continuam sendo aplicados.
+        assert gerar.call_args.kwargs["dados"] == {"nome_deputado": "Fulano"}
+        assert any("Corel da pasta da OS" in msg for msg in api.logs)
+
+    def test_create_sem_corel_na_pasta_usa_modelo(self, patched_runtime, tmp_path):
+        gerar, _exportar, cfg = patched_runtime
+        worker_mod._process_job_body(FakeApi(), cfg, _job(tipo_job="create"))
+        assert gerar.call_args.kwargs["caminho_modelo"] == str(
+            tmp_path / "models" / "CtVisitaFV.cdr"
+        )
+        assert gerar.call_args.kwargs["base_cdr_da_os"] is False
+
     def test_create_email_usa_modelo_web_e_a4(self, patched_runtime, monkeypatch, tmp_path):
         gerar, _exportar, cfg = patched_runtime
         web = tmp_path / "CSP" / "WEB"

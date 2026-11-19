@@ -268,7 +268,15 @@ def resolve_create_arquivo(job: dict) -> str:
     return str(job.get("arquivo_modelo") or "")
 
 
+def base_cdr_da_os(job: dict) -> str:
+    """Corel existente na pasta da OS a usar no lugar do modelo (create)."""
+    return str(job.get("base_cdr_path") or "").strip()
+
+
 def _caminho_modelo_create(cfg: WorkerConfig, job: dict) -> str:
+    base = base_cdr_da_os(job)
+    if base:
+        return base
     return _resolve_model_path(
         resolve_create_models_dir(cfg, job),
         resolve_create_arquivo(job),
@@ -784,12 +792,18 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             }
             dados = job.get("dados") or {}
             caminho_modelo = _caminho_modelo_create(cfg, job)
+            usa_corel_da_os = bool(base_cdr_da_os(job))
             prova_modo = str(job.get("prova_modo") or "").strip()
             prova_email = prova_modo == "prova_email"
             prova_web = prova_modo == "prova_web" or not prova_modo
             api.append_log(
                 job_id,
-                f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}",
+                (
+                    "Iniciando geração WEB — Corel da pasta da OS "
+                    f"{os.path.basename(caminho_modelo)} (campos aplicados sobre ele)"
+                    if usa_corel_da_os
+                    else f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}"
+                ),
                 "info",
             )
             result = gerar_arquivo_corel(
@@ -807,6 +821,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 exclusoes=job.get("exclusoes") or [],
                 carimbo=None,
                 pdf_somente_primeira_pagina=False,
+                base_cdr_da_os=usa_corel_da_os,
             )
             if prova_email and not cancel_requested.is_set():
                 prova_name = str(job.get("prova_email_pdf_name") or "").strip()

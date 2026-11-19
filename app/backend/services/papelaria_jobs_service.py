@@ -36,6 +36,8 @@ TIPO_JOB_IMPOSICAO = "imposicao"
 
 CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
+# Create: .cdr já existente na pasta da OS usado no lugar do modelo (relativo à OS).
+BASE_CDR_DADOS_KEY = "__base_cdr"
 ARTEFATOS_DADOS_KEY = "__artefatos"
 
 OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
@@ -283,7 +285,8 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
                 raise ValueError("Lista de exclusões deve ser uma lista.")
             cleaned[key_stripped] = value.strip()
             continue
-        if key_stripped == INPUT_CDR_DADOS_KEY:
+        if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY):
+            # Definidos só pelo servidor (nunca aceitar caminho vindo do cliente).
             continue
         if value is None:
             cleaned[key.strip()] = ""
@@ -424,6 +427,14 @@ def create_job(
     if "uf" in dados_clean and dados_clean["uf"]:
         dados_clean["uf"] = dados_clean["uf"].upper()
 
+    # Já existe Corel na pasta da OS (fora cópia de segurança)? A prova é
+    # montada a partir dele, com os campos do formulário aplicados por cima.
+    base_cdr: Optional[dict[str, Any]] = None
+    if tipo_job == TIPO_JOB_CREATE:
+        base_cdr = find_os_base_cdr(ano, nro)
+        if base_cdr:
+            dados_clean[BASE_CDR_DADOS_KEY] = base_cdr["relative_path"]
+
     ordem = next_queue_position()
     produto_os = (os_row.get("produto") or modelo["produto"] or "").strip()
     produto_job = modelo["produto"]
@@ -464,6 +475,15 @@ def create_job(
         raise RuntimeError("Falha ao recuperar job criado.")
 
     append_job_log(job_id, "Job criado e aguardando processamento.", "info")
+    if base_cdr:
+        append_job_log(
+            job_id,
+            (
+                f"Prova a partir do Corel da pasta da OS ({base_cdr['filename']}); "
+                "os campos do formulário serão aplicados sobre ele."
+            ),
+            "info",
+        )
     warning = _product_match_warning(produto_os, produto_job)
     if warning:
         append_job_log(job_id, warning, "warning")
@@ -2663,6 +2683,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             logger.warning("Job %s: exclusões inválidas — ignorado.", job_id)
 
     input_cdr_rel = dados.pop(INPUT_CDR_DADOS_KEY, None)
+    base_cdr_rel = dados.pop(BASE_CDR_DADOS_KEY, None)
 
     preview_config: dict[str, Any] | None = None
     preview_raw = modelo.get("preview_config_json")
@@ -2732,6 +2753,19 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "output_pdf_name": pdf_name,
             "tentativas": job.get("tentativas") or 0,
         }
+        if job["tipo_job"] == TIPO_JOB_CREATE and base_cdr_rel:
+            try:
+                payload["base_cdr_path"] = resolve_os_relative_cdr_path(
+                    job["ano_protocolo"],
+                    job["nro_protocolo"],
+                    str(base_cdr_rel),
+                )
+            except (LookupError, FileNotFoundError, ValueError) as exc:
+                append_job_log(
+                    job_id,
+                    f"Corel da pasta indisponível ({exc}) — usando o modelo.",
+                    "warning",
+                )
 
     if job["tipo_job"] == TIPO_JOB_TIMBRADO_A4_DIGITAL:
         payload["output_dir"] = resolve_os_timbrado_digital_dir(
@@ -4464,7 +4498,29 @@ def register_preparando_prova_andamento(ano: int, nro: int, ponto: str) -> str:
 
 
 def _is_backup_cdr_filename(filename: str) -> bool:
-    return CDR_BACKUP_NAME_FRAGMENT in (filename or "").lower()
+    """Cópia de segurança do CorelDRAW (pt: «Cópia_de_segurança_de_…», en: «Backup_of_…»)."""
+    import unicodedata
+
+    lower = (filename or "").lower()
+    if CDR_BACKUP_NAME_FRAGMENT in lower:
+        return True
+    plain = "".join(
+        ch
+        for ch in unicodedata.normalize("NFKD", lower)
+        if not unicodedata.combining(ch)
+    )
+    plain = re.sub(r"[\s_\-]+", " ", plain)
+    return "copia de seguranca" in plain or plain.startswith("backup of ")
+
+
+def find_os_base_cdr(ano: int, nro: int) -> Optional[dict[str, Any]]:
+    """Corel utilizável da pasta da OS para «Criar prova» (BaseSefoc primeiro, depois o mais recente)."""
+    try:
+        files = list_os_usable_cdrs(ano, nro)
+    except Exception as exc:
+        logger.debug("Sem Corel na pasta da OS %s/%s: %s", nro, ano, exc)
+        return None
+    return files[0] if files else None
 
 
 def _is_usable_os_cdr_filename(filename: str) -> bool:

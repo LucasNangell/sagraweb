@@ -2785,3 +2785,146 @@ class TestTimbradoA4DigitalJob:
         )
         assert updated["status"] == "completed"
         assert set(updated["artefatos"]) == set(docx_names)
+
+class TestCriarProvaComCorelDaPasta:
+    """«Criar prova» usa o .cdr já existente na pasta da OS (fora cópia de segurança)."""
+
+    @pytest.mark.parametrize(
+        "name,expected",
+        [
+            ("05024-Nome-Cópia_de_segurança.cdr", True),
+            ("Cópia de segurança de 05024-Nome.cdr", True),
+            ("Copia_de_seguranca_de_X.cdr", True),
+            ("Backup_of_05024-Nome.cdr", True),
+            ("05024-Nome-BaseSefoc.cdr", False),
+            ("cartao.cdr", False),
+        ],
+    )
+    def test_detecta_copia_de_seguranca(self, name, expected):
+        from services import papelaria_jobs_service as svc
+
+        assert svc._is_backup_cdr_filename(name) is expected
+
+    def _run_create(self, monkeypatch, cdrs):
+        from services import papelaria_jobs_service as svc
+
+        inserted: dict = {}
+        logs: list[str] = []
+
+        class _FakeCursor:
+            lastrowid = 42
+
+            def execute(self, sql, params=None):
+                if "INSERT INTO tabPapelariaJobs" in sql:
+                    inserted.update(params)
+
+        def fake_transaction(operations):
+            return [op(_FakeCursor()) for op in operations]
+
+        def fake_query(sql, params=None):
+            if "FROM tabProtocolos" in sql:
+                return [{"NroProtocolo": 5954, "AnoProtocolo": 2026, "produto": "Ct Visita"}]
+            if "MAX(OrdemFila)" in sql:
+                return [{"next_pos": 3}]
+            if "INSERT INTO tabPapelariaJobLog" in sql:
+                logs.append(params["msg"])
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc.db, "execute_transaction", fake_transaction)
+        monkeypatch.setattr(svc, "get_job", lambda job_id: {"id": job_id, "ano_protocolo": 2026, "nro_protocolo": 5954, "status": "pending", "dados": {}})
+        if isinstance(cdrs, Exception):
+            def _raise(ano, nro):
+                raise cdrs
+            monkeypatch.setattr(svc, "list_os_usable_cdrs", _raise)
+        else:
+            monkeypatch.setattr(svc, "list_os_usable_cdrs", lambda ano, nro: cdrs)
+        with patch.object(svc, "broadcast_job_update"), patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=MODEL_SAMPLE,
+        ):
+            svc.create_job(
+                ano=2026,
+                nro=5954,
+                modelo_id=1,
+                dados={
+                    "nome_deputado": "Fulano",
+                    "email": "a@b.c",
+                    svc.BASE_CDR_DADOS_KEY: "../../segredo.cdr",
+                },
+                solicitado_por="918713",
+            )
+        return json.loads(inserted["dados"]), logs
+
+    def test_create_grava_corel_da_pasta(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        dados, logs = self._run_create(
+            monkeypatch,
+            [
+                {
+                    "filename": "05024-Nome-BaseSefoc.cdr",
+                    "relative_path": "Sefoc/05024-Nome-BaseSefoc.cdr",
+                    "absolute_path": r"\server\os\Sefoc\05024-Nome-BaseSefoc.cdr",
+                    "mtime": 1.0,
+                },
+                {
+                    "filename": "outro.cdr",
+                    "relative_path": "outro.cdr",
+                    "absolute_path": r"\server\os\outro.cdr",
+                    "mtime": 9.0,
+                },
+            ],
+        )
+        # Caminho vindo do cliente é ignorado; vale o primeiro da pasta.
+        assert dados[svc.BASE_CDR_DADOS_KEY] == "Sefoc/05024-Nome-BaseSefoc.cdr"
+        assert dados["nome_deputado"] == "Fulano"
+        assert any("Corel da pasta da OS" in msg for msg in logs)
+
+    def test_create_sem_corel_usa_modelo(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        dados, _logs = self._run_create(monkeypatch, [])
+        assert svc.BASE_CDR_DADOS_KEY not in dados
+
+        dados, _logs = self._run_create(monkeypatch, LookupError("sem pasta"))
+        assert svc.BASE_CDR_DADOS_KEY not in dados
+
+    def test_payload_envia_base_cdr_path_e_mantem_campos(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        base = sefoc / "05024-Nome-BaseSefoc.cdr"
+        base.write_bytes(b"cdr")
+        job = {
+            "id": 88,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_CREATE,
+            "produto": "Ct Visita",
+            "modelo_id": 1,
+            "arquivo_modelo": "CtVisitaFV.cdr",
+            "dados": {
+                svc.BASE_CDR_DADOS_KEY: "Sefoc/05024-Nome-BaseSefoc.cdr",
+                "nome_deputado": "Fulano",
+            },
+            "tentativas": 0,
+        }
+        modelo = {**MODEL_SAMPLE, "campos": {"nome_deputado": "{nome_deputado}"}}
+        monkeypatch.setattr(svc, "get_job", lambda job_id: job)
+        monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda ano, nro, create=False: str(sefoc))
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05024-Nome")
+        monkeypatch.setattr("routers.os_routes._get_os_folder_path", lambda ano, nro: str(tmp_path))
+        monkeypatch.setattr("services.papelaria_prova_modo.get_modo", lambda: "prova_web")
+        monkeypatch.setattr(svc, "build_prova_web_pdf_name", lambda ano, nro: "05024-Nome-Prova2.pdf")
+        monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: None)
+        with patch("services.papelaria_models_service.get_modelo_by_id", return_value=modelo):
+            payload = svc.build_worker_job_payload(88)
+
+        assert payload["tipo_job"] == svc.TIPO_JOB_CREATE
+        assert payload["base_cdr_path"] == str(base.resolve())
+        assert payload["dados"] == {"nome_deputado": "Fulano"}
+        assert payload["campos"] == {"nome_deputado": "{nome_deputado}"}
+        assert "input_cdr_path" not in payload
+        assert payload["output_cdr_name"] == "05024-Nome-BaseSefoc.cdr"

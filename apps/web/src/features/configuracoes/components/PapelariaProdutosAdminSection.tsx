@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Box, Eye, LayoutGrid, Loader2, Plus, Printer, Tag } from "lucide-react";
+import { Box, Eye, FileText, LayoutGrid, Loader2, Plus, Printer, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchPapelariaAdminModelos } from "@/api/adminSystem";
@@ -17,16 +17,18 @@ import {
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
 import { PapelariaModeloPreviewPanel } from "./PapelariaModeloPreviewPanel";
+import { PapelariaModeloProvaPdfPanel } from "./PapelariaModeloProvaPdfPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
 import { PerfilImposicaoPanel } from "./PerfilImposicaoPanel";
 
-type InnerTab = "dados" | "mockup" | "preview" | "imposicao";
+type InnerTab = "dados" | "mockup" | "preview" | "prova-pdf" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
 
 const INNER_TABS: { id: InnerTab; label: string; icon: typeof Tag }[] = [
   { id: "dados", label: "Dados", icon: Tag },
   { id: "mockup", label: "Mockup 3D", icon: Box },
   { id: "preview", label: "Prévia", icon: Eye },
+  { id: "prova-pdf", label: "Prova PDF", icon: FileText },
   { id: "imposicao", label: "Imposição (produto)", icon: LayoutGrid },
 ];
 
@@ -290,6 +292,12 @@ export function PapelariaProdutosAdminSection() {
                     ) : null}
                     {innerTab === "preview" ? (
                       <PapelariaModeloPreviewPanel
+                        key={selectedModelo.id}
+                        modelo={selectedModelo}
+                      />
+                    ) : null}
+                    {innerTab === "prova-pdf" ? (
+                      <PapelariaModeloProvaPdfPanel
                         key={selectedModelo.id}
                         modelo={selectedModelo}
                       />

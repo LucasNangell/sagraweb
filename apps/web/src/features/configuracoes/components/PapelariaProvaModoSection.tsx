@@ -31,6 +31,11 @@ const MODOS: Array<{
     label: "Prova e-mail",
     hint: "O worker abre os modelos da pasta CSP. Cartão de visita assessor, inglês e Instagram, e a pasta com logo, deixam de aparecer na página Papelaria.",
   },
+  {
+    id: "prova_pdf",
+    label: "Prova PDF",
+    hint: "Gera a prova no servidor a partir do PDF do modelo (aba Produtos → Prova PDF), sem CorelDRAW. Entrega igual à Prova WEB. Modelos sem PDF configurado continuam pelo worker (Prova WEB).",
+  },
 ];
 
 export function PapelariaProvaModoSection() {

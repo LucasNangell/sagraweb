@@ -15,7 +15,10 @@ _lock = threading.Lock()
 
 MODO_PROVA_WEB = "prova_web"
 MODO_PROVA_EMAIL = "prova_email"
-MODOS = (MODO_PROVA_WEB, MODO_PROVA_EMAIL)
+# Prova gerada no servidor a partir do PDF do modelo (sem CorelDRAW). Entrega
+# igual à Prova WEB; modelos sem PDF configurado continuam pelo worker.
+MODO_PROVA_PDF = "prova_pdf"
+MODOS = (MODO_PROVA_WEB, MODO_PROVA_EMAIL, MODO_PROVA_PDF)
 
 # Nome cadastrado (pasta CSP\WEB) → arquivo na pasta CSP.
 EMAIL_MODEL_ALIASES: dict[str, str] = {
@@ -74,7 +77,7 @@ def get_public_settings() -> dict[str, str]:
 def set_modo(modo: str) -> None:
     valor = (modo or "").strip()
     if valor not in MODOS:
-        raise ValueError("Modo de prova inválido. Use prova_web ou prova_email.")
+        raise ValueError("Modo de prova inválido. Use prova_web, prova_email ou prova_pdf.")
     with _lock:
         raw = _load_raw()
         raw["modo"] = valor

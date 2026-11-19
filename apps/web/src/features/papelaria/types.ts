@@ -156,7 +156,9 @@ export interface PapelariaOsContext {
   autoSelectedModel?: PapelariaCorelModelDetail | null;
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
-  prova_modo?: "prova_web" | "prova_email";
+  prova_modo?: "prova_web" | "prova_email" | "prova_pdf";
+  /** Modo Prova PDF: modelos com PDF configurado (prova gerada no servidor, sem Corel). */
+  prova_pdf_modelos?: number[];
   /** Campos do produto real da última prova (Corel da pasta), se houver. */
   campos_produto?: PapelariaCamposProduto | null;
 }

@@ -59,7 +59,7 @@ class GerenciaSettingsSaveRequest(BaseModel):
 
 
 class PapelariaProvaModoSaveRequest(BaseModel):
-    modo: Literal["prova_web", "prova_email"]
+    modo: Literal["prova_web", "prova_email", "prova_pdf"]
 
 
 class DevFeaturesSaveRequest(BaseModel):

@@ -340,6 +340,99 @@ async def upload_prova_email_template(
         raise HTTPException(500, "Erro ao salvar PDF padrão de prova.")
 
 
+class PapelariaProvaPdfCamposPayload(BaseModel):
+    campos: list[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PapelariaProvaPdfPreviaPayload(BaseModel):
+    dados: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _modelo_existe(modelo_id: int) -> None:
+    from services import papelaria_models_service as models_svc
+
+    if not models_svc.get_modelo_by_id(int(modelo_id)):
+        raise HTTPException(404, "Modelo não encontrado.")
+
+
+@router.get("/admin/modelos/{modelo_id}/prova-pdf")
+def obter_prova_pdf_modelo(
+    modelo_id: int,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Modo Prova PDF: PDF do modelo, textos encontrados e campos ligados."""
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+
+    try:
+        return svc.obter_modelo_pdf(modelo_id)
+    except Exception as e:
+        logger.exception("Erro ao ler Prova PDF do modelo %s: %s", modelo_id, e)
+        raise HTTPException(500, "Erro ao ler o PDF do modelo.")
+
+
+@router.post("/admin/modelos/{modelo_id}/prova-pdf")
+async def enviar_prova_pdf_modelo(
+    modelo_id: int,
+    file: UploadFile = File(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+
+    try:
+        content = await file.read()
+        return svc.salvar_pdf_modelo(
+            modelo_id, filename=file.filename or "modelo.pdf", content=content
+        )
+    except svc.ProvaPdfError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao salvar Prova PDF do modelo %s: %s", modelo_id, e)
+        raise HTTPException(400, f"Não foi possível ler o PDF: {e}")
+
+
+@router.put("/admin/modelos/{modelo_id}/prova-pdf/campos")
+def salvar_campos_prova_pdf_modelo(
+    modelo_id: int,
+    payload: PapelariaProvaPdfCamposPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+
+    try:
+        return svc.salvar_campos(modelo_id, payload.campos)
+    except svc.ProvaPdfError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/admin/modelos/{modelo_id}/prova-pdf/previa")
+def previa_prova_pdf_modelo(
+    modelo_id: int,
+    payload: PapelariaProvaPdfPreviaPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+
+    try:
+        return svc.previa_png(modelo_id, payload.dados)
+    except svc.ProvaPdfError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/admin/modelos/{modelo_id}/prova-pdf")
+def remover_prova_pdf_modelo(
+    modelo_id: int,
+    _session: SessionData = Depends(_require_import_access),
+):
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+
+    return svc.remover_modelo_pdf(modelo_id)
+
+
 @router.delete("/admin/modelos/{modelo_id}/prova-email-template")
 def remover_prova_email_template(
     modelo_id: int,

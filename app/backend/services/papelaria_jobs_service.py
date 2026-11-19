@@ -451,10 +451,20 @@ def create_job(
     if "uf" in dados_clean and dados_clean["uf"]:
         dados_clean["uf"] = dados_clean["uf"].upper()
 
+    # Modo «Prova PDF»: modelo com PDF configurado gera no servidor (sem worker).
+    prova_pdf_servidor = False
+    if tipo_job == TIPO_JOB_CREATE:
+        from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
+
+        if get_modo() == MODO_PROVA_PDF:
+            from services import papelaria_prova_pdf_service as prova_pdf_svc
+
+            prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
+
     # Já existe Corel na pasta da OS (fora cópia de segurança)? A prova é
     # montada a partir dele, com os campos do formulário aplicados por cima.
     base_cdr: Optional[dict[str, Any]] = None
-    if tipo_job == TIPO_JOB_CREATE:
+    if tipo_job == TIPO_JOB_CREATE and not prova_pdf_servidor:
         base_cdr = find_os_base_cdr(ano, nro)
         if base_cdr:
             dados_clean[BASE_CDR_DADOS_KEY] = base_cdr["relative_path"]
@@ -478,6 +488,9 @@ def create_job(
         "ponto": solicitado_por,
         "job_pai": job_pai_id,
     }
+    if prova_pdf_servidor:
+        # Já nasce «processing» do servidor: nenhum worker pega este job.
+        insert_params["status"] = STATUS_PROCESSING
 
     def _insert_job(cursor) -> int:
         cursor.execute(
@@ -492,7 +505,19 @@ def create_job(
             """,
             insert_params,
         )
-        return int(cursor.lastrowid)
+        job_id_novo = int(cursor.lastrowid)
+        if prova_pdf_servidor:
+            from services.papelaria_prova_pdf_service import WORKER_ID_SERVIDOR
+
+            cursor.execute(
+                """
+                UPDATE tabPapelariaJobs
+                SET WorkerID = %(worker)s, IniciadoEm = NOW(), Tentativas = 1
+                WHERE ID = %(id)s
+                """,
+                {"worker": WORKER_ID_SERVIDOR, "id": job_id_novo},
+            )
+        return job_id_novo
 
     results = db.execute_transaction([_insert_job])
     job_id = int(results[0])
@@ -500,7 +525,27 @@ def create_job(
     if not job:
         raise RuntimeError("Falha ao recuperar job criado.")
 
+    if prova_pdf_servidor:
+        append_job_log(job_id, "Prova PDF: gerando no servidor a partir do PDF do modelo.", "info")
+        from services import papelaria_prova_pdf_service as prova_pdf_svc
+
+        job = prova_pdf_svc.gerar_prova_do_job(job_id)
+        warning = _product_match_warning(produto_os, produto_job)
+        if warning:
+            append_job_log(job_id, warning, "warning")
+            job["warnings"] = [warning]
+        return job
+
     append_job_log(job_id, "Job criado e aguardando processamento.", "info")
+    if tipo_job == TIPO_JOB_CREATE:
+        from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
+
+        if get_modo() == MODO_PROVA_PDF:
+            append_job_log(
+                job_id,
+                "Prova PDF: modelo sem PDF configurado — gerado pelo CorelDRAW (worker).",
+                "warning",
+            )
     if base_cdr:
         append_job_log(
             job_id,
@@ -2836,11 +2881,15 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
     from services.papelaria_prova_modo import (
         MODO_PROVA_EMAIL,
+        MODO_PROVA_PDF,
         MODO_PROVA_WEB,
         get_modo,
     )
 
     modo = get_modo()
+    if modo == MODO_PROVA_PDF:
+        # Job que caiu no worker (modelo sem PDF): mesmo fluxo da Prova WEB.
+        modo = MODO_PROVA_WEB
     payload["prova_modo"] = modo
     prova_job_types = (TIPO_JOB_CREATE, TIPO_JOB_EXPORT_EXISTING_CDR)
     if job["tipo_job"] in prova_job_types and modo == MODO_PROVA_EMAIL:

@@ -225,6 +225,12 @@ export function PapelariaCorelPanel({
   });
 
   const contextReady = hasOs && contextQuery.isSuccess;
+  /** Modo Prova PDF com PDF configurado: prova no servidor, sem ler o Corel da pasta. */
+  const provaPdfServidor = Boolean(
+    selectedModelId &&
+      contextQuery.data?.prova_modo === "prova_pdf" &&
+      contextQuery.data?.prova_pdf_modelos?.includes(selectedModelId),
+  );
   const enrichNome = (
     contextQuery.data?.prefill?.nome_deputado ||
     contextQuery.data?.os?.titular ||
@@ -896,7 +902,7 @@ export function PapelariaCorelPanel({
    */
   const preLeituraCorelRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!hasOs || !selectedModelId) return;
+    if (!hasOs || !selectedModelId || provaPdfServidor) return;
     const arquivo = usableCdrFiles(cdrPathQuery.data)[0];
     if (!arquivo) return;
     const chave = `${selectedModelId}|${arquivo.relative_path}|${arquivo.mtime}`;
@@ -905,7 +911,7 @@ export function PapelariaCorelPanel({
     void iniciarComparacaoCorelPapelariaOs(anoNum, nroNum, selectedModelId).catch(
       () => undefined,
     );
-  }, [hasOs, anoNum, nroNum, selectedModelId, cdrPathQuery.data]);
+  }, [hasOs, anoNum, nroNum, selectedModelId, cdrPathQuery.data, provaPdfServidor]);
 
   /** Corel já na pasta: compara os textos dele com o formulário antes de criar a prova. */
   const verificarDadosCorelThenGerar = async () => {
@@ -1003,7 +1009,7 @@ export function PapelariaCorelPanel({
   const handleGerarArquivo = () => {
     if (!validateFormForAction()) return;
     manterDadosCorelRef.current = false;
-    if (usableCdrFiles(cdrPathQuery.data).length > 0) {
+    if (!provaPdfServidor && usableCdrFiles(cdrPathQuery.data).length > 0) {
       void verificarDadosCorelThenGerar();
       return;
     }

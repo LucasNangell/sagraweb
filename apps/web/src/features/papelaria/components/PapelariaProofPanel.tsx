@@ -84,7 +84,7 @@ type Props = {
   approveProvaPending?: boolean;
   discardProvaPending?: boolean;
   provaReviewMessage?: string | null;
-  provaModo?: "prova_web" | "prova_email";
+  provaModo?: "prova_web" | "prova_email" | "prova_pdf";
   activeDynamicFields?: ActiveDynamicFieldPlacement[];
   onActiveDynamicFieldsChange?: (next: ActiveDynamicFieldPlacement[]) => void;
   onLivePreviewValueChange?: (key: string, value: string) => void;

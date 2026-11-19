@@ -91,6 +91,25 @@ _table_ready = False
 # ---------------------------------------------------------------------------
 
 
+def _prova_pdf_modelos(modelos: list[dict[str, Any]]) -> list[int]:
+    """Modo Prova PDF: IDs dos modelos com PDF configurado (gerados no servidor)."""
+    from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
+
+    if get_modo() != MODO_PROVA_PDF:
+        return []
+    from services.papelaria_prova_pdf_service import tem_modelo_pdf
+
+    out: list[int] = []
+    for m in modelos:
+        try:
+            mid = int(m.get("id") or 0)
+            if mid and tem_modelo_pdf(mid):
+                out.append(mid)
+        except Exception:
+            continue
+    return out
+
+
 def _as_str(value: Any, default: str = "") -> str:
     """Coerce valor do MySQL (int, etc.) para str antes de .strip()."""
     if value is None:
@@ -1801,4 +1820,5 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "warnings": warnings,
         "cliente_alteracao": cliente_alteracao,
         "prova_modo": get_modo(),
+        "prova_pdf_modelos": _prova_pdf_modelos(modelos),
     }

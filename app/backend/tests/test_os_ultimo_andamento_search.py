@@ -713,7 +713,15 @@ class TestHomeFetchAllFastPathSql:
 class TestHomeFetchAllMaterializedEnrich:
     @patch(
         "services.os_ultimo_andamento_service.fetch_operacional_rows_batch",
-        return_value={},
+        return_value={
+            (10, 2026): {
+                "nro_protocolo": 10,
+                "ano_protocolo": 2026,
+                "situacao": "Saída p/",
+                "setor": "Correspondência",
+                "data": "2026-11-13 00:00:00",
+            }
+        },
     )
     @patch(
         "services.os_ultimo_andamento_service.fetch_materialized_operacional_rows_batch",
@@ -721,9 +729,9 @@ class TestHomeFetchAllMaterializedEnrich:
             (10, 2026): {
                 "nro_protocolo": 10,
                 "ano_protocolo": 2026,
-                "situacao": "Em Execução",
+                "situacao": "Saída p/",
                 "setor": "SEFOC",
-                "data": "2026-01-15 10:00:00",
+                "data": "2026-11-17 19:28:43",
             }
         },
     )
@@ -731,7 +739,7 @@ class TestHomeFetchAllMaterializedEnrich:
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=True)
     @patch(_MAT_POPULATED, return_value=True)
     @patch("services.os_search_service.db")
-    def test_uses_materialized_batch_when_preferred(
+    def test_home_fetch_all_uses_live_ultimo_not_stale_snapshot(
         self, mock_db, _pop, _prefer, _ft, mock_mat, mock_live
     ):
         mock_db.execute_query.side_effect = [
@@ -766,10 +774,10 @@ class TestHomeFetchAllMaterializedEnrich:
             include_total=True,
             simple_pagination=True,
         )
-        assert result["data"][0]["situacao"] == "Em Execução"
-        assert result["data"][0]["setor"] == "SEFOC"
-        mock_mat.assert_called_once()
-        mock_live.assert_not_called()
+        assert result["data"][0]["situacao"] == "Saída p/"
+        assert result["data"][0]["setor"] == "Correspondência"
+        mock_live.assert_called()
+        mock_mat.assert_not_called()
 
     @patch(
         "services.os_ultimo_andamento_service.fetch_operacional_rows_batch",
@@ -828,5 +836,5 @@ class TestHomeFetchAllMaterializedEnrich:
         )
         assert result["data"][0]["situacao"] == "Entregue"
         assert result["data"][0]["setor"] == "Arte"
-        mock_mat.assert_called_once()
+        mock_mat.assert_not_called()
         mock_live.assert_called_once()

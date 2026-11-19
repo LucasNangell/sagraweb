@@ -1,7 +1,7 @@
 """
 Busca paginada de OSs — GET /api/os/search.
 Fonte primária de situação/setor: tabAndamento (UltimoStatus=1, espelhos Sub OS excluídos).
-tab_os_ultimo_andamento_operacional só entra com OS_SEARCH_PREFER_MATERIALIZED=1.
+A lista da home usa esse andamento ao vivo. A tabela materializada não substitui o último marcado.
 """
 from __future__ import annotations
 
@@ -1253,42 +1253,12 @@ def _enrich_operacional_for_home(
     rows: List[Dict[str, Any]], *, slim: bool = True
 ) -> List[Dict[str, Any]]:
     """
-    Home fetch_all: prefere materializada (1 query/lote); gaps vão para live.
-    Sem OS_SEARCH_PREFER_MATERIALIZED, equivalente a _enrich_operacional_from_live.
+    Home fetch_all: situação/setor vêm do UltimoStatus=1 em tabAndamento.
+    A cópia materializada fica defasada e não pode substituir o último andamento.
     """
     if not rows:
         return rows
-    if not (_prefer_materialized_andamento() and materialized_table_populated()):
-        return _enrich_operacional_from_live(rows, slim=slim)
-
-    from services.os_ultimo_andamento_service import (
-        fetch_materialized_operacional_rows_batch,
-        fetch_operacional_rows_batch,
-    )
-
-    pairs = _protocol_pairs(rows)
-    mat_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
-    for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
-        mat_map.update(fetch_materialized_operacional_rows_batch(chunk))
-
-    _apply_operacional_map(rows, mat_map, slim=slim, include_user=False)
-
-    gaps = [
-        (int(row["nr_os"]), int(row["ano"]))
-        for row in rows
-        if row.get("nr_os") is not None
-        and row.get("ano") is not None
-        and (int(row["nr_os"]), int(row["ano"])) not in mat_map
-    ]
-    if not gaps:
-        return rows
-
-    live_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
-    for chunk in _chunks(gaps, OS_SEARCH_IN_CHUNK):
-        live_map.update(fetch_operacional_rows_batch(chunk))
-    if live_map:
-        _apply_operacional_map(rows, live_map, slim=slim, include_user=False)
-    return rows
+    return _enrich_operacional_from_live(rows, slim=slim)
 
 
 def _enrich_sub_os_counts(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

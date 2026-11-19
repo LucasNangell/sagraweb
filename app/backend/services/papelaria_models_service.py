@@ -1612,6 +1612,33 @@ def is_papelaria_os_by_product(
     return any(normalizar_texto_produto(m["produto"]) == prod_norm for m in todos)
 
 
+def _campos_produto_da_ultima_prova(
+    ano: int, nro: int
+) -> tuple[Optional[dict[str, Any]], dict[str, str]]:
+    """Campos do produto real da última prova criada (e seus valores)."""
+    try:
+        from services.papelaria_campos_produto import carregar_de_dados
+        from services.papelaria_jobs_service import TIPO_JOB_CREATE, list_jobs_for_os
+
+        for job in list_jobs_for_os(ano, nro, limit=20):
+            if (job.get("tipo_job") or "") != TIPO_JOB_CREATE:
+                continue
+            if job.get("status") in ("failed", "cancelled"):
+                continue
+            dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+            produto = carregar_de_dados(dados)
+            if not produto:
+                return None, {}
+            valores = {
+                c["key"]: str(dados.get(c["key"]) or "")
+                for c in produto.get("campos") or []
+            }
+            return produto, valores
+    except Exception as exc:
+        logger.warning("Campos do produto da SP %s/%s indisponíveis: %s", nro, ano, exc)
+    return None, {}
+
+
 def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     rows = db.execute_query(
         """
@@ -1644,6 +1671,9 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         )
 
     prefill = build_prefill_corel(ano, nro, row=row)
+    campos_produto, produto_valores = _campos_produto_da_ultima_prova(ano, nro)
+    if produto_valores:
+        prefill = {**prefill, **produto_valores}
     cliente_alteracao = None
     alt = None
     try:
@@ -1745,7 +1775,11 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         _as_str(row.get("Titulo")),
     )
 
+    # Chaves internas (__campos_produto, __exclusoes…) não são campos do formulário.
+    prefill = {k: v for k, v in prefill.items() if not str(k).startswith("__")}
+
     return {
+        "campos_produto": campos_produto,
         "os": {
             "nro": nro,
             "ano": ano,

@@ -94,12 +94,42 @@ export interface PapelariaCreateJobPayload {
   manter_dados_corel?: boolean;
 }
 
+/** Ocorrência de um objeto no Corel da pasta (face + centro em mm no arquivo final). */
+export interface PapelariaCorelOcorrencia {
+  face: string;
+  x: number | null;
+  y: number | null;
+  /** Ex.: «Frente», «Verso», «Frente (esquerda)». */
+  rotulo: string;
+  original: string;
+  novo: string;
+  /** Campo do produto já existente para esta ocorrência. */
+  key?: string | null;
+}
+
 /** Objeto do Corel da pasta cujo texto difere do que o formulário aplicaria. */
 export interface PapelariaCorelDiferenca {
   campo: string;
   rotulo: string;
   original: string[];
   novo: string[];
+  /** false: worker antigo, sem face/posição — não dá para criar campos por ocorrência. */
+  editavel?: boolean;
+  ocorrencias?: PapelariaCorelOcorrencia[];
+}
+
+/** Campos do produto real (Corel da pasta): um campo por ocorrência de objeto. */
+export interface PapelariaCamposProdutoEntrada {
+  face: string;
+  x: number;
+  y: number;
+  key: string;
+}
+
+export interface PapelariaCamposProduto {
+  arquivo?: string;
+  objetos: Record<string, PapelariaCamposProdutoEntrada[]>;
+  campos: PapelariaField[];
 }
 
 export type PapelariaCompararCorelStatus =
@@ -127,6 +157,8 @@ export interface PapelariaOsContext {
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
   prova_modo?: "prova_web" | "prova_email";
+  /** Campos do produto real da última prova (Corel da pasta), se houver. */
+  campos_produto?: PapelariaCamposProduto | null;
 }
 
 export type PapelariaJobStatus =

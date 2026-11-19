@@ -58,11 +58,14 @@ def textos_esperados(template: str, dados: dict[str, Any]) -> list[str]:
 
 
 def _rotulo_campo(nome: str, template: str, campos_form: list[dict[str, Any]]) -> str:
+    """Rótulo do objeto: o campo do formulário quando o template usa uma variável só."""
     from services.papelaria_models_service import extrair_variaveis
 
     labels = {str(f.get("key")): str(f.get("label") or f.get("key")) for f in campos_form or []}
-    usados = [labels[v] for v in sorted(extrair_variaveis(template)) if v in labels]
-    return ", ".join(dict.fromkeys(usados)) or nome
+    variaveis = sorted(extrair_variaveis(template))
+    if len(variaveis) == 1 and variaveis[0] in labels:
+        return labels[variaveis[0]]
+    return nome
 
 
 def _exclusoes(dados: dict[str, Any]) -> set[str]:
@@ -76,21 +79,105 @@ def _exclusoes(dados: dict[str, Any]) -> set[str]:
     return {str(x) for x in parsed} if isinstance(parsed, list) else set()
 
 
+def parear_ocorrencias(
+    ocorrencias: list[dict[str, Any]],
+    entradas: list[dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """Mesma regra do worker: mesma face, mais próxima, um para um."""
+    pares: list[tuple[float, int, int]] = []
+    for oi, oc in enumerate(ocorrencias):
+        for ei, e in enumerate(entradas):
+            if str(e.get("face") or "") != str(oc.get("face") or ""):
+                continue
+            dx = float(oc.get("x") or 0) - float(e.get("x") or 0)
+            dy = float(oc.get("y") or 0) - float(e.get("y") or 0)
+            pares.append((dx * dx + dy * dy, oi, ei))
+    pares.sort()
+    usados_o: set[int] = set()
+    usados_e: set[int] = set()
+    out: dict[int, dict[str, Any]] = {}
+    for _d, oi, ei in pares:
+        if oi in usados_o or ei in usados_e:
+            continue
+        usados_o.add(oi)
+        usados_e.add(ei)
+        out[oi] = entradas[ei]
+    return out
+
+
+def _normalizar_ocorrencias(itens: list[Any]) -> list[dict[str, Any]]:
+    """Aceita o formato novo ({face,x,y,texto}) e o antigo (só textos)."""
+    out: list[dict[str, Any]] = []
+    for item in itens or []:
+        if isinstance(item, dict):
+            out.append(
+                {
+                    "face": str(item.get("face") or ""),
+                    "x": item.get("x"),
+                    "y": item.get("y"),
+                    "texto": str(item.get("texto") or ""),
+                }
+            )
+        elif item is not None:
+            out.append({"face": "", "x": None, "y": None, "texto": str(item)})
+    return out
+
+
+def _rotulos_posicao(ocs: list[dict[str, Any]]) -> list[str]:
+    """«Frente», «Verso», «Frente (esquerda)»… para distinguir ocorrências."""
+    rotulos = [oc["face"] or "Corel" for oc in ocs]
+    por_face: dict[str, list[int]] = {}
+    for i, oc in enumerate(ocs):
+        por_face.setdefault(oc["face"] or "Corel", []).append(i)
+    for face, idxs in por_face.items():
+        if len(idxs) < 2:
+            continue
+        xs = [float(ocs[i].get("x") or 0) for i in idxs]
+        ys = [float(ocs[i].get("y") or 0) for i in idxs]
+        if max(xs) - min(xs) >= 10:
+            ordem = sorted(idxs, key=lambda i: float(ocs[i].get("x") or 0))
+            nomes = ["esquerda", "direita"] if len(ordem) == 2 else [f"{n}ª da esquerda" for n in range(1, len(ordem) + 1)]
+        else:
+            ordem = sorted(idxs, key=lambda i: -float(ocs[i].get("y") or 0))
+            nomes = ["superior", "inferior"] if len(ordem) == 2 else [f"{n}ª de cima" for n in range(1, len(ordem) + 1)]
+        for nome, i in zip(nomes, ordem):
+            rotulos[i] = f"{face} ({nome})"
+    return rotulos
+
+
+def _esperado_por_face(
+    template: str, face: str, dados: dict[str, Any], original: str = ""
+) -> str:
+    from services.papelaria_models_service import dividir_frente_verso, substituir_variaveis
+
+    partes = dividir_frente_verso(template)
+    if partes:
+        frente = substituir_variaveis(partes[1], dados) or ""
+        verso = substituir_variaveis(partes[2], dados) or ""
+        if face == "Verso":
+            return verso
+        if not face and normalizar_texto(original) == normalizar_texto(verso):
+            return verso  # sem face (worker antigo): vale qualquer das partes
+        return frente
+    return substituir_variaveis(template, dados) or ""
+
+
 def comparar_dados_corel(
     *,
     modelo: dict[str, Any],
     dados: dict[str, Any],
     campos_cdr: dict[str, str],
-    ocorrencias_cdr: Optional[dict[str, list[str]]] = None,
+    ocorrencias_cdr: Optional[dict[str, list[Any]]] = None,
     preview_config: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
     """
     Diferenças entre o Corel da pasta e o formulário, por objeto do modelo.
 
-    Só entram objetos que existem no Corel (os ausentes ficam como estão de
-    qualquer forma). Cada item: ``campo``, ``rotulo``, ``original`` (textos do
-    Corel) e ``novo`` (texto que o formulário aplicaria).
+    Cada item traz ``ocorrencias`` (face, posição, texto original e o que o
+    formulário aplicaria) — base dos campos do produto real. Objetos já
+    transformados em campos do produto comparam com os valores desses campos.
     """
+    from services.papelaria_campos_produto import carregar_de_dados
     from services.papelaria_live_preview_service import overlay_campos_com_templates_preview
 
     campos_modelo = overlay_campos_com_templates_preview(
@@ -98,6 +185,8 @@ def comparar_dados_corel(
     )
     excluidos = _exclusoes(dados)
     dados_ok = preparar_dados(dados, modelo)
+    produto = carregar_de_dados(dados) or {}
+    produto_por_nome = {_chave(n): v for n, v in (produto.get("objetos") or {}).items()}
     por_nome = {_chave(k): v for k, v in (campos_cdr or {}).items()}
     ocorr = {_chave(k): v for k, v in (ocorrencias_cdr or {}).items()}
 
@@ -106,24 +195,49 @@ def comparar_dados_corel(
         if nome in excluidos or template is None:
             continue
         chave = _chave(nome)
-        textos = [t for t in (ocorr.get(chave) or []) if t is not None]
-        if not textos and chave in por_nome:
-            textos = [por_nome[chave]]
-        if not textos:
+        ocs = _normalizar_ocorrencias(ocorr.get(chave) or [])
+        if not ocs and chave in por_nome:
+            ocs = _normalizar_ocorrencias([por_nome[chave]])
+        if not ocs:
             continue
-        esperados = textos_esperados(str(template), dados_ok)
-        esperados_norm = {normalizar_texto(e) for e in esperados}
-        divergentes = [t for t in textos if normalizar_texto(t) not in esperados_norm]
-        if not divergentes:
+
+        entradas = produto_por_nome.get(chave) or []
+        pares = parear_ocorrencias(ocs, entradas) if entradas else {}
+        rotulos = _rotulos_posicao(ocs)
+        itens: list[dict[str, Any]] = []
+        difere = False
+        for i, oc in enumerate(ocs):
+            entrada = pares.get(i)
+            if entrada is not None:
+                novo = str(dados.get(entrada["key"]) or "")
+            else:
+                novo = _esperado_por_face(str(template), oc["face"], dados_ok, oc["texto"])
+            original = normalizar_texto(oc["texto"])
+            novo_n = normalizar_texto(novo)
+            if original != novo_n:
+                difere = True
+            itens.append(
+                {
+                    "face": oc["face"],
+                    "x": oc["x"],
+                    "y": oc["y"],
+                    "rotulo": rotulos[i],
+                    "original": original,
+                    "novo": novo_n,
+                    "key": entrada["key"] if entrada else None,
+                }
+            )
+        if not difere:
             continue
-        originais = list(dict.fromkeys(normalizar_texto(t) for t in textos))
-        novos = list(dict.fromkeys(normalizar_texto(e) for e in esperados))
         diferencas.append(
             {
                 "campo": nome,
                 "rotulo": _rotulo_campo(nome, str(template), modelo.get("campos_formulario") or []),
-                "original": originais,
-                "novo": novos,
+                # Sem face/posição (worker antigo) não dá para criar campos por ocorrência.
+                "editavel": all(oc["face"] and oc["x"] is not None for oc in ocs),
+                "ocorrencias": itens,
+                "original": list(dict.fromkeys(it["original"] for it in itens)),
+                "novo": list(dict.fromkeys(it["novo"] for it in itens)),
             }
         )
     return diferencas
@@ -138,7 +252,7 @@ def _chave(nome: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def iniciar_comparacao(ano: int, nro: int) -> dict[str, Any]:
+def iniciar_comparacao(ano: int, nro: int, modelo_id: Optional[int] = None) -> dict[str, Any]:
     """Envia o .cdr da pasta para inspeção. Sem Corel na pasta: ``sem_corel``."""
     from services import papelaria_cdr_inspect_service as inspect_svc
     from services.papelaria_jobs_service import find_os_base_cdr
@@ -146,9 +260,18 @@ def iniciar_comparacao(ano: int, nro: int) -> dict[str, Any]:
     base = find_os_base_cdr(ano, nro)
     if not base:
         return {"status": STATUS_SEM_COREL}
+    modelo_arquivo = ""
+    if modelo_id:
+        from services import papelaria_models_service as models_svc
+
+        modelo = models_svc.get_modelo_by_id(int(modelo_id))
+        modelo_arquivo = str((modelo or {}).get("arquivo_modelo") or "").strip()
     with open(base["absolute_path"], "rb") as handle:
         content = handle.read()
-    inspect = inspect_svc.create_inspect_request(content, base["filename"])
+    # O modelo dá o formato do produto: o worker identifica Frente/Verso.
+    inspect = inspect_svc.create_inspect_request(
+        content, base["filename"], modelo_arquivo=modelo_arquivo or None
+    )
     return {
         "status": inspect.get("status") or inspect_svc.STATUS_PENDING,
         "inspect_id": inspect["inspect_id"],
@@ -205,6 +328,7 @@ __all__ = [
     "comparar_dados_corel",
     "iniciar_comparacao",
     "normalizar_texto",
+    "parear_ocorrencias",
     "resultado_comparacao",
     "textos_esperados",
 ]

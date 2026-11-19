@@ -321,6 +321,20 @@ class TestProcessJobDispatch:
         )
         assert gerar.call_args.kwargs["aplicar_campos"] is True
 
+    def test_create_repassa_campos_do_produto(self, patched_runtime):
+        gerar, _exportar, cfg = patched_runtime
+        objetos = {"NomeDep": [{"face": "Verso", "x": 23.5, "y": 25.0, "key": "obj_nomedep_2"}]}
+        worker_mod._process_job_body(
+            FakeApi(),
+            cfg,
+            _job(
+                tipo_job="create",
+                base_cdr_path="//srv/os/Sefoc/x_Base.cdr",
+                campos_produto_objetos=objetos,
+            ),
+        )
+        assert gerar.call_args.kwargs["objetos_produto"] == objetos
+
     def test_create_sem_corel_na_pasta_usa_modelo(self, patched_runtime, tmp_path):
         gerar, _exportar, cfg = patched_runtime
         worker_mod._process_job_body(FakeApi(), cfg, _job(tipo_job="create"))

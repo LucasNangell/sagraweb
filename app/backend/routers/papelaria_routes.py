@@ -42,6 +42,10 @@ class PapelariaCompararCorelPayload(BaseModel):
     dados: Dict[str, Any] = Field(default_factory=dict)
 
 
+class PapelariaIniciarComparacaoPayload(BaseModel):
+    modelo_id: Optional[int] = Field(None, ge=1)
+
+
 class PapelariaFinalizeCorelPayload(BaseModel):
     ano: int = Field(..., ge=2000, le=2100)
     nro: int = Field(..., ge=1)
@@ -803,13 +807,16 @@ def criar_job_papelaria(
 def iniciar_comparacao_corel_os(
     ano: int,
     nro: int,
+    payload: Optional[PapelariaIniciarComparacaoPayload] = None,
     _session: SessionData = Depends(_require_papelaria_access),
 ):
     """Lê (via worker) os textos do Corel da pasta para comparar com o formulário."""
     try:
         from services import papelaria_corel_dados_service as dados_svc
 
-        return dados_svc.iniciar_comparacao(ano, nro)
+        return dados_svc.iniciar_comparacao(
+            ano, nro, payload.modelo_id if payload else None
+        )
     except LookupError as e:
         raise HTTPException(404, str(e))
     except (OSError, ValueError) as e:

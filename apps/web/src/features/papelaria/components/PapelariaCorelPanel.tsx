@@ -65,10 +65,19 @@ import {
 import { isTimbradoA4DigitalProduct } from "../papelariaSession";
 import { compararDadosCorel } from "../papelariaCorelDados";
 import {
+  CAMPOS_PRODUTO_DADOS_KEY,
+  camposModeloComProduto,
+  camposVisiveis,
+  construirCamposProduto,
+  previewConfigComProduto,
+  semValoresDoProduto,
+} from "../papelariaCamposProduto";
+import {
   resolveDefaultPapelariaViewMode,
   type PapelariaViewMode,
 } from "../papelariaViewMode";
 import type {
+  PapelariaCamposProduto,
   PapelariaCorelModelSummary,
   PapelariaField,
   PapelariaJob,
@@ -183,6 +192,11 @@ export function PapelariaCorelPanel({
   );
   /** Escolha do usuário: manter os textos do Corel da pasta. */
   const manterDadosCorelRef = useRef(false);
+  /** Campos do produto real (Corel da pasta): um campo por ocorrência de objeto. */
+  const [camposProduto, setCamposProduto] = useState<PapelariaCamposProduto | null>(
+    null,
+  );
+  const camposProdutoAplicados = useRef(false);
   const corelDadosAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => corelDadosAbortRef.current?.abort(), []);
   const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
@@ -666,6 +680,13 @@ export function PapelariaCorelPanel({
 
   useEffect(() => {
     const ctx = contextQuery.data;
+    if (!ctx || camposProdutoAplicados.current) return;
+    camposProdutoAplicados.current = true;
+    setCamposProduto(ctx.campos_produto ?? null);
+  }, [contextQuery.data]);
+
+  useEffect(() => {
+    const ctx = contextQuery.data;
     if (!ctx) return;
     const camposCliente = ctx.cliente_alteracao?.campos ?? null;
     const alteracaoKey = clienteAlteracaoIdentity(ctx.cliente_alteracao);
@@ -740,6 +761,12 @@ export function PapelariaCorelPanel({
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
     setExcludedFields([]);
+    // Campos do produto valem para o modelo da última prova.
+    setCamposProduto(
+      model.id === contextQuery.data?.autoSelectedModelId
+        ? (contextQuery.data?.campos_produto ?? null)
+        : null,
+    );
     const clienteCampos = contextQuery.data?.cliente_alteracao?.campos ?? null;
     const base = mergePapelariaFieldValues(
       {},
@@ -764,15 +791,44 @@ export function PapelariaCorelPanel({
     return Object.fromEntries(items.map((item) => [item.key, item]));
   }, [clienteAlteracaoPendente?.campos_alterados]);
 
+  /** Campos exibidos: modelo (sem variáveis só dos objetos do produto) + campos do produto. */
+  const camposFormulario = useMemo(
+    () =>
+      modelDetailQuery.data
+        ? camposVisiveis(
+            modelDetailQuery.data.campos_formulario,
+            modelDetailQuery.data.campos,
+            camposProduto,
+          )
+        : undefined,
+    [modelDetailQuery.data, camposProduto],
+  );
+  const previewConfigJsonEfetivo = useMemo(
+    () =>
+      previewConfigComProduto(
+        modelDetailQuery.data?.preview_config_json,
+        camposProduto,
+      ) ?? undefined,
+    [modelDetailQuery.data?.preview_config_json, camposProduto],
+  );
+
   const previa = useMemo(() => {
     if (!modelDetailQuery.data?.campos) return null;
-    return buildPreviaTextual(modelDetailQuery.data.campos, fieldValues);
-  }, [modelDetailQuery.data?.campos, fieldValues]);
+    return buildPreviaTextual(
+      camposModeloComProduto(modelDetailQuery.data.campos, camposProduto),
+      fieldValues,
+    );
+  }, [modelDetailQuery.data?.campos, fieldValues, camposProduto]);
+
+  const restaurarCamposDoModelo = () => {
+    setFieldValues((prev) => semValoresDoProduto(prev, camposProduto));
+    setCamposProduto(null);
+  };
 
   const validateFormForAction = (): boolean => {
     if (!selectedModelId) return false;
     const missing = validateRequiredFields(
-      modelDetailQuery.data?.campos_formulario,
+      camposFormulario,
       fieldValues,
       excludedFields,
     );
@@ -813,8 +869,11 @@ export function PapelariaCorelPanel({
     if (excludedFields.length > 0) {
       base["__exclusoes"] = JSON.stringify(excludedFields);
     }
+    if (camposProduto) {
+      base[CAMPOS_PRODUTO_DADOS_KEY] = JSON.stringify(camposProduto);
+    }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto]);
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
@@ -866,6 +925,24 @@ export function PapelariaCorelPanel({
 
   const escolherDadosCorel = (manter: boolean) => {
     manterDadosCorelRef.current = manter;
+    setCorelDados(null);
+    void ensureOsFolderThen("gerar");
+  };
+
+  /** Modal de comparação: textos escolhidos viram os campos do produto real. */
+  const confirmarDadosCorel = (escolhas: Record<string, string>) => {
+    if (corelDados?.fase !== "diferente") return;
+    const { camposProduto: novo, valores } = construirCamposProduto(
+      corelDados.diferencas,
+      escolhas,
+      { arquivo: corelDados.arquivo, anterior: camposProduto },
+    );
+    // Sem face/posição (worker antigo): escolha global de manter o Corel.
+    manterDadosCorelRef.current = corelDados.diferencas.some(
+      (d) => d.editavel === false,
+    );
+    setCamposProduto(novo);
+    setFieldValues((prev) => ({ ...semValoresDoProduto(prev, camposProduto), ...valores }));
     setCorelDados(null);
     void ensureOsFolderThen("gerar");
   };
@@ -1387,8 +1464,14 @@ export function PapelariaCorelPanel({
                       </p>
                     ) : (
                       <>
+                        {camposProduto ? (
+                          <CamposProdutoAviso
+                            arquivo={camposProduto.arquivo}
+                            onRestaurar={restaurarCamposDoModelo}
+                          />
+                        ) : null}
                         <DynamicFields
-                          fields={modelDetailQuery.data?.campos_formulario}
+                          fields={camposFormulario}
                           isLoading={modelDetailQuery.isLoading}
                           values={fieldValues}
                           camposAlterados={camposAlteradosByKey}
@@ -1506,8 +1589,14 @@ export function PapelariaCorelPanel({
                   <h3 className="mb-2 text-xs font-bold text-neutral-700">
                     Informações do cliente
                   </h3>
+                  {camposProduto ? (
+                    <CamposProdutoAviso
+                      arquivo={camposProduto.arquivo}
+                      onRestaurar={restaurarCamposDoModelo}
+                    />
+                  ) : null}
                   <DynamicFields
-                    fields={modelDetailQuery.data?.campos_formulario}
+                    fields={camposFormulario}
                     isLoading={modelDetailQuery.isLoading}
                     values={fieldValues}
                     camposAlterados={camposAlteradosByKey}
@@ -1620,7 +1709,7 @@ export function PapelariaCorelPanel({
             cores={coresOs}
             arquivoModelo={arquivoModeloAtivo}
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
-            previewConfigJson={modelDetailQuery.data?.preview_config_json}
+            previewConfigJson={previewConfigJsonEfetivo}
             livePreviewValues={fieldValues}
             previa={previa}
             selectedModelId={selectedModelId}
@@ -1651,6 +1740,7 @@ export function PapelariaCorelPanel({
       {corelDados ? (
         <PapelariaCorelDadosModal
           estado={corelDados}
+          onConfirmar={confirmarDadosCorel}
           onManterOriginais={() => escolherDadosCorel(true)}
           onUsarFormulario={() => escolherDadosCorel(false)}
           onCancelar={cancelarDadosCorel}
@@ -1796,6 +1886,33 @@ function fieldDisplayLabel(field: PapelariaField): string {
   }
 }
 
+function CamposProdutoAviso({
+  arquivo,
+  onRestaurar,
+}: {
+  arquivo?: string;
+  onRestaurar: () => void;
+}) {
+  return (
+    <div
+      className="mb-2 flex items-start justify-between gap-2 rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-[10px] text-amber-900"
+      data-testid="papelaria-campos-produto-aviso"
+    >
+      <span>
+        Campos do produto real{arquivo ? ` (${arquivo})` : ""}: textos do Corel da
+        pasta, editáveis aqui e no portal do cliente.
+      </span>
+      <button
+        type="button"
+        className="shrink-0 font-semibold text-secondary-blue hover:underline"
+        onClick={onRestaurar}
+      >
+        Usar campos do modelo
+      </button>
+    </div>
+  );
+}
+
 function DynamicFields({
   fields,
   isLoading,
@@ -1902,7 +2019,7 @@ function DynamicFields({
             {field.type === "textarea" ? (
               <textarea
                 className={inputClassName}
-                rows={2}
+                rows={field.rows ?? 2}
                 value={values[field.key] ?? ""}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 disabled={isExcluded}

@@ -319,7 +319,19 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
             api.fail_inspect(inspect_id, "CorelDRAW indisponível para inspeção.")
             return
         api.download_inspect_cdr(inspect_id, local_cdr)
-        result = inspecionar_cdr(local_cdr, corel_visible=cfg.corel_visible)
+        modelo_inspect: str | None = None
+        if str(inspect.get("modelo_arquivo") or "").strip():
+            try:
+                modelo_inspect = _resolve_model_path(
+                    cfg.models_dir, str(inspect["modelo_arquivo"])
+                )
+            except FileNotFoundError:
+                modelo_inspect = None
+        result = inspecionar_cdr(
+            local_cdr,
+            corel_visible=cfg.corel_visible,
+            modelo_produto_path=modelo_inspect,
+        )
         api.complete_inspect(
             inspect_id,
             campos=result.get("campos") or {},
@@ -840,6 +852,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 aplicar_campos=not (
                     usa_corel_da_os and bool(job.get("manter_dados_corel"))
                 ),
+                objetos_produto=job.get("campos_produto_objetos") or None,
             )
             if prova_email and not cancel_requested.is_set():
                 prova_name = str(job.get("prova_email_pdf_name") or "").strip()

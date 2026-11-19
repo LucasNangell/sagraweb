@@ -95,10 +95,16 @@ export async function createPapelariaJob(
 export async function iniciarComparacaoCorelPapelariaOs(
   ano: number,
   nro: number,
+  modeloId?: number | null,
 ): Promise<PapelariaCompararCorelResponse> {
   return apiFetch<PapelariaCompararCorelResponse>(
     `/papelaria/os/${ano}/${nro}/comparar-corel`,
-    { method: "POST" },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // O modelo dá o formato do produto (worker separa Frente/Verso).
+      body: JSON.stringify({ modelo_id: modeloId ?? null }),
+    },
   );
 }
 

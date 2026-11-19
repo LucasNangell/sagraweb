@@ -117,3 +117,39 @@ def test_mover_para_admin_docs(tmp_path):
     assert not cdr.exists()
     assert Path(novo) == sefoc / "AdminDocs" / "antigo.cdr"
     assert Path(novo).read_bytes() == b"cdr"
+
+
+def test_parear_ocorrencias_por_face_e_proximidade():
+    ocs = [(0, "Frente", 65.9, 12.2), (1, "Frente", 17.7, 12.2), (2, "Verso", 23.5, 25.0)]
+    entradas = [
+        {"face": "Frente", "x": 17.69, "y": 12.18, "key": "obj_endereco_1"},
+        {"face": "Frente", "x": 65.89, "y": 12.18, "key": "obj_endereco_2"},
+        {"face": "Verso", "x": 23.46, "y": 25.0, "key": "obj_nomedep_2"},
+    ]
+    pares = leg.parear_ocorrencias(ocs, entradas)
+    assert pares[0]["key"] == "obj_endereco_2"
+    assert pares[1]["key"] == "obj_endereco_1"
+    assert pares[2]["key"] == "obj_nomedep_2"
+    # Mais ocorrências que entradas: as que sobram ficam sem campo.
+    assert 1 not in leg.parear_ocorrencias(ocs[:2], entradas[1:2])
+
+
+def test_nome_face():
+    assert [leg.nome_face(p) for p in (1, 2, 3)] == ["Frente", "Verso", "Página 3"]
+
+
+def test_planejar_troca_de_linhas_preserva_estrutura():
+    from corel_generator import planejar_troca_de_linhas
+
+    antigo = "Everton Rocha\rChefe de Gabinete\r\rFone: (84) 3113-0944\r\r"
+    novo = "Maria Teste\nAssessora Parlamentar\n\nFone: (84) 3113-0000"
+    trocas = planejar_troca_de_linhas(antigo, novo)
+    # Da última para a primeira, só as linhas que mudaram (offsets do Corel).
+    assert trocas == [
+        (33, 53, "Fone: (84) 3113-0000"),
+        (14, 31, "Assessora Parlamentar"),
+        (0, 13, "Maria Teste"),
+    ]
+    # Número de linhas diferente: troca o texto inteiro (None).
+    assert planejar_troca_de_linhas(antigo, "Só uma linha") is None
+    assert planejar_troca_de_linhas("uma linha", "outra") is None

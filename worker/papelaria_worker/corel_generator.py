@@ -957,14 +957,128 @@ def aplicar_texto_modelo(
         alterar_texto(shape, "", logs)
         return
     plain, ranges = styled
+    if not ranges and _texto_igual(ler_texto_shape(shape), plain):
+        # Mesmo texto: não reescreve (preserva negrito/tamanhos mistos do Corel).
+        logs.append(f"Texto de '{getattr(shape, 'Name', '?')}' já igual — mantido.")
+        return
+    if not ranges and _substituir_linhas_preservando_estilo(shape, plain, logs):
+        return
     alterar_texto(shape, plain, logs)
     aplicar_negrito_inline(shape, ranges, logs, plain_texto=plain)
+
+
+def planejar_troca_de_linhas(antigo: str, novo: str) -> Optional[list[tuple[int, int, str]]]:
+    """
+    Trocas (início, fim, texto) linha a linha — da última para a primeira —
+    quando o texto novo tem o mesmo número de linhas do antigo (ignorando linhas
+    vazias no fim). Sem correspondência de linhas: None.
+    """
+    def _quebras(t: str) -> str:
+        for q in ("\r\n", "\n", "\x0b", " ", " "):
+            t = t.replace(q, "\r")
+        return t
+
+    velhas = _quebras(antigo or "").split("\r")
+    novas = _quebras(novo or "").split("\r")
+    n_velhas = len(velhas)
+    while n_velhas and not velhas[n_velhas - 1].strip():
+        n_velhas -= 1
+    while novas and not novas[-1].strip():
+        novas.pop()
+    if n_velhas < 2 or len(novas) != n_velhas:
+        return None
+    trocas: list[tuple[int, int, str]] = []
+    pos = 0
+    for i in range(n_velhas):
+        inicio, fim = pos, pos + len(velhas[i])
+        if velhas[i] != novas[i]:
+            trocas.append((inicio, fim, novas[i]))
+        pos = fim + 1  # \r do parágrafo
+    trocas.reverse()
+    return trocas
+
+
+def _substituir_linhas_preservando_estilo(shape: Any, plain: str, logs: list[str]) -> bool:
+    """Troca só as linhas que mudaram, mantendo fonte/tamanho/negrito de cada uma."""
+    try:
+        story = shape.Text.Story
+        antigo = str(story.Text or "")
+    except Exception:
+        return False
+    trocas = planejar_troca_de_linhas(antigo, plain)
+    if trocas is None:
+        return False
+    try:
+        for inicio, fim, texto in trocas:
+            story.Range(int(inicio), int(fim)).Text = texto
+    except Exception as exc:
+        logs.append(f"Aviso: troca por linha falhou em '{getattr(shape, 'Name', '?')}' ({exc}).")
+        return False
+    logs.append(
+        f"Texto de '{getattr(shape, 'Name', '?')}' trocado linha a linha "
+        f"({len(trocas)} linha(s)), formatação preservada."
+    )
+    return True
+
+
+def _texto_igual(atual: Optional[str], novo: Optional[str]) -> bool:
+    def _n(t: Optional[str]) -> str:
+        raw = str(t or "")
+        for q in ("\r\n", "\r", "\x0b", "\u2028", "\u2029"):
+            raw = raw.replace(q, "\n")
+        linhas = [" ".join(l.split()) for l in raw.split("\n")]
+        return "\n".join(linhas).strip()
+
+    return atual is not None and _n(atual) == _n(novo)
+
+
+def aplicar_campo_por_ocorrencia(
+    doc: Any,
+    nome_campo_corel: str,
+    entradas: list[dict[str, Any]],
+    dados: dict[str, Any],
+    logs: list[str],
+    *,
+    indice_shapes: Optional[dict[str, list[dict[str, Any]]]] = None,
+) -> None:
+    """
+    Campos do produto real: cada ocorrência do objeto (face + posição) recebe
+    o texto do seu campo (``entrada["key"]`` em ``dados``).
+    """
+    import cdr_formato_legado as legado
+
+    ocorrencias = encontrar_shapes_no_documento(doc, nome_campo_corel, indice=indice_shapes)
+    if not ocorrencias:
+        logs.append(f"Objeto '{nome_campo_corel}' não existe no Corel — campo do produto ignorado.")
+        return
+    with legado.unidade_mm(doc):
+        localizar = legado.localizador_faces(doc, None)
+        posicoes: list[tuple[int, str, float, float]] = []
+        for idx, occ in enumerate(ocorrencias):
+            pos = localizar(occ["shape"], int(occ.get("pagina") or 1))
+            if pos:
+                posicoes.append((idx, pos[0], pos[1], pos[2]))
+        pares = legado.parear_ocorrencias(posicoes, entradas)
+    aplicados = 0
+    for idx, occ in enumerate(ocorrencias):
+        entrada = pares.get(idx)
+        if not entrada:
+            continue
+        chave = str(entrada.get("key") or "")
+        if not chave or chave not in dados:
+            continue
+        aplicar_texto_modelo(occ["shape"], "{" + chave + "}", dados, logs)
+        aplicados += 1
+    logs.append(
+        f"Campo do produto '{nome_campo_corel}': {aplicados} de {len(ocorrencias)} ocorrência(s)."
+    )
 
 
 def inspecionar_cdr(
     caminho_cdr: str,
     *,
     corel_visible: bool = False,
+    modelo_produto_path: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Abre o .cdr no CorelDRAW e retorna objetos nomeados com conteúdo textual.
@@ -1012,9 +1126,18 @@ def inspecionar_cdr(
             f"{len(preview_layout.get('elementos') or [])} elemento(s)."
         )
 
+        ocorrencias_faces: dict[str, list[dict[str, Any]]] = {}
+        if modelo_produto_path:
+            try:
+                ocorrencias_faces = _ocorrencias_por_face(
+                    corel, doc, indice, modelo_produto_path, logs
+                )
+            except Exception as exc:
+                logs.append(f"Aviso: faces das ocorrências não identificadas: {exc}")
+
         return {
             "campos": campos,
-            "ocorrencias": ocorrencias_texto,
+            "ocorrencias": ocorrencias_faces or ocorrencias_texto,
             "variaveis": sorted(vars_set),
             "preview_layout": preview_layout,
             "logs": logs,
@@ -1025,6 +1148,37 @@ def inspecionar_cdr(
                 doc.Close()
             except Exception:
                 pass
+
+
+def _ocorrencias_por_face(
+    corel: Any,
+    doc: Any,
+    indice: dict[str, list[dict[str, Any]]],
+    modelo_produto_path: str,
+    logs: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Texto, face e posição (no arquivo final) de cada ocorrência nomeada."""
+    import cdr_formato_legado as legado
+
+    esperado: Optional[tuple[float, float]] = None
+    if os.path.isfile(modelo_produto_path):
+        esperado = legado.ler_tamanho_primeira_pagina(corel, modelo_produto_path)
+    out: dict[str, list[dict[str, Any]]] = {}
+    with legado.unidade_mm(doc):
+        localizar = legado.localizador_faces(doc, esperado)
+        for nome, ocorrencias in indice.items():
+            for occ in ocorrencias[:20]:
+                texto = ler_texto_shape(occ["shape"])
+                if texto is None:
+                    continue
+                pos = localizar(occ["shape"], int(occ.get("pagina") or 1))
+                if pos is None:
+                    continue  # fora das bordas: não vai para o arquivo final
+                out.setdefault(nome, []).append(
+                    {"face": pos[0], "x": pos[1], "y": pos[2], "texto": texto.strip()}
+                )
+    logs.append(f"Ocorrências por face: {sum(len(v) for v in out.values())}.")
+    return out
 
 
 # Objetos do carimbo/template que podem faltar em alguns CDR — não abortam o job.
@@ -2843,6 +2997,7 @@ def _gerar_arquivo_corel_impl(
     base_cdr_da_os: bool = False,
     modelo_produto_path: Optional[str] = None,
     aplicar_campos: bool = True,
+    objetos_produto: Optional[dict[str, list[dict[str, Any]]]] = None,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
@@ -2929,7 +3084,7 @@ def _gerar_arquivo_corel_impl(
                     # Usuário optou por manter os dados originais do Corel da pasta.
                     logs.append("Mantendo os dados originais do Corel — campos do formulário não aplicados.")
                     campos = {}
-                elif not campos:
+                elif not campos and not objetos_produto:
                     raise CorelGenerationError("Modelo sem campos configurados.")
 
                 indice_shapes = construir_indice_shapes_documento(doc)
@@ -2956,6 +3111,19 @@ def _gerar_arquivo_corel_impl(
                         indice_shapes=indice_shapes,
                         ignorar_ausente=ignorar_ausentes,
                     )
+
+                if aplicar_campos and objetos_produto:
+                    for nome_obj, entradas in objetos_produto.items():
+                        if not isinstance(entradas, list):
+                            continue
+                        aplicar_campo_por_ocorrencia(
+                            doc,
+                            nome_obj,
+                            entradas,
+                            dados,
+                            logs,
+                            indice_shapes=indice_shapes,
+                        )
 
                 try:
                     if aplicar_campos:
@@ -3107,6 +3275,7 @@ def gerar_arquivo_corel(
     base_cdr_da_os: bool = False,
     modelo_produto_path: Optional[str] = None,
     aplicar_campos: bool = True,
+    objetos_produto: Optional[dict[str, list[dict[str, Any]]]] = None,
 ) -> GenerationResult:
     """
     Gera CDR e PDF a partir de cópia temporária do modelo.
@@ -3169,6 +3338,7 @@ def gerar_arquivo_corel(
             base_cdr_da_os=base_cdr_da_os,
             modelo_produto_path=modelo_produto_local,
             aplicar_campos=aplicar_campos or not base_cdr_da_os,
+            objetos_produto=objetos_produto,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))

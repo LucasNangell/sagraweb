@@ -49,7 +49,11 @@ def ensure_papelaria_cdr_inspect_table() -> None:
 
 
 def _ensure_inspect_layout_column() -> None:
-    for coluna in ("LayoutJson", "OcorrenciasJson"):
+    for coluna, tipo in (
+        ("LayoutJson", "JSON NULL"),
+        ("OcorrenciasJson", "JSON NULL"),
+        ("ModeloArquivo", "VARCHAR(255) NULL"),
+    ):
         rows = db.execute_query(
             """
             SELECT COUNT(*) AS cnt
@@ -64,7 +68,7 @@ def _ensure_inspect_layout_column() -> None:
             continue
         try:
             db.execute_query(
-                f"ALTER TABLE tabPapelariaCdrInspect ADD COLUMN {coluna} JSON NULL"
+                f"ALTER TABLE tabPapelariaCdrInspect ADD COLUMN {coluna} {tipo}"
             )
         except Exception as exc:
             logger.warning("Migração coluna %s em tabPapelariaCdrInspect: %s", coluna, exc)
@@ -158,7 +162,11 @@ def _row_to_inspect(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def create_inspect_request(content: bytes, filename: str) -> dict[str, Any]:
+def create_inspect_request(
+    content: bytes,
+    filename: str,
+    modelo_arquivo: Optional[str] = None,
+) -> dict[str, Any]:
     ensure_papelaria_cdr_inspect_table()
     if not content:
         raise ValueError("Arquivo .cdr vazio.")
@@ -182,6 +190,14 @@ def create_inspect_request(content: bytes, filename: str) -> dict[str, Any]:
             "status": STATUS_PENDING,
         },
     )
+    if modelo_arquivo:
+        try:
+            db.execute_query(
+                "UPDATE tabPapelariaCdrInspect SET ModeloArquivo = %(m)s WHERE Token = %(t)s",
+                {"m": str(modelo_arquivo)[:255], "t": token},
+            )
+        except Exception as exc:
+            logger.warning("Inspeção %s: modelo não registrado: %s", token, exc)
     return get_inspect_request(token) or {"inspect_id": token, "status": STATUS_PENDING}
 
 
@@ -249,7 +265,7 @@ def claim_inspect_for_worker(worker_id: str) -> Optional[dict[str, Any]]:
 
     rows = db.execute_query(
         """
-        SELECT Token, CaminhoCdr, NomeArquivo
+        SELECT *
         FROM tabPapelariaCdrInspect
         WHERE Token = %(token)s
         LIMIT 1
@@ -274,6 +290,8 @@ def claim_inspect_for_worker(worker_id: str) -> Optional[dict[str, Any]]:
     return {
         "inspect_id": token,
         "filename": row.get("NomeArquivo") or cdr_path.name,
+        # Modelo do produto: o worker usa o formato para achar Frente/Verso.
+        "modelo_arquivo": row.get("ModeloArquivo") or "",
     }
 
 
@@ -308,7 +326,7 @@ def complete_inspect(
     campos: dict[str, str],
     variaveis: list[str],
     preview_layout: Optional[dict[str, Any]] = None,
-    ocorrencias: Optional[dict[str, list[str]]] = None,
+    ocorrencias: Optional[dict[str, list[Any]]] = None,
 ) -> dict[str, Any]:
     ensure_papelaria_cdr_inspect_table()
     _assert_worker_owns_inspect(token, worker_id)
@@ -360,11 +378,24 @@ def complete_inspect(
             params,
         )
     if isinstance(ocorrencias, dict) and ocorrencias:
-        limpas = {
-            str(k): [str(t) for t in (v or [])][:20]
-            for k, v in ocorrencias.items()
-            if isinstance(v, list)
-        }
+        limpas: dict[str, list[Any]] = {}
+        for k, v in ocorrencias.items():
+            if not isinstance(v, list):
+                continue
+            itens: list[Any] = []
+            for t in v[:20]:
+                if isinstance(t, dict):
+                    itens.append(
+                        {
+                            "face": str(t.get("face") or "")[:20],
+                            "x": t.get("x") if isinstance(t.get("x"), (int, float)) else None,
+                            "y": t.get("y") if isinstance(t.get("y"), (int, float)) else None,
+                            "texto": str(t.get("texto") or "")[:4000],
+                        }
+                    )
+                elif t is not None:
+                    itens.append(str(t)[:4000])
+            limpas[str(k)] = itens
         try:
             db.execute_query(
                 """

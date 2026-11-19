@@ -287,6 +287,13 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
                 raise ValueError("Lista de exclusões deve ser uma lista.")
             cleaned[key_stripped] = value.strip()
             continue
+        if key_stripped == "__campos_produto":
+            from services.papelaria_campos_produto import validar_campos_produto
+
+            produto = validar_campos_produto(value)
+            if produto:
+                cleaned[key_stripped] = json.dumps(produto, ensure_ascii=False)
+            continue
         if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY, MANTER_DADOS_COREL_KEY):
             # Definidos só pelo servidor (nunca aceitar caminho vindo do cliente).
             continue
@@ -312,8 +319,12 @@ def _validate_required_fields(
     modelo: dict[str, Any],
     dados: dict[str, str],
 ) -> list[str]:
+    from services.papelaria_campos_produto import carregar_de_dados, variaveis_ocultas
+
     missing: list[str] = []
-    exclusoes: list[str] = []
+    # Variáveis só usadas por objetos que viraram campos do produto não são exigidas.
+    ocultas = variaveis_ocultas(modelo.get("campos") or {}, carregar_de_dados(dados))
+    exclusoes: list[str] = list(ocultas)
     exclusoes_raw = dados.get("__exclusoes")
     if exclusoes_raw:
         try:
@@ -421,6 +432,16 @@ def create_job(
         raise LookupError("Modelo não encontrado ou inativo.")
 
     dados_clean = _sanitize_dados(dados)
+    if "__campos_produto" in dados_clean:
+        from services.papelaria_campos_produto import validar_campos_produto
+
+        produto = validar_campos_produto(
+            dados_clean["__campos_produto"], modelo.get("campos") or {}
+        )
+        if produto:
+            dados_clean["__campos_produto"] = json.dumps(produto, ensure_ascii=False)
+        else:
+            dados_clean.pop("__campos_produto", None)
     missing = _validate_required_fields(modelo, dados_clean)
     if missing:
         raise ValueError(f"Campos obrigatórios ausentes: {', '.join(missing)}")
@@ -2694,6 +2715,16 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
     input_cdr_rel = dados.pop(INPUT_CDR_DADOS_KEY, None)
     base_cdr_rel = dados.pop(BASE_CDR_DADOS_KEY, None)
     manter_dados_corel = str(dados.pop(MANTER_DADOS_COREL_KEY, "") or "") == "1"
+    from services.papelaria_campos_produto import (
+        CHAVE_CAMPOS_PRODUTO,
+        campos_modelo_sem_objetos,
+        validar_campos_produto,
+    )
+
+    try:
+        campos_produto = validar_campos_produto(dados.pop(CHAVE_CAMPOS_PRODUTO, None))
+    except ValueError:
+        campos_produto = None
 
     preview_config: dict[str, Any] | None = None
     preview_raw = modelo.get("preview_config_json")
@@ -2748,9 +2779,14 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "produto": job["produto"],
             "modelo_id": job["modelo_id"],
             "arquivo_modelo": job["arquivo_modelo"],
-            "campos": overlay_campos_com_templates_preview(
-                modelo.get("campos") or {},
-                preview_config,
+            # Objetos que viraram campos do produto saem dos templates do modelo:
+            # o worker aplica o texto de cada ocorrência (campos_produto_objetos).
+            "campos": campos_modelo_sem_objetos(
+                overlay_campos_com_templates_preview(
+                    modelo.get("campos") or {},
+                    preview_config,
+                ),
+                campos_produto,
             ),
             "dados": dados,
             "campos_dinamicos_layout": campos_dinamicos_layout,
@@ -2763,6 +2799,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "output_pdf_name": pdf_name,
             "tentativas": job.get("tentativas") or 0,
         }
+        if campos_produto:
+            payload["campos_produto_objetos"] = campos_produto["objetos"]
         if job["tipo_job"] == TIPO_JOB_CREATE and base_cdr_rel:
             try:
                 payload["base_cdr_path"] = resolve_os_relative_cdr_path(

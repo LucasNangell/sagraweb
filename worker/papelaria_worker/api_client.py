@@ -221,7 +221,7 @@ class PapelariaWorkerApiClient:
         campos: dict[str, str],
         variaveis: list[str],
         preview_layout: dict[str, Any] | None = None,
-        ocorrencias: dict[str, list[str]] | None = None,
+        ocorrencias: dict[str, list[Any]] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "worker_id": self.worker_id,

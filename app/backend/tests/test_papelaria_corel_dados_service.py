@@ -81,7 +81,7 @@ def test_diferencas_do_cartao_antigo():
     assert nome["rotulo"] == "Nome do deputado/deputada"
     assert "Everton Rocha\nChefe de Gabinete\n\nFone: (84) 3113-0944" in nome["original"]
     assert nome["novo"] == ["Sargento Gonçalves"]
-    assert dif["Contato"]["rotulo"] == "E-mail, Gabinete"
+    assert dif["Contato"]["rotulo"] == "Contato"  # template com várias variáveis
     assert dif["Contato"]["novo"] == [
         "Fones: (61) 3215-5569\n3215-3569\ndep.sargentogoncalves@camara.leg.br"
     ]
@@ -125,7 +125,7 @@ def test_iniciar_envia_corel_para_inspecao(monkeypatch, tmp_path):
     )
     sent = {}
 
-    def fake_create(content, filename):
+    def fake_create(content, filename, modelo_arquivo=None):
         sent.update(content=content, filename=filename)
         return {"inspect_id": "tok", "status": "pending"}
 
@@ -180,3 +180,76 @@ def test_resultado_falha(monkeypatch):
     )
     out = svc.resultado_comparacao("tok", modelo_id=12, dados=DADOS)
     assert out["status"] == "failed" and out["erro"] == "Corel ocupado"
+
+
+# Ocorrências reais do 06592 (worker com o formato do CtVisitaFV: face + centro em mm).
+FACES = {
+    "NomeDep": [
+        {"face": "Frente", "x": 42.22, "y": 28.36, "texto": "Sargento Gonçalves"},
+        {"face": "Verso", "x": 23.46, "y": 25.0, "texto": "Everton Rocha\nChefe de Gabinete\n\nFone: (84) 3113-0944"},
+    ],
+    "Endereco": [
+        {"face": "Frente", "x": 65.89, "y": 12.18, "texto": "Av. das Fronteiras, 1251\nNossa Senhora da Apresentação\nCEP 59114-275 - Natal/RN\nFone: (84) 3113-0944"},
+        {"face": "Frente", "x": 17.69, "y": 12.18, "texto": "Câmara dos Deputados\nAnexo III, Gabinete 569\nCEP 70160-900 - Brasília/DF\nFones: (61) 3215-5569/1569"},
+    ],
+    "Contato": [{"face": "Frente", "x": 42.5, "y": 4.17, "texto": "dep.sargentogoncalves@camara.leg.br"}],
+    "Genero": [{"face": "Frente", "x": 42.24, "y": 24.81, "texto": "Deputado Federal"}],
+    "PartidoDep": [{"face": "Frente", "x": 42.15, "y": 21.89, "texto": "PL/RN"}],
+}
+
+
+def test_ocorrencias_por_face_com_rotulos_de_posicao():
+    dif = {d["campo"]: d for d in _comparar(campos_cdr={}, ocorrencias_cdr=FACES)}
+    assert set(dif) == {"Contato", "Endereco", "NomeDep"}
+    end = dif["Endereco"]
+    assert end["editavel"] is True
+    rotulos = {o["rotulo"]: o for o in end["ocorrencias"]}
+    assert set(rotulos) == {"Frente (esquerda)", "Frente (direita)"}
+    assert "Natal/RN" in rotulos["Frente (direita)"]["original"]
+    nome = {o["face"]: o for o in dif["NomeDep"]["ocorrencias"]}
+    assert nome["Frente"]["original"] == nome["Frente"]["novo"] == "Sargento Gonçalves"
+    assert nome["Verso"]["novo"] == "Sargento Gonçalves"
+    assert nome["Verso"]["original"].startswith("Everton Rocha")
+
+
+def test_campos_do_produto_ja_salvos_comparam_com_os_valores_deles():
+    produto = {
+        "objetos": {
+            "NomeDep": [
+                {"face": "Frente", "x": 42.2, "y": 28.4, "key": "obj_nomedep_1"},
+                {"face": "Verso", "x": 23.5, "y": 25.0, "key": "obj_nomedep_2"},
+            ]
+        },
+        "campos": [],
+    }
+    dados = {
+        **DADOS,
+        "__campos_produto": json.dumps(produto),
+        "obj_nomedep_1": "Sargento Gonçalves",
+        "obj_nomedep_2": "Everton Rocha\nChefe de Gabinete\n\nFone: (84) 3113-0944",
+    }
+    dif = {d["campo"]: d for d in _comparar(dados=dados, campos_cdr={}, ocorrencias_cdr=FACES)}
+    assert "NomeDep" not in dif  # já é o produto real
+
+    dados["obj_nomedep_2"] = "Fulano de Tal"
+    dif = {d["campo"]: d for d in _comparar(dados=dados, campos_cdr={}, ocorrencias_cdr=FACES)}
+    verso = [o for o in dif["NomeDep"]["ocorrencias"] if o["face"] == "Verso"][0]
+    assert verso["novo"] == "Fulano de Tal"
+    assert verso["key"] == "obj_nomedep_2"
+
+
+def test_parear_ocorrencias_um_para_um_por_face():
+    from services.papelaria_corel_dados_service import parear_ocorrencias
+
+    ocs = [
+        {"face": "Frente", "x": 65.9, "y": 12.2},
+        {"face": "Frente", "x": 17.7, "y": 12.2},
+        {"face": "Verso", "x": 20, "y": 20},
+    ]
+    entradas = [
+        {"face": "Frente", "x": 17.0, "y": 12.0, "key": "obj_e_1"},
+        {"face": "Frente", "x": 66.0, "y": 12.0, "key": "obj_e_2"},
+    ]
+    pares = parear_ocorrencias(ocs, entradas)
+    assert pares[0]["key"] == "obj_e_2" and pares[1]["key"] == "obj_e_1"
+    assert 2 not in pares

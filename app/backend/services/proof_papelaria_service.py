@@ -142,18 +142,35 @@ def build_portal_papelaria_edit_payload(
     if not job:
         return None
 
+    from services.papelaria_campos_produto import (
+        campos_formulario_com_produto,
+        carregar_de_dados,
+        preview_config_com_produto,
+    )
+
     modelo_id = job.get("modelo_id")
     modelo = get_modelo_with_preview(int(modelo_id)) if modelo_id else None
     job_dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    # Corel real da pasta: mesmos campos do produto que o SEFOC vê/editou.
+    produto = carregar_de_dados(job_dados)
+    campos_formulario = campos_formulario_com_produto(
+        (modelo or {}).get("campos_formulario") or [],
+        (modelo or {}).get("campos") or {},
+        produto,
+    )
+    preview_json = preview_config_com_produto(
+        (modelo or {}).get("preview_config_json"), produto
+    )
+    job_dados = {k: v for k, v in job_dados.items() if not str(k).startswith("__")}
 
     return {
         "proof_id": ctx["proof_id"],
         "job_id": ctx["job_id"],
         "modelo_id": modelo_id,
         "job_dados": job_dados,
-        "campos_formulario": (modelo or {}).get("campos_formulario") or [],
-        "preview_config_json": (modelo or {}).get("preview_config_json"),
-        "tem_preview_config": bool((modelo or {}).get("preview_config_json")),
+        "campos_formulario": campos_formulario,
+        "preview_config_json": preview_json,
+        "tem_preview_config": bool(preview_json),
         "produto": ctx.get("produto") or (modelo or {}).get("produto") or "",
         "arquivo_modelo": ctx.get("arquivo_modelo") or "",
         "frente_verso": ctx.get("frente_verso") or "",

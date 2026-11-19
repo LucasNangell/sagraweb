@@ -52,7 +52,7 @@ class WorkerInspectCompletePayload(BaseModel):
     campos: Dict[str, str] = Field(default_factory=dict)
     variaveis: list[str] = Field(default_factory=list)
     preview_layout: Optional[Dict[str, Any]] = None
-    ocorrencias: Optional[Dict[str, list[str]]] = None
+    ocorrencias: Optional[Dict[str, list[Any]]] = None
 
 
 class WorkerInspectFailPayload(BaseModel):

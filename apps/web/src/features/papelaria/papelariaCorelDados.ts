@@ -40,7 +40,7 @@ export async function compararDadosCorel(
   const d = { ...defaultDeps, ...deps };
   const { ano, nro, modeloId, dados, signal } = params;
   try {
-    const inicio = await d.iniciar(ano, nro);
+    const inicio = await d.iniciar(ano, nro, modeloId);
     if (inicio.status === "sem_corel" || !inicio.inspect_id) {
       return { status: "sem_corel" };
     }

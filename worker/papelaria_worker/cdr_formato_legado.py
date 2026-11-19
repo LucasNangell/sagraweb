@@ -588,3 +588,115 @@ def reconstruir_documento_no_formato(
         except Exception:
             pass
         raise
+
+
+# ---------------------------------------------------------------------------
+# Ocorrências por face (campos do produto real)
+# ---------------------------------------------------------------------------
+
+
+def nome_face(pagina: int) -> str:
+    return {1: "Frente", 2: "Verso"}.get(int(pagina), f"Página {int(pagina)}")
+
+
+def parear_ocorrencias(
+    ocorrencias: list[tuple[int, str, float, float]],
+    entradas: list[dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """
+    Associa cada ocorrência (idx, face, x, y) à entrada da mesma face mais
+    próxima, um para um (o mais próximo primeiro).
+    """
+    pares: list[tuple[float, int, int]] = []
+    for oi, (idx, face, x, y) in enumerate(ocorrencias):
+        for ei, entrada in enumerate(entradas):
+            if str(entrada.get("face") or "") != face:
+                continue
+            try:
+                ex, ey = float(entrada.get("x")), float(entrada.get("y"))
+            except (TypeError, ValueError):
+                ex, ey = x, y
+            pares.append(((x - ex) ** 2 + (y - ey) ** 2, oi, ei))
+    pares.sort()
+    usados_o: set[int] = set()
+    usados_e: set[int] = set()
+    out: dict[int, dict[str, Any]] = {}
+    for _dist, oi, ei in pares:
+        if oi in usados_o or ei in usados_e:
+            continue
+        usados_o.add(oi)
+        usados_e.add(ei)
+        out[ocorrencias[oi][0]] = entradas[ei]
+    return out
+
+
+class unidade_mm:
+    """Context manager: documento em mm e unidade original restaurada na saída."""
+
+    def __init__(self, doc: Any) -> None:
+        self.doc = doc
+        self.anterior: Optional[int] = None
+
+    def __enter__(self) -> Any:
+        try:
+            self.anterior = int(self.doc.Unit)
+        except Exception:
+            self.anterior = None
+        _definir_mm(self.doc)
+        return self.doc
+
+    def __exit__(self, *exc: Any) -> None:
+        if self.anterior is not None:
+            try:
+                self.doc.Unit = self.anterior
+            except Exception:
+                pass
+
+
+def localizador_faces(
+    doc: Any,
+    esperado_mm: Optional[tuple[float, float]],
+) -> Callable[[Any, int], Optional[tuple[str, float, float]]]:
+    """
+    Função (shape, página) → (face, x, y): centro em mm relativo ao canto
+    inferior esquerdo da página no arquivo final (já no formato do produto).
+
+    No padrão antigo, a face vem da borda que contém o objeto (fora das bordas
+    = None, pois não vai para o arquivo novo). Chamar com o documento em mm.
+    """
+    precisa, _tamanho = precisa_reconstruir(doc, esperado_mm)
+    if precisa:
+        infos = [i for _l, lista in _shapes_da_pagina(doc.Pages.Item(1)) for i in lista]
+        bordas = detectar_bordas(infos, esperado_mm, pagina=1)
+        if bordas:
+            tamanho = esperado_mm or largura_altura(bordas[0].bounds)
+            destino = (0.0, 0.0, float(tamanho[0]), float(tamanho[1]))
+            desloc = [(b, deslocamento(b.bounds, destino)) for b in bordas]
+
+            def _legado(shape: Any, pagina: int) -> Optional[tuple[str, float, float]]:
+                if int(pagina) != 1:
+                    return None
+                b = _bounds_com(shape)
+                if b is None:
+                    return None
+                for borda, (dx, dy) in desloc:
+                    if centro_dentro(b, borda.bounds):
+                        cx, cy = centro(b)
+                        return borda.face, round(cx + dx, 2), round(cy + dy, 2)
+                return None
+
+            return _legado
+
+    paginas: dict[int, Bounds] = {}
+
+    def _normal(shape: Any, pagina: int) -> Optional[tuple[str, float, float]]:
+        b = _bounds_com(shape)
+        if b is None:
+            return None
+        if pagina not in paginas:
+            paginas[pagina] = _bounds_pagina(doc.Pages.Item(int(pagina)))
+        pb = paginas[pagina]
+        cx, cy = centro(b)
+        return nome_face(pagina), round(cx - pb[0], 2), round(cy - pb[1], 2)
+
+    return _normal

@@ -31,16 +31,16 @@ export const TOOLS: Array<{
   label: string;
   icon: ReactNode;
 }> = [
-  { id: "select", label: "Selecionar", icon: <MousePointer2 className="size-3.5" /> },
-  { id: "faixa", label: "Faixa", icon: <StretchHorizontal className="size-3.5" /> },
-  { id: "sangria", label: "Sangria", icon: <Droplets className="size-3.5" /> },
-  { id: "retangulo", label: "Retângulo", icon: <Square className="size-3.5" /> },
-  { id: "circulo", label: "Círculo", icon: <Circle className="size-3.5" /> },
-  { id: "seta", label: "Seta", icon: <ArrowUpRight className="size-3.5" /> },
-  { id: "ponto", label: "Ponto", icon: <Dot className="size-5" /> },
-  { id: "medida", label: "Medir", icon: <Ruler className="size-3.5" /> },
-  { id: "texto", label: "Texto", icon: <Type className="size-3.5" /> },
-  { id: "livre", label: "Livre", icon: <Pencil className="size-3.5" /> },
+  { id: "select", label: "Selecionar", icon: <MousePointer2 className="size-4 shrink-0" /> },
+  { id: "faixa", label: "Faixa", icon: <StretchHorizontal className="size-4 shrink-0" /> },
+  { id: "sangria", label: "Sangria", icon: <Droplets className="size-4 shrink-0" /> },
+  { id: "retangulo", label: "Retângulo", icon: <Square className="size-4 shrink-0" /> },
+  { id: "circulo", label: "Círculo", icon: <Circle className="size-4 shrink-0" /> },
+  { id: "seta", label: "Seta", icon: <ArrowUpRight className="size-4 shrink-0" /> },
+  { id: "ponto", label: "Ponto", icon: <Dot className="size-5 shrink-0" /> },
+  { id: "medida", label: "Medir", icon: <Ruler className="size-4 shrink-0" /> },
+  { id: "texto", label: "Texto", icon: <Type className="size-4 shrink-0" /> },
+  { id: "livre", label: "Livre", icon: <Pencil className="size-4 shrink-0" /> },
 ];
 
 export function toolToTipo(tool: AnaliseLabTool): AnaliseLabMarkTipoOrNull {

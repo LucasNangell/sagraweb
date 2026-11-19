@@ -331,10 +331,10 @@ export function AnaliseLabItemPanel({
       className={
         pagePickActive
           ? "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sky-500 bg-sky-50 text-sky-700"
-          : "inline-flex size-8 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm"
+          : "sagra-btn sagra-btn--outline sagra-btn--icon"
       }
     >
-      <MousePointerClick className="size-4" aria-hidden />
+      <MousePointerClick className="size-4 shrink-0" aria-hidden />
     </button>
   ) : null;
 

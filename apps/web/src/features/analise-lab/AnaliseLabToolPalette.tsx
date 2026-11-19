@@ -13,7 +13,6 @@ export function AnaliseLabToolPalette({
   busy = false,
   compact = false,
 }: AnaliseLabToolPaletteProps) {
-  const size = compact ? "size-7" : "size-8";
   return (
     <div className="flex flex-wrap items-center gap-0.5">
       {TOOLS.map((t) => (
@@ -26,9 +25,10 @@ export function AnaliseLabToolPalette({
           onClick={() => onToolChange(t.id)}
           className={
             tool === t.id
-              ? `inline-flex ${size} sagra-btn sagra-btn--primary sagra-btn--xs`
-              : `inline-flex ${size} sagra-btn sagra-btn--outline sagra-btn--xs`
+              ? "sagra-btn sagra-btn--primary sagra-btn--icon"
+              : "sagra-btn sagra-btn--outline sagra-btn--icon"
           }
+          style={compact ? { width: "1.75rem", height: "1.75rem" } : undefined}
         >
           {t.icon}
         </button>

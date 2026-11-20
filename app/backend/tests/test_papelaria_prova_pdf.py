@@ -65,6 +65,40 @@ def test_renderizar_troca_marcador_e_mantem_fixo():
     assert "Fixo Maria José" in texto
 
 
+@pytest.mark.parametrize(
+    "template,dados,esperado",
+    [
+        ("{nome_deputado}", {}, ""),
+        ("{partido}/{uf}", {}, ""),
+        ("{partido}/{uf}", {"partido": "PSD", "uf": "SP"}, "PSD/SP"),
+        ("Fone: {telefone}", {"telefone": "  "}, ""),
+        ("Fone: {telefone}", {"telefone": "3215-5569"}, "Fone: 3215-5569"),
+        (
+            "Câmara dos Deputados\nGabinete {gabinete}\nFone: {telefone}",
+            {"telefone": "1"},
+            "Câmara dos Deputados\nFone: 1",
+        ),
+        ("Texto fixo", {}, "Texto fixo"),
+    ],
+)
+def test_texto_do_campo_remove_linhas_sem_informacao(template, dados, esperado):
+    from services import papelaria_prova_pdf_service as svc
+
+    assert svc._texto_do_campo(template, dados) == esperado
+
+
+def test_renderizar_campo_vazio_remove_texto_do_modelo():
+    from services import papelaria_prova_pdf_service as svc
+
+    campos = [
+        {"marcador": "NOMETITULAR", "pagina": 1, "template": "Dep. {nome_deputado}"},
+    ]
+    texto = _textos(svc.renderizar(_pdf_modelo(), campos, {"nome_deputado": ""}))
+    assert "NOMETITULAR" not in texto
+    assert "Dep." not in texto
+    assert "Fixo Maria José" in texto
+
+
 def test_salvar_campos_ignora_marcador_inexistente(tmp_path, monkeypatch):
     from services import papelaria_prova_pdf_service as svc
 

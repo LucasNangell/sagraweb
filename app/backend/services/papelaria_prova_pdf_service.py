@@ -534,10 +534,35 @@ def _espacamento_do_marcador(fonte: FonteEmbutida, chars: list[dict[str, Any]], 
     return round(meio, 4) if abs(meio) > 0.01 else 0.0
 
 
+def _linhas_com_informacao(template: str, dados: dict[str, Any]) -> str:
+    """
+    Tira do template as linhas cujas variáveis estão todas vazias — junto com o
+    texto fixo delas («Fone: », «/»). Linhas só com texto fixo ficam.
+    """
+    from services.papelaria_models_service import enriquecer_variaveis_derivadas
+
+    resolvidos = enriquecer_variaveis_derivadas(dados)
+
+    def valor(nome: str) -> str:
+        nome = nome.strip()
+        if nome == "nome_acessor":
+            nome = "nome_assessor"
+        return str(resolvidos.get(nome) or "").strip()
+
+    linhas = (template or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    mantidas = []
+    for linha in linhas:
+        variaveis = re.findall(r"\{([^{}]+)\}", linha)
+        if variaveis and not any(valor(v) for v in variaveis):
+            continue
+        mantidas.append(linha)
+    return "\n".join(mantidas)
+
+
 def _texto_do_campo(template: str, dados: dict[str, Any]) -> str:
     from services.papelaria_models_service import substituir_variaveis
 
-    texto = substituir_variaveis(template, dados) or ""
+    texto = substituir_variaveis(_linhas_com_informacao(template, dados), dados) or ""
     linhas = texto.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     while linhas and not linhas[-1].strip():
         linhas.pop()

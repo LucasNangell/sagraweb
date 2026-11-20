@@ -164,6 +164,7 @@ export function PapelariaModeloProvaPdfPanel({
         Usado no modo de geração <strong>Prova PDF</strong>. Exporte o modelo do CorelDRAW para PDF com{" "}
         <strong>«Incorporar fontes no documento»</strong> e <strong>sem subconjunto de fontes</strong>, com os
         textos como texto (não curvas). Ligue cada texto variável a um template de campo; os demais ficam fixos.
+        Linha do template cujos campos ficarem vazios sai da prova inteira, com o texto fixo dela (ex.: «Fone: »).
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

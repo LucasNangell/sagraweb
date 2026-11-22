@@ -64,17 +64,26 @@ export function PapelariaModeloProvaPdfPanel({
   const [teste, setTeste] = useState<Record<string, string>>({});
   const [previa, setPrevia] = useState<{ paginas: string[]; ms: number } | null>(null);
   const [msg, setMsg] = useState<{ texto: string; erro: boolean } | null>(null);
+  /** Evita que setQueryData dispare o effect e reaplique hidratação em cima do estado local. */
+  const suppressHydrateRef = useRef(false);
 
   const aplicarResposta = (data: ProvaPdfModelo) => {
     const { mapa, orfaos } = hidratarCampos(data);
     setCampos(mapa);
     setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
+    suppressHydrateRef.current = true;
     qc.setQueryData(queryKey, data);
   };
 
   useEffect(() => {
-    if (query.data) aplicarResposta(query.data);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!query.data) return;
+    if (suppressHydrateRef.current) {
+      suppressHydrateRef.current = false;
+      return;
+    }
+    const { mapa, orfaos } = hidratarCampos(query.data);
+    setCampos(mapa);
+    setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
   }, [query.data]);
 
   const textos = query.data?.analise?.textos ?? [];
@@ -115,12 +124,16 @@ export function PapelariaModeloProvaPdfPanel({
     onError: (e: Error) => setMsg({ texto: e.message, erro: true }),
   });
   const previaMutation = useMutation({
-    mutationFn: async (lista: ProvaPdfCampo[]) => {
-      const salvo = await saveProvaPdfCampos(modelo.id, lista, {
-        limpar: lista.length === 0,
+    mutationFn: async (payload: {
+      lista: ProvaPdfCampo[];
+      dadosTeste: Record<string, string>;
+    }) => {
+      // Persiste no servidor, mas NÃO reidrata o formulário — senão os templates
+      // somem na UI até sair/voltar da aba.
+      await saveProvaPdfCampos(modelo.id, payload.lista, {
+        limpar: payload.lista.length === 0,
       });
-      aplicarResposta(salvo);
-      return previaProvaPdf(modelo.id, teste);
+      return previaProvaPdf(modelo.id, payload.dadosTeste);
     },
     onSuccess: (data) => {
       setPrevia(data);
@@ -309,6 +322,37 @@ export function PapelariaModeloProvaPdfPanel({
             })}
           </div>
 
+          {camposLigados.length ? (
+            <div
+              className="sticky top-0 z-10 space-y-2 rounded border border-emerald-200 bg-emerald-50/95 p-3 shadow-sm backdrop-blur-sm"
+              data-testid="papelaria-prova-pdf-campos-fixos"
+            >
+              <p className="text-xs font-semibold text-emerald-900">
+                Campos configurados ({camposLigados.length}) — permanecem editáveis após salvar/prévia
+              </p>
+              <ul className="space-y-2">
+                {camposLigados.map((c) => (
+                  <li
+                    key={chaveTexto(c)}
+                    className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                  >
+                    <p className="text-[10px] font-medium text-slate-600">
+                      {c.marcador}
+                      <span className="ml-1 font-normal text-slate-400">· pág. {c.pagina}</span>
+                    </p>
+                    <textarea
+                      className="mt-1 w-full rounded border border-slate-300 px-1.5 py-1 font-mono text-[11px]"
+                      rows={Math.max(1, Math.min(4, c.template.split("\n").length))}
+                      value={c.template}
+                      onChange={(e) => atualizar(c, { template: e.target.value })}
+                      data-testid={`papelaria-prova-pdf-fixos-${c.marcador}`}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto rounded border border-slate-200">
             <table className="w-full min-w-[720px] text-xs" data-testid="papelaria-prova-pdf-textos">
               <thead className="bg-slate-50 text-left text-[10px] uppercase text-slate-500">
@@ -440,31 +484,44 @@ export function PapelariaModeloProvaPdfPanel({
             </button>
           </div>
 
-          {camposLigados.length ? (
+          {camposLigados.length || previa ? (
             <div className="space-y-2 rounded border border-slate-200 p-3">
               <p className="text-xs font-semibold text-secondary-blue">Prévia com valores de teste</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {variaveisTeste.map((v) => (
-                  <label key={v} className="flex flex-col gap-0.5 text-[11px] text-slate-600">
-                    <span className="font-mono">{`{${v}}`}</span>
-                    <textarea
-                      rows={1}
-                      className="rounded border border-slate-300 px-1.5 py-1 text-xs"
-                      value={teste[v] ?? ""}
-                      onChange={(e) => setTeste((p) => ({ ...p, [v]: e.target.value }))}
-                    />
-                  </label>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="sagra-btn sagra-btn--outline sagra-btn--sm"
-                disabled={ocupado}
-                onClick={() => previaMutation.mutate(camposLigados)}
-              >
-                {previaMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
-                Gerar prévia
-              </button>
+              {camposLigados.length ? (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {variaveisTeste.map((v) => (
+                      <label key={v} className="flex flex-col gap-0.5 text-[11px] text-slate-600">
+                        <span className="font-mono">{`{${v}}`}</span>
+                        <textarea
+                          rows={1}
+                          className="rounded border border-slate-300 px-1.5 py-1 text-xs"
+                          value={teste[v] ?? ""}
+                          onChange={(e) => setTeste((p) => ({ ...p, [v]: e.target.value }))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                    disabled={ocupado || !camposLigados.length}
+                    onClick={() =>
+                      previaMutation.mutate({
+                        lista: camposLigados,
+                        dadosTeste: teste,
+                      })
+                    }
+                  >
+                    {previaMutation.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Eye className="size-3.5" />
+                    )}
+                    Gerar prévia
+                  </button>
+                </>
+              ) : null}
               {previa ? (
                 <div className="space-y-2">
                   <p className="text-[11px] text-slate-500">Gerada no servidor em {previa.ms} ms.</p>

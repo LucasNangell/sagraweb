@@ -84,7 +84,31 @@ def test_renderizar_troca_marcador_e_mantem_fixo():
 def test_texto_do_campo_remove_linhas_sem_informacao(template, dados, esperado):
     from services import papelaria_prova_pdf_service as svc
 
-    assert svc._texto_do_campo(template, dados) == esperado
+    plain, _ranges = svc._texto_do_campo(template, dados)
+    assert plain == esperado
+
+
+def test_texto_do_campo_parseia_negrito_inline():
+    from services import papelaria_prova_pdf_service as svc
+
+    plain, ranges = svc._texto_do_campo(
+        "Gabinete {genero_curto} **{nome_deputado}**",
+        {"genero": "Deputada Federal", "nome_deputado": "Maria Silva"},
+    )
+    assert plain == "Gabinete Deputada Maria Silva"
+    assert ranges
+    assert plain[ranges[0][0] : ranges[0][1]] == "Maria Silva"
+
+
+def test_segmentos_por_linha_respeita_offsets():
+    from services import papelaria_prova_pdf_service as svc
+
+    segs = svc._segmentos_por_linha(
+        "Alpha\nBeta Gamma",
+        [(6, 10)],  # "Beta"
+    )
+    assert segs[0] == [("Alpha", False)]
+    assert segs[1] == [("Beta", True), (" Gamma", False)]
 
 
 def test_renderizar_campo_vazio_remove_texto_do_modelo():
@@ -97,6 +121,65 @@ def test_renderizar_campo_vazio_remove_texto_do_modelo():
     assert "NOMETITULAR" not in texto
     assert "Dep." not in texto
     assert "Fixo Maria José" in texto
+
+
+_FONTE_BOLD = r"C:\Windows\Fonts\arialbd.ttf"
+
+
+def _pdf_modelo_com_bold() -> bytes:
+    if not os.path.isfile(_FONTE) or not os.path.isfile(_FONTE_BOLD):
+        pytest.skip("fontes Arial/Arial Bold indisponíveis")
+    doc = fitz.open()
+    page = doc.new_page(width=255.1, height=141.7)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    page.insert_font(fontname="F2", fontfile=_FONTE_BOLD)
+    page.insert_text((20, 40), "NOMETITULAR", fontname="F1", fontsize=11)
+    # Garante que a Bold fique nos recursos da página.
+    page.insert_text((20, 120), " ", fontname="F2", fontsize=1)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_renderizar_aplica_negrito_inline():
+    from services import papelaria_prova_pdf_service as svc
+
+    campos = [
+        {
+            "marcador": "NOMETITULAR",
+            "pagina": 1,
+            "template": "Dep. **{nome_deputado}**",
+            "alinhamento": "esquerda",
+            "ancora": "topo",
+            "entrelinha": 1.2,
+            "reduzir_para_caber": True,
+        }
+    ]
+    saida = svc.renderizar(
+        _pdf_modelo_com_bold(), campos, {"nome_deputado": "José Maria"}
+    )
+    texto = _textos(saida)
+    assert "José Maria" in texto
+    assert "**" not in texto
+    assert "NOMETITULAR" not in texto
+
+
+def test_renderizar_negrito_sem_fonte_bold_falha():
+    from services import papelaria_prova_pdf_service as svc
+
+    campos = [
+        {
+            "marcador": "NOMETITULAR",
+            "pagina": 1,
+            "template": "**{nome_deputado}**",
+            "alinhamento": "auto",
+            "ancora": "auto",
+            "entrelinha": 1.2,
+            "reduzir_para_caber": True,
+        }
+    ]
+    with pytest.raises(svc.ProvaPdfError, match="negrito"):
+        svc.renderizar(_pdf_modelo(), campos, {"nome_deputado": "Maria"})
 
 
 def test_salvar_campos_ignora_marcador_inexistente(tmp_path, monkeypatch):

@@ -118,6 +118,12 @@ def _nome_sem_subconjunto(nome: str) -> str:
     return nome.split("+", 1)[1] if re.match(r"^[A-Z]{6}\+", nome or "") else (nome or "")
 
 
+def _nome_fonte_legivel(nome: str) -> str:
+    """Remove prefixo de subset e decodifica escapes PDF (#20 → espaço)."""
+    base = _nome_sem_subconjunto(nome or "")
+    return re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), base)
+
+
 def _ler_larguras(doc: Any, texto_w: str) -> tuple[dict[int, float], float]:
     larg: dict[int, float] = {}
     toks = re.findall(r"\[|\]|-?[\d.]+", texto_w)
@@ -578,22 +584,62 @@ def _linhas_com_informacao(template: str, dados: dict[str, Any]) -> str:
     return "\n".join(mantidas)
 
 
-def _texto_do_campo(template: str, dados: dict[str, Any]) -> str:
-    from services.papelaria_models_service import substituir_variaveis
+def _texto_do_campo(
+    template: str, dados: dict[str, Any]
+) -> tuple[str, list[tuple[int, int]]]:
+    """Substitui variáveis e interpreta `**negrito**` → texto plano + intervalos."""
+    from services.papelaria_models_service import (
+        _substituir_placeholders,
+        parse_inline_bold,
+    )
 
-    texto = substituir_variaveis(_linhas_com_informacao(template, dados), dados) or ""
-    linhas = texto.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    texto = _substituir_placeholders(_linhas_com_informacao(template, dados), dados)
+    texto = texto.replace("\r\n", "\n").replace("\r", "\n")
+    plain, ranges = parse_inline_bold(texto)
+    linhas = plain.split("\n")
     while linhas and not linhas[-1].strip():
         linhas.pop()
-    return "\n".join(linhas)
+    plain = "\n".join(linhas)
+    lim = len(plain)
+    ranges = [(a, min(b, lim)) for a, b in ranges if a < lim and a < b]
+    return plain, ranges
 
 
 def _chave_fonte(nome: str) -> str:
-    chave = re.sub(r"[^a-z0-9]", "", _nome_sem_subconjunto(nome).lower())
+    chave = re.sub(r"[^a-z0-9]", "", _nome_fonte_legivel(nome).lower())
     for sufixo in ("regular", "mt", "psmt"):
         if chave.endswith(sufixo) and len(chave) > len(sufixo):
             chave = chave[: -len(sufixo)]
     return chave
+
+
+def _familia_fonte(nome: str) -> str:
+    """Família tipográfica sem sufixo de estilo (regular/bold/italic…)."""
+    chave = re.sub(r"[^a-z0-9]", "", _nome_fonte_legivel(nome).lower())
+    for sufixo in (
+        "bolditalic",
+        "boldoblique",
+        "blackitalic",
+        "semibold",
+        "bold",
+        "black",
+        "heavy",
+        "italic",
+        "oblique",
+        "regular",
+        "medium",
+        "light",
+        "mt",
+        "psmt",
+    ):
+        if chave.endswith(sufixo) and len(chave) > len(sufixo):
+            chave = chave[: -len(sufixo)]
+    return chave
+
+
+def _eh_fonte_negrito(nome: str) -> bool:
+    chave = re.sub(r"[^a-z0-9]", "", _nome_fonte_legivel(nome).lower())
+    return any(tag in chave for tag in ("bold", "black", "heavy", "semibold"))
 
 
 def _fonte_do_span(
@@ -610,6 +656,96 @@ def _fonte_do_span(
     if len(fontes_pg) == 1:
         return next(iter(fontes_pg.values()))
     return None
+
+
+def _resolver_fonte_negrito(
+    doc: Any,
+    fontes_pg: dict[str, tuple[int, str]],
+    fonte_regular: FonteEmbutida,
+    fontes_cache: dict[int, FonteEmbutida],
+    *,
+    marcador: str,
+) -> tuple[int, str, FonteEmbutida]:
+    """Localiza variante Bold/Black da mesma família já embutida no PDF."""
+    familia = _familia_fonte(fonte_regular.nome)
+    for nome, (xref, recurso) in fontes_pg.items():
+        if xref == fonte_regular.xref:
+            continue
+        if not _eh_fonte_negrito(nome):
+            continue
+        if _familia_fonte(nome) != familia:
+            continue
+        emb = fontes_cache.get(xref)
+        if emb is None:
+            emb = ler_fonte_embutida(doc, xref)
+            if emb is None:
+                continue
+            fontes_cache[xref] = emb
+        return xref, recurso, emb
+    raise ProvaPdfError(
+        f"O campo «{marcador}» usa negrito (`**...**`), mas o PDF do modelo não tem "
+        f"a fonte negrito da família «{fonte_regular.nome}» incorporada. Exporte do "
+        "CorelDRAW com a variante Bold incorporada (sem subconjunto)."
+    )
+
+
+def _segmentos_com_negrito(
+    texto: str, ranges: list[tuple[int, int]]
+) -> list[tuple[str, bool]]:
+    """Parte o texto em segmentos (trecho, é_negrito) segundo intervalos 0-based."""
+    if not texto:
+        return []
+    if not ranges:
+        return [(texto, False)]
+    marks = [False] * len(texto)
+    for ini, fim in ranges:
+        for i in range(max(0, ini), min(len(texto), fim)):
+            marks[i] = True
+    segs: list[tuple[str, bool]] = []
+    i = 0
+    while i < len(texto):
+        flag = marks[i]
+        j = i + 1
+        while j < len(texto) and marks[j] == flag:
+            j += 1
+        segs.append((texto[i:j], flag))
+        i = j
+    return segs
+
+
+def _segmentos_por_linha(
+    texto: str, ranges: list[tuple[int, int]]
+) -> list[list[tuple[str, bool]]]:
+    """Segmentos de cada linha (offsets globais do texto completo)."""
+    linhas = texto.split("\n")
+    out: list[list[tuple[str, bool]]] = []
+    offset = 0
+    for i, linha in enumerate(linhas):
+        locais = [
+            (max(0, a - offset), min(len(linha), b - offset))
+            for a, b in ranges
+            if b > offset and a < offset + len(linha)
+        ]
+        locais = [(a, b) for a, b in locais if a < b]
+        out.append(_segmentos_com_negrito(linha, locais))
+        offset += len(linha) + (1 if i < len(linhas) - 1 else 0)
+    return out
+
+
+def _largura_segmentos(
+    segs: list[tuple[str, bool]],
+    fonte: FonteEmbutida,
+    fonte_bold: Optional[FonteEmbutida],
+    tamanho: float,
+    espacamento: float,
+) -> float:
+    total = 0.0
+    for trecho, negrito in segs:
+        if not trecho:
+            continue
+        f = fonte_bold if negrito and fonte_bold is not None else fonte
+        total += f.largura(trecho, tamanho, espacamento)
+    return total
 
 
 def renderizar(
@@ -683,6 +819,9 @@ def renderizar(
         for pidx, itens in por_pagina.items():
             page = doc[pidx]
             largura_pg, altura_pg = page.rect.width, page.rect.height
+            fontes_pg = {
+                _nome_sem_subconjunto(f[3]): (f[0], f[4]) for f in page.get_fonts(full=True)
+            }
             planos = []
             for campo, alvo in itens:
                 fonte = fontes_cache.get(alvo["xref"])
@@ -694,7 +833,18 @@ def renderizar(
                             "editável. Exporte o PDF do Corel com as fontes incorporadas."
                         )
                     fontes_cache[alvo["xref"]] = fonte
-                texto = _texto_do_campo(campo["template"], dados)
+                texto, ranges_negrito = _texto_do_campo(campo["template"], dados)
+                fonte_bold: Optional[FonteEmbutida] = None
+                bold_xref = 0
+                bold_recurso = ""
+                if ranges_negrito:
+                    bold_xref, bold_recurso, fonte_bold = _resolver_fonte_negrito(
+                        doc,
+                        fontes_pg,
+                        fonte,
+                        fontes_cache,
+                        marcador=str(campo["marcador"]),
+                    )
                 faltam = fonte.faltando(texto)
                 if faltam:
                     raise ProvaPdfError(
@@ -702,18 +852,33 @@ def renderizar(
                         f"(campo «{campo['marcador']}»). Exporte o PDF com a fonte inteira "
                         "(sem subconjunto)."
                     )
-                planos.append((campo, alvo, fonte, texto))
+                if fonte_bold is not None:
+                    negrito_txt = "".join(
+                        texto[a:b] for a, b in ranges_negrito if 0 <= a < b <= len(texto)
+                    )
+                    faltam_b = fonte_bold.faltando(negrito_txt)
+                    if faltam_b:
+                        raise ProvaPdfError(
+                            f"A fonte negrito {fonte_bold.nome} não tem os caracteres "
+                            f"{' '.join(faltam_b)} (campo «{campo['marcador']}»). "
+                            "Exporte o PDF com a fonte Bold inteira (sem subconjunto)."
+                        )
+                planos.append(
+                    (campo, alvo, fonte, texto, ranges_negrito, fonte_bold, bold_xref, bold_recurso)
+                )
                 page.add_redact_annot(alvo["bbox"], fill=False)
             page.apply_redactions(
                 images=fitz.PDF_REDACT_IMAGE_NONE,
                 graphics=fitz.PDF_REDACT_LINE_ART_NONE,
                 text=fitz.PDF_REDACT_TEXT_REMOVE,
             )
-            for _campo, alvo, _fonte, _texto in planos:
+            for _campo, alvo, _fonte, _texto, _ranges, fonte_bold, bold_xref, bold_recurso in planos:
                 garantir_recurso_fonte(doc, page, alvo["recurso"], alvo["xref"])
+                if fonte_bold is not None and bold_xref and bold_recurso:
+                    garantir_recurso_fonte(doc, page, bold_recurso, bold_xref)
 
             ops = ["q"]
-            for campo, alvo, fonte, texto in planos:
+            for campo, alvo, fonte, texto, ranges_negrito, fonte_bold, _bx, bold_recurso in planos:
                 if not texto:
                     continue
                 bbox: fitz.Rect = alvo["bbox"]
@@ -725,7 +890,7 @@ def renderizar(
                 ancora = campo.get("ancora") or "auto"
                 if ancora == "auto":
                     ancora = ancora_sugerida(bbox.y0, bbox.y1, altura_pg)
-                linhas = texto.split("\n")
+                segs_linhas = _segmentos_por_linha(texto, ranges_negrito)
                 margem = margem_pagina.get(pidx, 0.0)
                 if alinhar == "esquerda":
                     disponivel = largura_pg - margem - alvo["origem"].x
@@ -734,32 +899,48 @@ def renderizar(
                 else:
                     cx = (bbox.x0 + bbox.x1) / 2.0
                     disponivel = 2.0 * min(cx - margem, largura_pg - margem - cx)
-                maior = max(fonte.largura(l, tam, tc) for l in linhas)
+                maior = max(
+                    (
+                        _largura_segmentos(segs, fonte, fonte_bold, tam, tc)
+                        for segs in segs_linhas
+                    ),
+                    default=0.0,
+                )
                 if campo.get("reduzir_para_caber", True) and disponivel > 0 and maior > disponivel:
                     fator = max(0.6, disponivel / maior)
                     tam *= fator
                     tc *= fator
                 entrelinha = tam * float(campo.get("entrelinha") or 1.2)
-                n = len(linhas)
+                n = len(segs_linhas)
                 base_y = alvo["origem"].y
-                for i, linha in enumerate(linhas):
+                for i, segs in enumerate(segs_linhas):
                     if ancora == "base":
                         y = base_y - (n - 1 - i) * entrelinha
                     elif ancora == "centro":
                         y = base_y + (i - (n - 1) / 2.0) * entrelinha
                     else:
                         y = base_y + i * entrelinha
-                    w = fonte.largura(linha, tam, tc)
+                    w = _largura_segmentos(segs, fonte, fonte_bold, tam, tc)
                     if alinhar == "direita":
                         x = bbox.x1 - w
                     elif alinhar == "centro":
                         x = (bbox.x0 + bbox.x1) / 2.0 - w / 2.0
                     else:
                         x = alvo["origem"].x
-                    ops.append(
-                        f"BT {alvo['cor']} /{alvo['recurso']} {tam:.4f} Tf {tc:.4f} Tc "
-                        f"1 0 0 1 {x:.4f} {altura_pg - y:.4f} Tm <{fonte.codificar(linha)}> Tj ET"
-                    )
+                    cursor = x
+                    for trecho, negrito in segs:
+                        if not trecho:
+                            continue
+                        if negrito and fonte_bold is not None:
+                            f_use, rec_use = fonte_bold, bold_recurso
+                        else:
+                            f_use, rec_use = fonte, alvo["recurso"]
+                        ops.append(
+                            f"BT {alvo['cor']} /{rec_use} {tam:.4f} Tf {tc:.4f} Tc "
+                            f"1 0 0 1 {cursor:.4f} {altura_pg - y:.4f} Tm "
+                            f"<{f_use.codificar(trecho)}> Tj ET"
+                        )
+                        cursor += f_use.largura(trecho, tam, tc)
             ops.append("Q")
             page.wrap_contents()
             novo = doc.get_new_xref()

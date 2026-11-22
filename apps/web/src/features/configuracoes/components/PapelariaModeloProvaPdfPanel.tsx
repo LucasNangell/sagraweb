@@ -62,7 +62,11 @@ export function PapelariaModeloProvaPdfPanel({
   const [campos, setCampos] = useState<Record<string, ProvaPdfCampo>>({});
   const [orfaosKeys, setOrfaosKeys] = useState<string[]>([]);
   const [teste, setTeste] = useState<Record<string, string>>({});
-  const [previa, setPrevia] = useState<{ paginas: string[]; ms: number } | null>(null);
+  const [previa, setPrevia] = useState<{
+    paginas: string[];
+    ms: number;
+    avisos?: string[];
+  } | null>(null);
   const [msg, setMsg] = useState<{ texto: string; erro: boolean } | null>(null);
   /** Evita que setQueryData dispare o effect e reaplique hidratação em cima do estado local. */
   const suppressHydrateRef = useRef(false);
@@ -528,6 +532,14 @@ export function PapelariaModeloProvaPdfPanel({
               {previa ? (
                 <div className="space-y-2">
                   <p className="text-[11px] text-slate-500">Gerada no servidor em {previa.ms} ms.</p>
+                  {(previa.avisos ?? []).map((aviso, i) => (
+                    <p
+                      key={i}
+                      className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900"
+                    >
+                      {aviso}
+                    </p>
+                  ))}
                   {previa.paginas.map((src, i) => (
                     <img
                       key={i}

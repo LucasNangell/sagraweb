@@ -93,11 +93,17 @@ export function saveProvaPdfCampos(
   });
 }
 
+export interface ProvaPdfPrevia {
+  paginas: string[];
+  ms: number;
+  avisos?: string[];
+}
+
 export function previaProvaPdf(
   modeloId: number,
   dados: Record<string, string>,
-): Promise<{ paginas: string[]; ms: number }> {
-  return apiFetch<{ paginas: string[]; ms: number }>(`${base(modeloId)}/previa`, {
+): Promise<ProvaPdfPrevia> {
+  return apiFetch<ProvaPdfPrevia>(`${base(modeloId)}/previa`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dados }),

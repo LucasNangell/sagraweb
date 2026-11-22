@@ -164,7 +164,7 @@ def test_renderizar_aplica_negrito_inline():
     assert "NOMETITULAR" not in texto
 
 
-def test_renderizar_negrito_sem_fonte_bold_falha():
+def test_renderizar_negrito_sem_fonte_bold_usa_regular_com_aviso():
     from services import papelaria_prova_pdf_service as svc
 
     campos = [
@@ -178,8 +178,13 @@ def test_renderizar_negrito_sem_fonte_bold_falha():
             "reduzir_para_caber": True,
         }
     ]
-    with pytest.raises(svc.ProvaPdfError, match="negrito"):
-        svc.renderizar(_pdf_modelo(), campos, {"nome_deputado": "Maria"})
+    avisos: list[str] = []
+    saida = svc.renderizar(
+        _pdf_modelo(), campos, {"nome_deputado": "Maria"}, avisos=avisos
+    )
+    assert "Maria" in _textos(saida)
+    assert "**" not in _textos(saida)
+    assert avisos and "negrito" in avisos[0].lower()
 
 
 def test_salvar_campos_ignora_marcador_inexistente(tmp_path, monkeypatch):

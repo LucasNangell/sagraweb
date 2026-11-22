@@ -663,9 +663,7 @@ def _resolver_fonte_negrito(
     fontes_pg: dict[str, tuple[int, str]],
     fonte_regular: FonteEmbutida,
     fontes_cache: dict[int, FonteEmbutida],
-    *,
-    marcador: str,
-) -> tuple[int, str, FonteEmbutida]:
+) -> Optional[tuple[int, str, FonteEmbutida]]:
     """Localiza variante Bold/Black da mesma família já embutida no PDF."""
     familia = _familia_fonte(fonte_regular.nome)
     for nome, (xref, recurso) in fontes_pg.items():
@@ -682,11 +680,7 @@ def _resolver_fonte_negrito(
                 continue
             fontes_cache[xref] = emb
         return xref, recurso, emb
-    raise ProvaPdfError(
-        f"O campo «{marcador}» usa negrito (`**...**`), mas o PDF do modelo não tem "
-        f"a fonte negrito da família «{fonte_regular.nome}» incorporada. Exporte do "
-        "CorelDRAW com a variante Bold incorporada (sem subconjunto)."
-    )
+    return None
 
 
 def _segmentos_com_negrito(
@@ -752,12 +746,15 @@ def renderizar(
     pdf_modelo: Any,
     campos: list[dict[str, Any]],
     dados: dict[str, Any],
+    avisos: Optional[list[str]] = None,
 ) -> bytes:
     """
     Aplica os campos ao PDF do modelo e devolve o PDF final (bytes).
 
     Remove só o texto de cada marcador e escreve o texto novo com a fonte
     embutida no PDF, mesmo tamanho, cor e espaçamento entre letras.
+    Se houver `**negrito**` sem Bold embutida, desenha em regular e acrescenta
+    aviso em ``avisos`` (quando fornecido).
     """
     import fitz
 
@@ -838,13 +835,21 @@ def renderizar(
                 bold_xref = 0
                 bold_recurso = ""
                 if ranges_negrito:
-                    bold_xref, bold_recurso, fonte_bold = _resolver_fonte_negrito(
-                        doc,
-                        fontes_pg,
-                        fonte,
-                        fontes_cache,
-                        marcador=str(campo["marcador"]),
+                    resolvida = _resolver_fonte_negrito(
+                        doc, fontes_pg, fonte, fontes_cache
                     )
+                    if resolvida is None:
+                        msg = (
+                            f"O campo «{campo['marcador']}» usa negrito (`**...**`), "
+                            f"mas o PDF não tem a Bold da família «{fonte.nome}» "
+                            "incorporada — o trecho saiu em regular. Exporte do "
+                            "CorelDRAW com a variante Bold incorporada (sem subconjunto)."
+                        )
+                        if avisos is not None:
+                            avisos.append(msg)
+                        ranges_negrito = []
+                    else:
+                        bold_xref, bold_recurso, fonte_bold = resolvida
                 faltam = fonte.faltando(texto)
                 if faltam:
                     raise ProvaPdfError(
@@ -967,8 +972,9 @@ def previa_png(modelo_id: int, dados: dict[str, Any], dpi: int = 150) -> dict[st
     from services import papelaria_models_service as models_svc
 
     modelo = models_svc.get_modelo_by_id(int(modelo_id)) or {}
+    avisos: list[str] = []
     t0 = time.perf_counter()
-    saida = renderizar(pdf, campos, preparar_dados(dados or {}, modelo))
+    saida = renderizar(pdf, campos, preparar_dados(dados or {}, modelo), avisos=avisos)
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
@@ -978,7 +984,7 @@ def previa_png(modelo_id: int, dados: dict[str, Any], dpi: int = 150) -> dict[st
         ]
     finally:
         doc.close()
-    return {"paginas": paginas, "ms": ms}
+    return {"paginas": paginas, "ms": ms, "avisos": avisos}
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,15 @@ import {
 } from "@/api/papelariaProvaPdf";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
+import {
+  campoVazio,
+  chaveTexto,
+  hidratarCampos,
+  variaveisDosTemplates,
+} from "./provaPdfCampos";
+
+export { variaveisDosTemplates } from "./provaPdfCampos";
+
 const ALINHAMENTOS: Array<{ id: ProvaPdfAlinhamento; label: string }> = [
   { id: "auto", label: "Automático" },
   { id: "esquerda", label: "Esquerda" },
@@ -30,35 +39,6 @@ const ANCORAS: Array<{ id: ProvaPdfAncora; label: string }> = [
   { id: "base", label: "Cresce p/ cima" },
   { id: "centro", label: "Centralizado" },
 ];
-
-/** Chave da linha (o mesmo texto pode aparecer em mais de uma página). */
-function chaveTexto(t: Pick<ProvaPdfTexto, "marcador" | "pagina">): string {
-  return `${t.pagina}|${t.marcador}`;
-}
-
-function campoVazio(t: ProvaPdfTexto): ProvaPdfCampo {
-  return {
-    marcador: t.marcador,
-    pagina: t.pagina,
-    template: "",
-    alinhamento: "auto",
-    ancora: "auto",
-    entrelinha: 1.2,
-    reduzir_para_caber: true,
-  };
-}
-
-/** Variáveis `{x}` usadas nos templates (para os valores de teste da prévia). */
-export function variaveisDosTemplates(campos: ProvaPdfCampo[]): string[] {
-  const out = new Set<string>();
-  for (const c of campos) {
-    for (const m of c.template.matchAll(/\{([^{}]+)\}/g)) {
-      const nome = m[1]?.trim();
-      if (nome) out.add(nome);
-    }
-  }
-  return [...out];
-}
 
 /**
  * Modo «Prova PDF»: PDF do modelo exportado do CorelDRAW + ligação dos textos
@@ -80,18 +60,15 @@ export function PapelariaModeloProvaPdfPanel({
   });
 
   const [campos, setCampos] = useState<Record<string, ProvaPdfCampo>>({});
+  const [orfaosKeys, setOrfaosKeys] = useState<string[]>([]);
   const [teste, setTeste] = useState<Record<string, string>>({});
   const [previa, setPrevia] = useState<{ paginas: string[]; ms: number } | null>(null);
   const [msg, setMsg] = useState<{ texto: string; erro: boolean } | null>(null);
 
   const aplicarResposta = (data: ProvaPdfModelo) => {
-    const mapa: Record<string, ProvaPdfCampo> = {};
-    for (const c of data.campos) {
-      const pagina =
-        c.pagina || data.analise?.textos.find((t) => t.marcador === c.marcador)?.pagina || 1;
-      mapa[chaveTexto({ marcador: c.marcador, pagina })] = { ...c, pagina };
-    }
+    const { mapa, orfaos } = hidratarCampos(data);
     setCampos(mapa);
+    setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
     qc.setQueryData(queryKey, data);
   };
 
@@ -101,6 +78,14 @@ export function PapelariaModeloProvaPdfPanel({
   }, [query.data]);
 
   const textos = query.data?.analise?.textos ?? [];
+  const textoKeys = useMemo(() => new Set(textos.map((t) => chaveTexto(t))), [textos]);
+  const orfaosVisiveis = useMemo(
+    () =>
+      orfaosKeys
+        .map((k) => campos[k])
+        .filter((c): c is ProvaPdfCampo => Boolean(c?.template?.trim())),
+    [orfaosKeys, campos],
+  );
   const variaveisModelo = useMemo(
     () => (detalheQuery.data?.campos_formulario ?? []).map((f) => ({ key: f.key, label: f.label })),
     [detalheQuery.data],
@@ -121,7 +106,8 @@ export function PapelariaModeloProvaPdfPanel({
     onError: (e: Error) => setMsg({ texto: e.message, erro: true }),
   });
   const saveMutation = useMutation({
-    mutationFn: () => saveProvaPdfCampos(modelo.id, camposLigados),
+    mutationFn: (lista: ProvaPdfCampo[]) =>
+      saveProvaPdfCampos(modelo.id, lista, { limpar: lista.length === 0 }),
     onSuccess: (data) => {
       aplicarResposta(data);
       setMsg({ texto: "Campos salvos.", erro: false });
@@ -129,8 +115,11 @@ export function PapelariaModeloProvaPdfPanel({
     onError: (e: Error) => setMsg({ texto: e.message, erro: true }),
   });
   const previaMutation = useMutation({
-    mutationFn: async () => {
-      await saveProvaPdfCampos(modelo.id, camposLigados).then(aplicarResposta);
+    mutationFn: async (lista: ProvaPdfCampo[]) => {
+      const salvo = await saveProvaPdfCampos(modelo.id, lista, {
+        limpar: lista.length === 0,
+      });
+      aplicarResposta(salvo);
       return previaProvaPdf(modelo.id, teste);
     },
     onSuccess: (data) => {
@@ -149,14 +138,94 @@ export function PapelariaModeloProvaPdfPanel({
     onError: (e: Error) => setMsg({ texto: e.message, erro: true }),
   });
 
-  const atualizar = (t: ProvaPdfTexto, patch: Partial<ProvaPdfCampo>) =>
+  const atualizar = (t: Pick<ProvaPdfTexto, "marcador" | "pagina">, patch: Partial<ProvaPdfCampo>) =>
     setCampos((prev) => {
       const chave = chaveTexto(t);
-      return { ...prev, [chave]: { ...(prev[chave] ?? campoVazio(t)), ...patch } };
+      const base = prev[chave] ?? campoVazio(t as ProvaPdfTexto);
+      return { ...prev, [chave]: { ...base, ...patch } };
     });
+
+  const removerOrfao = (c: ProvaPdfCampo) => {
+    const chave = chaveTexto(c);
+    setCampos((prev) => {
+      const next = { ...prev };
+      delete next[chave];
+      return next;
+    });
+    setOrfaosKeys((prev) => prev.filter((k) => k !== chave));
+  };
 
   const ocupado =
     uploadMutation.isPending || saveMutation.isPending || previaMutation.isPending || deleteMutation.isPending;
+
+  const renderCampoControls = (
+    c: ProvaPdfCampo,
+    opts: {
+      alinhamentoSugerido?: string;
+      ancoraSugerida?: string;
+      onChange: (patch: Partial<ProvaPdfCampo>) => void;
+      testId?: string;
+    },
+  ) => {
+    const ligado = Boolean(c.template.trim());
+    return (
+      <>
+        <td className="px-2 py-1.5">
+          <textarea
+            className="w-full rounded border border-slate-300 px-1.5 py-1 font-mono text-[11px]"
+            rows={Math.max(1, Math.min(5, c.template.split("\n").length))}
+            placeholder="ex.: {nome_deputado}"
+            value={c.template}
+            onChange={(e) => opts.onChange({ template: e.target.value })}
+            data-testid={opts.testId}
+          />
+        </td>
+        <td className="px-2 py-1.5">
+          <select
+            className="rounded border border-slate-300 px-1 py-1 text-[11px]"
+            value={c.alinhamento}
+            disabled={!ligado}
+            onChange={(e) =>
+              opts.onChange({ alinhamento: e.target.value as ProvaPdfAlinhamento })
+            }
+          >
+            {ALINHAMENTOS.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.id === "auto" && opts.alinhamentoSugerido
+                  ? `Automático (${opts.alinhamentoSugerido})`
+                  : a.label}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td className="px-2 py-1.5">
+          <select
+            className="rounded border border-slate-300 px-1 py-1 text-[11px]"
+            value={c.ancora}
+            disabled={!ligado}
+            onChange={(e) => opts.onChange({ ancora: e.target.value as ProvaPdfAncora })}
+          >
+            {ANCORAS.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.id === "auto" && opts.ancoraSugerida
+                  ? `Automático (${opts.ancoraSugerida === "base" ? "cresce p/ cima" : "cresce p/ baixo"})`
+                  : a.label}
+              </option>
+            ))}
+          </select>
+          <label className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
+            <input
+              type="checkbox"
+              checked={c.reduzir_para_caber}
+              disabled={!ligado}
+              onChange={(e) => opts.onChange({ reduzir_para_caber: e.target.checked })}
+            />
+            Reduzir para caber
+          </label>
+        </td>
+      </>
+    );
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="papelaria-prova-pdf-panel">
@@ -255,68 +324,86 @@ export function PapelariaModeloProvaPdfPanel({
                   const c = campos[chaveTexto(t)] ?? campoVazio(t);
                   const ligado = Boolean(c.template.trim());
                   return (
-                    <tr key={chaveTexto(t)} className={cn("border-t border-slate-100 align-top", ligado && "bg-emerald-50/40")}>
+                    <tr
+                      key={chaveTexto(t)}
+                      className={cn(
+                        "border-t border-slate-100 align-top",
+                        ligado && "bg-emerald-50/40",
+                      )}
+                    >
                       <td className="px-2 py-1.5">
                         <p className="font-medium text-slate-800">{t.marcador}</p>
                         <p className="text-[10px] text-slate-500">
                           {t.fonte} · {t.tamanho} pt · pág. {t.pagina}
                         </p>
                       </td>
-                      <td className="px-2 py-1.5">
-                        <textarea
-                          className="w-full rounded border border-slate-300 px-1.5 py-1 font-mono text-[11px]"
-                          rows={Math.max(1, Math.min(5, c.template.split("\n").length))}
-                          placeholder="ex.: {nome_deputado}"
-                          value={c.template}
-                          onChange={(e) => atualizar(t, { template: e.target.value })}
-                          data-testid={`papelaria-prova-pdf-template-${t.marcador}`}
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <select
-                          className="rounded border border-slate-300 px-1 py-1 text-[11px]"
-                          value={c.alinhamento}
-                          disabled={!ligado}
-                          onChange={(e) => atualizar(t, { alinhamento: e.target.value as ProvaPdfAlinhamento })}
-                        >
-                          {ALINHAMENTOS.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.id === "auto" ? `Automático (${t.alinhamento_sugerido})` : a.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <select
-                          className="rounded border border-slate-300 px-1 py-1 text-[11px]"
-                          value={c.ancora}
-                          disabled={!ligado}
-                          onChange={(e) => atualizar(t, { ancora: e.target.value as ProvaPdfAncora })}
-                        >
-                          {ANCORAS.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.id === "auto"
-                                ? `Automático (${t.ancora_sugerida === "base" ? "cresce p/ cima" : "cresce p/ baixo"})`
-                                : a.label}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
-                          <input
-                            type="checkbox"
-                            checked={c.reduzir_para_caber}
-                            disabled={!ligado}
-                            onChange={(e) => atualizar(t, { reduzir_para_caber: e.target.checked })}
-                          />
-                          Reduzir para caber
-                        </label>
-                      </td>
+                      {renderCampoControls(c, {
+                        alinhamentoSugerido: t.alinhamento_sugerido,
+                        ancoraSugerida: t.ancora_sugerida,
+                        onChange: (patch) => atualizar(t, patch),
+                        testId: `papelaria-prova-pdf-template-${t.marcador}`,
+                      })}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+
+          {orfaosVisiveis.length ? (
+            <div
+              className="space-y-2 rounded border border-amber-200 bg-amber-50/50 p-3"
+              data-testid="papelaria-prova-pdf-orfaos"
+            >
+              <p className="text-xs font-semibold text-amber-900">
+                Campos salvos sem texto correspondente no PDF
+              </p>
+              <p className="text-[11px] text-amber-800">
+                O marcador não aparece mais na análise atual (PDF trocado ou texto de exemplo
+                diferente). Edite o template ou remova o vínculo.
+              </p>
+              <div className="overflow-x-auto rounded border border-amber-200 bg-white">
+                <table className="w-full min-w-[720px] text-xs">
+                  <thead className="bg-amber-50 text-left text-[10px] uppercase text-amber-800">
+                    <tr>
+                      <th className="px-2 py-1.5">Marcador salvo</th>
+                      <th className="px-2 py-1.5">Template</th>
+                      <th className="px-2 py-1.5">Alinhamento</th>
+                      <th className="px-2 py-1.5">Várias linhas</th>
+                      <th className="px-2 py-1.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orfaosVisiveis.map((c) => {
+                      const chave = chaveTexto(c);
+                      if (textoKeys.has(chave)) return null;
+                      return (
+                        <tr key={chave} className="border-t border-amber-100 align-top">
+                          <td className="px-2 py-1.5">
+                            <p className="font-medium text-slate-800">{c.marcador}</p>
+                            <p className="text-[10px] text-slate-500">pág. {c.pagina}</p>
+                          </td>
+                          {renderCampoControls(c, {
+                            onChange: (patch) => atualizar(c, patch),
+                            testId: `papelaria-prova-pdf-orfao-${c.marcador}`,
+                          })}
+                          <td className="px-2 py-1.5">
+                            <button
+                              type="button"
+                              className="sagra-btn sagra-btn--outline sagra-btn--sm text-red-700"
+                              onClick={() => removerOrfao(c)}
+                            >
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
 
           {variaveisModelo.length ? (
             <p className="text-[11px] text-slate-500">
@@ -334,7 +421,18 @@ export function PapelariaModeloProvaPdfPanel({
               type="button"
               className="sagra-btn sagra-btn--primary sagra-btn--sm"
               disabled={ocupado}
-              onClick={() => saveMutation.mutate()}
+              onClick={() => {
+                if (
+                  camposLigados.length === 0 &&
+                  (query.data?.campos?.length ?? 0) > 0 &&
+                  !window.confirm(
+                    "Nenhum campo ligado. Isso remove todos os campos salvos deste modelo. Continuar?",
+                  )
+                ) {
+                  return;
+                }
+                saveMutation.mutate(camposLigados);
+              }}
               data-testid="papelaria-prova-pdf-salvar"
             >
               {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
@@ -362,7 +460,7 @@ export function PapelariaModeloProvaPdfPanel({
                 type="button"
                 className="sagra-btn sagra-btn--outline sagra-btn--sm"
                 disabled={ocupado}
-                onClick={() => previaMutation.mutate()}
+                onClick={() => previaMutation.mutate(camposLigados)}
               >
                 {previaMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
                 Gerar prévia

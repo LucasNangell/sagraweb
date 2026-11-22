@@ -118,6 +118,25 @@ def test_salvar_campos_ignora_marcador_inexistente(tmp_path, monkeypatch):
     assert svc.tem_modelo_pdf(7) is False
 
 
+def test_salvar_campos_vazio_nao_apaga_sem_limpar(tmp_path, monkeypatch):
+    from services import papelaria_prova_pdf_service as svc
+    import pytest
+
+    monkeypatch.setattr(svc, "RAIZ_MODELOS_PDF", tmp_path)
+    svc.salvar_pdf_modelo(7, filename="modelo.pdf", content=_pdf_modelo())
+    svc.salvar_campos(
+        7,
+        [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_deputado}"}],
+    )
+    with pytest.raises(svc.ProvaPdfError, match="limpeza"):
+        svc.salvar_campos(7, [])
+    assert [c["marcador"] for c in svc.carregar_config(7)["campos"]] == [
+        "NOMETITULAR"
+    ]
+    res = svc.salvar_campos(7, [], limpar=True)
+    assert res["campos"] == []
+
+
 def test_salvar_pdf_rejeita_arquivo_invalido(tmp_path, monkeypatch):
     from services import papelaria_prova_pdf_service as svc
 

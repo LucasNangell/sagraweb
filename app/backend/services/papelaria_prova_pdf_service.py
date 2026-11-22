@@ -481,16 +481,30 @@ def salvar_pdf_modelo(modelo_id: int, *, filename: str, content: bytes) -> dict[
     return obter_modelo_pdf(modelo_id)
 
 
-def salvar_campos(modelo_id: int, campos: list[Any]) -> dict[str, Any]:
+def salvar_campos(
+    modelo_id: int, campos: list[Any], *, limpar: bool = False
+) -> dict[str, Any]:
     pdf = caminho_pdf(modelo_id)
     if not pdf.is_file():
         raise ProvaPdfError("Envie primeiro o PDF do modelo.")
     analise = analisar_pdf(pdf)
     marcadores = {t["marcador"] for t in analise["textos"]}
+    config = carregar_config(modelo_id)
+    existentes = [
+        c
+        for c in (config.get("campos") or [])
+        if isinstance(c, dict) and str(c.get("template") or "").strip()
+    ]
+    # Aceita órfãos já salvos (marcador sumiu da análise após trocar o PDF).
+    marcadores_aceitos = marcadores | {
+        str(c.get("marcador") or "").strip()
+        for c in existentes
+        if str(c.get("marcador") or "").strip()
+    }
     normalizados = []
     vistos: set[tuple[str, int]] = set()
     for raw in campos or []:
-        c = _normalizar_campo(raw, marcadores)
+        c = _normalizar_campo(raw, marcadores_aceitos)
         if not c or not c["template"].strip():
             continue
         chave = (c["marcador"], c["pagina"])
@@ -498,7 +512,12 @@ def salvar_campos(modelo_id: int, campos: list[Any]) -> dict[str, Any]:
             continue
         vistos.add(chave)
         normalizados.append(c)
-    config = carregar_config(modelo_id)
+    # Evita apagar vínculos por payload vazio acidental (ex.: closure stale no admin).
+    if not normalizados and existentes and not limpar:
+        raise ProvaPdfError(
+            "Nenhum campo foi enviado, mas este modelo já tem campos salvos. "
+            "Envie os campos novamente ou confirme a limpeza explícita."
+        )
     config["campos"] = normalizados
     config["atualizado_em"] = time.strftime("%Y-%m-%d %H:%M:%S")
     _salvar_config(modelo_id, config)

@@ -81,11 +81,15 @@ export async function uploadProvaPdfModelo(
 export function saveProvaPdfCampos(
   modeloId: number,
   campos: ProvaPdfCampo[],
+  options?: { limpar?: boolean },
 ): Promise<ProvaPdfModelo> {
   return apiFetch<ProvaPdfModelo>(`${base(modeloId)}/campos`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ campos }),
+    body: JSON.stringify({
+      campos,
+      limpar: Boolean(options?.limpar),
+    }),
   });
 }
 

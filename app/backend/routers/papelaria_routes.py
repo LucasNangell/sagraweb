@@ -488,6 +488,37 @@ def excluir_modelo_admin(
         raise HTTPException(500, "Erro ao excluir modelo.")
 
 
+class PapelariaProdutoMockupPayload(BaseModel):
+    produto: str
+    variante: str
+    mockup_config_json: Optional[Any] = None
+
+
+@router.get("/admin/produtos/mockup")
+def obter_mockup_produto(
+    produto: str = Query(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Mockup 3D do produto: variações «frente» e «frente_verso»."""
+    from services import papelaria_produto_mockup_service as svc
+
+    return svc.obter(produto)
+
+
+@router.put("/admin/produtos/mockup")
+def salvar_mockup_produto(
+    payload: PapelariaProdutoMockupPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Grava o mockup da variação do produto (vazio remove e volta ao automático)."""
+    from services import papelaria_produto_mockup_service as svc
+
+    try:
+        return svc.salvar(payload.produto, payload.variante, payload.mockup_config_json)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.put("/admin/modelos/{modelo_id}/mockup-config")
 def salvar_mockup_config_modelo(
     modelo_id: int,

@@ -202,6 +202,10 @@ def _papelaria_mockup_meta(ano: int, os_id: int) -> dict[str, Any]:
             modelo = get_modelo_by_id(int(modelo_id))
             if modelo:
                 meta["mockupConfigJson"] = modelo.get("mockup_config_json")
+                # Frente de um modelo + verso de outro: vale o mockup «frente e verso» do produto.
+                if isinstance(dados, dict) and dados.get("__composicao"):
+                    fv = (modelo.get("mockup_produto") or {}).get("frente_verso")
+                    meta["mockupConfigJson"] = fv or modelo.get("mockup_config_json_modelo")
                 if not meta["produto"]:
                     meta["produto"] = (modelo.get("produto") or "").strip()
                 if not meta["arquivoModelo"]:

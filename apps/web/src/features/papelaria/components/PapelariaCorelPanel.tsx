@@ -1818,6 +1818,7 @@ export function PapelariaCorelPanel({
             cores={coresOs}
             arquivoModelo={arquivoModeloAtivo}
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
+            modeloMockup={modelDetailQuery.data ?? null}
             previewConfigJson={previewConfigJsonEfetivo}
             temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao)}
             composicao={composicao}

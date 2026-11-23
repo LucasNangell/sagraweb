@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import {
   createPapelariaModeloFromCdr,
+  savePapelariaProdutoMockup,
   fetchPapelariaCdrInspect,
   inspectPapelariaCdr,
   type PapelariaCdrInspectResult,
@@ -92,6 +93,9 @@ export function PapelariaNovoModeloForm({
     return (produtosExistentes ?? []).find((p) => normalizeSearch(p) === alvo) ?? null;
   }, [lockedProduto, produtoNovo, produtosExistentes]);
 
+  /** Produto novo: escolhe o mockup inicial do produto. Produto existente já tem o seu. */
+  const pedeMockup = !lockedProduto && !produtoJaExiste;
+
   useEffect(() => {
     return () => {
       if (pollTimerRef.current !== null) {
@@ -162,16 +166,28 @@ export function PapelariaNovoModeloForm({
               frenteVerso,
               habilitarCamposDinamicos: true,
             });
-      return createPapelariaModeloFromCdr({
+      const criado = await createPapelariaModeloFromCdr({
         produto: produtoFinal,
         frenteVerso,
         cores,
         nomeExibicao: nomeExibicao.trim() || undefined,
         inspectId: inspectResult?.status === "completed" ? inspectId ?? undefined : undefined,
-        mockupConfigJson: JSON.stringify(mockupConfig),
         previewConfigJson: JSON.stringify(previewConfig),
         file: cdrFile,
       });
+      // Mockup 3D é do produto: só o produto novo recebe o preset inicial.
+      if (pedeMockup) {
+        try {
+          await savePapelariaProdutoMockup(
+            produtoFinal,
+            frenteVerso === "Frente" ? "frente" : "frente_verso",
+            JSON.stringify(mockupConfig),
+          );
+        } catch {
+          /* modelo já criado; o mockup pode ser ajustado depois em Mockup 3D */
+        }
+      }
+      return criado;
     },
     onSuccess: (data) => {
       setLocalError(null);
@@ -181,6 +197,7 @@ export function PapelariaNovoModeloForm({
       if (fileRef.current) fileRef.current.value = "";
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-produtos"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-produto-mockup"] });
       onCreated(data);
     },
     onError: (err: Error) => {
@@ -437,10 +454,11 @@ export function PapelariaNovoModeloForm({
           ) : null}
         </fieldset>
 
-        {/* 3. Mockup */}
-        <fieldset className="pw-step">
+        {/* 3. Mockup do produto (só produto novo) */}
+        {pedeMockup ? (
+                <fieldset className="pw-step">
           <legend className="pw-step__legend">
-            <span className="pw-step__num">3</span> Mockup 3D inicial
+            <span className="pw-step__num">3</span> Mockup 3D do produto
           </legend>
           <div className="pw-preset-grid" role="radiogroup" aria-label="Preset de mockup inicial">
             {PRESET_OPTIONS.map((p) => {
@@ -461,6 +479,7 @@ export function PapelariaNovoModeloForm({
             })}
           </div>
         </fieldset>
+        ) : null}
 
         {localError ? <InlineMessage tone="error">{localError}</InlineMessage> : null}
 

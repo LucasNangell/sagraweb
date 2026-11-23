@@ -449,6 +449,31 @@ export async function fetchPapelariaAdminModelo(
   );
 }
 
+export type PapelariaProdutoMockup = {
+  produto: string;
+  frente: string | null;
+  frente_verso: string | null;
+};
+
+/** Mockup 3D do produto (variações «frente» e «frente_verso»). */
+export async function fetchPapelariaProdutoMockup(produto: string): Promise<PapelariaProdutoMockup> {
+  return apiFetch<PapelariaProdutoMockup>(
+    `/papelaria/admin/produtos/mockup?produto=${encodeURIComponent(produto)}`,
+  );
+}
+
+export async function savePapelariaProdutoMockup(
+  produto: string,
+  variante: "frente" | "frente_verso",
+  mockupConfigJson: string | null,
+): Promise<PapelariaProdutoMockup> {
+  return apiFetch<PapelariaProdutoMockup>("/papelaria/admin/produtos/mockup", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ produto, variante, mockup_config_json: mockupConfigJson }),
+  });
+}
+
 export async function savePapelariaAdminMockupConfig(
   modeloId: number,
   mockupConfigJson: string | null,

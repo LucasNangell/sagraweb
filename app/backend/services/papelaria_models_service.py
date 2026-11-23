@@ -824,7 +824,10 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
             preview_json,
             campos if isinstance(campos, dict) else None,
         )
-    return out
+    # Mockup 3D vale por produto (só frente / frente e verso), não por modelo.
+    from services.papelaria_produto_mockup_service import aplicar_no_modelo
+
+    return aplicar_no_modelo(out)
 
 
 def _infer_campo_labels(

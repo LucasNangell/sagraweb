@@ -24,9 +24,9 @@ vi.mock("./PapelariaModeloDadosPanel", () => ({
     <div data-testid="panel-dados">dados:{modelo.id}</div>
   ),
 }));
-vi.mock("./PapelariaModeloMockupPanel", () => ({
-  PapelariaModeloMockupPanel: ({ modelo }: { modelo: PapelariaAdminModelRecord }) => (
-    <div data-testid="panel-mockup">mockup:{modelo.id}</div>
+vi.mock("./PapelariaProdutoMockupPanel", () => ({
+  PapelariaProdutoMockupPanel: ({ produto }: { produto: string }) => (
+    <div data-testid="panel-mockup">mockup:{produto}</div>
   ),
 }));
 vi.mock("./PapelariaModeloTextosPanel", () => ({
@@ -113,17 +113,20 @@ describe("PapelariaProdutosAdminSection", () => {
     expect(within(versos).getByText("Cartão de visita 2")).toBeInTheDocument();
     expect(within(versos).queryByText("Cartão de visita 1")).not.toBeInTheDocument();
     fireEvent.click(within(frentes).getByText("Cartão de visita 2"));
-    fireEvent.click(screen.getByRole("tab", { name: /Mockup 3D/ }));
-    expect(screen.getByTestId("panel-mockup")).toHaveTextContent("mockup:2");
+    // Mockup 3D é do produto, não do modelo.
+    expect(screen.queryByRole("tab", { name: /Mockup 3D/ })).not.toBeInTheDocument();
 
     // Prévia ao vivo + Prova PDF agora são uma aba só.
     expect(screen.queryByRole("tab", { name: /Prova PDF/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Textos e prévia/ }));
     expect(screen.getByTestId("panel-textos")).toHaveTextContent("textos:2");
 
+    fireEvent.click(screen.getByRole("radio", { name: /Mockup 3D/ }));
+    expect(screen.getByTestId("panel-mockup")).toHaveTextContent("mockup:Cartão de visita");
+
     fireEvent.click(screen.getByRole("radio", { name: /Imposição/ }));
     expect(screen.getByTestId("panel-imposicao")).toHaveTextContent("imposicao:Cartão de visita");
-    expect(screen.queryByRole("tab", { name: /Mockup 3D/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Textos e prévia/ })).not.toBeInTheDocument();
   });
 
   it("leva a aba antiga salva na sessão (Prova PDF) para Textos e prévia", async () => {

@@ -53,6 +53,7 @@ import {
 import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
+import { mockupJsonEfetivo, type ModeloComMockup } from "../mockup/mockupProduto";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
 import { PapelariaProofMockup3D } from "./PapelariaProofMockup3D";
@@ -66,6 +67,8 @@ type Props = {
   cores?: string;
   arquivoModelo?: string;
   mockupConfigJson?: string | null;
+  /** Modelo selecionado (mockup do produto + reserva do modelo). */
+  modeloMockup?: ModeloComMockup | null;
   previewConfigJson?: string | null;
   /** Modelo com PDF configurado: a prévia ao vivo é o próprio PDF renderizado no servidor. */
   temProvaPdf?: boolean;
@@ -110,6 +113,7 @@ export function PapelariaProofPanel({
   cores,
   arquivoModelo,
   mockupConfigJson,
+  modeloMockup = null,
   previewConfigJson,
   temProvaPdf = false,
   composicao = null,
@@ -292,8 +296,10 @@ export function PapelariaProofPanel({
     staleTime: 60_000,
   });
 
-  const effectiveMockupJson =
-    jobModeloQuery.data?.mockup_config_json ?? mockupConfigJson;
+  // Mockup vale por produto: 1 página = só frente, 2+ = frente e verso.
+  const mockupDoProduto = mockupJsonEfetivo(jobModeloQuery.data ?? modeloMockup, pageUrls.length);
+  // `null` = sem configuração para esta variação → preset automático.
+  const effectiveMockupJson = mockupDoProduto === undefined ? mockupConfigJson : mockupDoProduto;
 
   const mockupResolved = getPapelariaMockupConfig({
     produto: produto ?? activeJob?.produto,

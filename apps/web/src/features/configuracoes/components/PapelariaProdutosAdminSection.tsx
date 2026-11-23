@@ -25,9 +25,9 @@ import {
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
-import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
 import { PapelariaModelosPorFace, type Face } from "./PapelariaModelosPorFace";
 import { PapelariaModeloTextosPanel } from "./PapelariaModeloTextosPanel";
+import { PapelariaProdutoMockupPanel } from "./PapelariaProdutoMockupPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
 import {
   EmptyState,
@@ -37,8 +37,8 @@ import {
 } from "./PapelariaWorkspaceUi";
 import { PerfilImposicaoPanel } from "./PerfilImposicaoPanel";
 
-type ModeloTab = "dados" | "mockup" | "textos";
-type Scope = "modelos" | "imposicao";
+type ModeloTab = "dados" | "textos";
+type Scope = "modelos" | "mockup" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
 
 type ImposicaoStatus = Partial<
@@ -47,7 +47,6 @@ type ImposicaoStatus = Partial<
 
 const MODELO_TABS: { id: ModeloTab; label: string; icon: typeof Tag; hint: string }[] = [
   { id: "dados", label: "Dados gerais", icon: Tag, hint: "Nome, pasta de imposição e PDF de prova por e-mail" },
-  { id: "mockup", label: "Mockup 3D", icon: Box, hint: "Dobras, formato e visualização 3D da prova" },
   {
     id: "textos",
     label: "Textos e prévia",
@@ -58,7 +57,7 @@ const MODELO_TABS: { id: ModeloTab; label: string; icon: typeof Tag; hint: strin
 
 /** Abas antigas (sessão salva) → aba unificada. */
 function normalizarTab(tab: string | undefined): ModeloTab {
-  if (tab === "dados" || tab === "mockup" || tab === "textos") return tab;
+  if (tab === "dados" || tab === "textos") return tab;
   if (tab === "preview" || tab === "prova-pdf") return "textos";
   return "dados";
 }
@@ -178,7 +177,8 @@ export function PapelariaProdutosAdminSection() {
     setSelectedProduto(modelo.produto);
     setSelectedModeloId(modelo.id);
     setScope("modelos");
-    setModeloTab("mockup");
+    // Mockup é do produto; o passo seguinte do modelo é o PDF (textos e prévia).
+    setModeloTab("textos");
     setMode("browse");
   };
 
@@ -350,7 +350,15 @@ export function PapelariaProdutosAdminSection() {
                 onScopeChange={setScope}
               />
 
-              {scope === "imposicao" ? (
+              {scope === "mockup" ? (
+                <div className="pw-panel-host">
+                  <PapelariaProdutoMockupPanel
+                    key={selectedGroup.produto}
+                    produto={selectedGroup.produto}
+                    modelos={selectedGroup.modelos}
+                  />
+                </div>
+              ) : scope === "imposicao" ? (
                 <div className="pw-panel-host">
                   {selectedGroup.modelos.length > 1 ? (
                     <div className="pw-imposicao-ref">
@@ -415,9 +423,6 @@ export function PapelariaProdutosAdminSection() {
                             onDeleted={handleDeleted}
                           />
                         ) : null}
-                        {modeloTab === "mockup" ? (
-                          <PapelariaModeloMockupPanel key={selectedModelo.id} modelo={selectedModelo} />
-                        ) : null}
                         {modeloTab === "textos" ? (
                           <PapelariaModeloTextosPanel key={selectedModelo.id} modelo={selectedModelo} />
                         ) : null}
@@ -462,7 +467,13 @@ function ProdutoNavItem({
         </span>
       </span>
       <span className="pw-nav-item__meta">
-        <Coverage icon={<Box className="size-3" aria-hidden />} n={group.comMockup} total={total} label="mockup custom" />
+        <span
+          className={cn("pw-coverage", !mockupDoProduto(group) && "is-none", mockupDoProduto(group) && "is-full")}
+          title={mockupDoProduto(group) ? "Mockup 3D configurado no produto" : "Mockup 3D automático"}
+        >
+          <Box className="size-3" aria-hidden />
+          {mockupDoProduto(group) ? "✓" : "—"}
+        </span>
         <Coverage icon={<FileText className="size-3" aria-hidden />} n={group.comProvaPdf} total={total} label="PDF do modelo" />
         <ImposicaoBadges status={status} />
       </span>
@@ -526,7 +537,7 @@ function ProdutoHeader({
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
           <span>{plural(group.modelos.length, "modelo", "modelos")}</span>
           <span aria-hidden>·</span>
-          <span>{group.comMockup} com mockup custom</span>
+          <span>{mockupDoProduto(group) ? "mockup do produto configurado" : "mockup automático"}</span>
           <span aria-hidden>·</span>
           <span>{group.comProvaPdf} com PDF do modelo</span>
           <ImposicaoBadges status={status} detailed />
@@ -546,6 +557,12 @@ function ProdutoHeader({
               title: "Configurações de cada modelo Corel (variação)",
             },
             {
+              id: "mockup",
+              label: "Mockup 3D",
+              icon: <Box className="size-3.5 shrink-0" aria-hidden />,
+              title: "Mockup 3D do produto (só frente / frente e verso) — vale para todos os modelos",
+            },
+            {
               id: "imposicao",
               label: "Imposição",
               icon: <LayoutGrid className="size-3.5 shrink-0" aria-hidden />,
@@ -560,6 +577,11 @@ function ProdutoHeader({
 }
 
 
+function mockupDoProduto(group: PapelariaProdutoGroup): boolean {
+  const mp = group.modelos[0]?.mockup_produto;
+  return Boolean(mp?.frente?.trim() || mp?.frente_verso?.trim());
+}
+
 function ModeloTabs({
   modelo,
   active,
@@ -570,13 +592,6 @@ function ModeloTabs({
   onChange: (t: ModeloTab) => void;
 }) {
   const badge = (id: ModeloTab): ReactNode => {
-    if (id === "mockup") {
-      return modelo.tem_mockup_config ? (
-        <span className="pw-tab__dot is-on" title="Mockup personalizado" />
-      ) : (
-        <span className="pw-tab__dot" title="Preset automático" />
-      );
-    }
     if (id === "textos") {
       if (modelo.tem_prova_pdf) return <span className="pw-tab__dot is-on" title="PDF do modelo em uso" />;
       return modelo.tem_preview_config ? (

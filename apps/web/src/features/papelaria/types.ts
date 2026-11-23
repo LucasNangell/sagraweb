@@ -55,6 +55,9 @@ export interface PapelariaCorelModelDetail extends PapelariaCorelModelSummary {
   preview_faces?: PapelariaPreviewFaceMeta[];
   /** Modelo com PDF + textos ligados: a prévia ao vivo é o próprio PDF renderizado. */
   tem_prova_pdf?: boolean;
+  /** Mockup 3D do produto (só frente / frente e verso) — vale para todos os modelos. */
+  mockup_produto?: { frente?: string | null; frente_verso?: string | null } | null;
+  mockup_config_json_modelo?: string | null;
 }
 
 export interface PapelariaOsContextOs {

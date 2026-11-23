@@ -101,6 +101,10 @@ export interface PapelariaAdminModelRecord {
   /** Face removida de um modelo antigo de 2 páginas. */
   ocultar_frente?: boolean;
   ocultar_verso?: boolean;
+  /** Mockup 3D do produto; mockup_config_json já vem com a variação do modelo. */
+  mockup_produto?: { frente?: string | null; frente_verso?: string | null } | null;
+  mockup_config_json_modelo?: string | null;
+  mockup_origem?: "produto" | "modelo" | "automatico";
   preview_faces?: Array<{
     id: string;
     nome?: string;

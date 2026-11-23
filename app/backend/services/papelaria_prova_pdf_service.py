@@ -743,6 +743,79 @@ def _texto_do_campo(
     return plain, ranges
 
 
+TEXTOS_DADOS_KEY = "__textos"
+TEXTOS_MAX = 200
+TEXTO_EDITADO_MAX = 2000
+
+
+def _texto_editado(texto: str) -> tuple[str, list[tuple[int, int]]]:
+    """Texto digitado na prévia: literal (sem variáveis), aceita `**negrito**`."""
+    from services.papelaria_models_service import parse_inline_bold
+
+    bruto = str(texto or "").replace("\r\n", "\n").replace("\r", "\n")
+    plain, ranges = parse_inline_bold(bruto)
+    linhas = plain.split("\n")
+    while linhas and not linhas[-1].strip():
+        linhas.pop()
+    plain = "\n".join(linhas)
+    lim = len(plain)
+    ranges = [(a, min(b, lim)) for a, b in ranges if a < lim and a < b]
+    return plain, ranges
+
+
+def normalizar_textos(raw: Any) -> dict[str, str]:
+    """
+    Textos editados na prévia (chave ``__textos``): ``{"modelo:pagina:marcador": texto}``.
+    Levanta ``ProvaPdfError`` quando o formato é inválido.
+    """
+    if raw in (None, ""):
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ProvaPdfError("Textos editados: JSON inválido.") from exc
+    if not isinstance(raw, dict):
+        raise ProvaPdfError("Textos editados devem ser um objeto.")
+    if len(raw) > TEXTOS_MAX:
+        raise ProvaPdfError("Textos editados demais.")
+    out: dict[str, str] = {}
+    for chave, valor in raw.items():
+        partes = str(chave).split(":", 2)
+        if len(partes) != 3 or not partes[0].isdigit() or not partes[1].isdigit() or not partes[2]:
+            raise ProvaPdfError("Chave de texto editado inválida.")
+        if len(partes[2]) > 500:
+            raise ProvaPdfError("Chave de texto editado inválida.")
+        if not isinstance(valor, str):
+            raise ProvaPdfError("Texto editado inválido.")
+        if len(valor) > TEXTO_EDITADO_MAX:
+            raise ProvaPdfError("Texto editado longo demais.")
+        out[f"{int(partes[0])}:{int(partes[1])}:{partes[2]}"] = valor
+    return out
+
+
+def textos_do_modelo(dados: dict[str, Any], modelo_id: int) -> dict[str, str]:
+    """Textos editados de um modelo, por ``"pagina:marcador"`` (formato inválido → nenhum)."""
+    try:
+        todos = normalizar_textos((dados or {}).get(TEXTOS_DADOS_KEY))
+    except ProvaPdfError:
+        return {}
+    prefixo = f"{int(modelo_id)}:"
+    return {k[len(prefixo):]: v for k, v in todos.items() if k.startswith(prefixo)}
+
+
+def _valores_do_template(template: str, dados: dict[str, Any]) -> dict[str, str]:
+    from services.papelaria_models_service import enriquecer_variaveis_derivadas
+
+    resolvidos = enriquecer_variaveis_derivadas(dados)
+    out: dict[str, str] = {}
+    for nome in re.findall(r"\{([^{}]+)\}", template or ""):
+        chave = nome.strip()
+        real = "nome_assessor" if chave == "nome_acessor" else chave
+        out[nome] = str(resolvidos.get(real, "") or "")
+    return out
+
+
 def _chave_fonte(nome: str) -> str:
     chave = re.sub(r"[^a-z0-9]", "", _nome_fonte_legivel(nome).lower())
     for sufixo in ("regular", "mt", "psmt"):
@@ -880,6 +953,16 @@ def _largura_segmentos(
     return total
 
 
+def _area_relativa(area: Any, largura: float, altura: float) -> list[float]:
+    """Retângulo em frações da página (0–1), origem no canto superior esquerdo."""
+    return [
+        round(max(0.0, area.x0 / largura), 5),
+        round(max(0.0, area.y0 / altura), 5),
+        round(min(1.0, area.x1 / largura), 5),
+        round(min(1.0, area.y1 / altura), 5),
+    ]
+
+
 def renderizar(
     pdf_modelo: Any,
     campos: list[dict[str, Any]],
@@ -887,9 +970,16 @@ def renderizar(
     avisos: Optional[list[str]] = None,
     *,
     exigir_campos: bool = True,
+    textos: Optional[dict[str, str]] = None,
+    regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
     """
     Aplica os campos ao PDF do modelo e devolve o PDF final (bytes).
+
+    ``textos`` (``"pagina:marcador"`` -> texto) substitui o texto do campo pelo
+    que o usuário digitou na prévia — com a mesma fonte, alinhamento, âncora e
+    redução do campo. ``regioes``, quando fornecida, recebe onde cada campo
+    ficou na página (para editar o texto direto na prévia).
 
     Remove só o texto de cada marcador e escreve o texto novo com a fonte
     embutida no PDF, mesmo tamanho, cor e espaçamento entre letras.
@@ -989,7 +1079,12 @@ def renderizar(
                             "editável. Exporte o PDF do Corel com as fontes incorporadas."
                         )
                     fontes_cache[alvo["xref"]] = fonte
-                texto, ranges_negrito = _texto_do_campo(campo["template"], dados)
+                chave_local = f"{pidx + 1}:{campo['marcador']}"
+                editado = textos is not None and chave_local in textos
+                if editado:
+                    texto, ranges_negrito = _texto_editado(textos[chave_local])
+                else:
+                    texto, ranges_negrito = _texto_do_campo(campo["template"], dados)
                 fonte_bold: Optional[FonteEmbutida] = None
                 bold_xref = 0
                 bold_recurso = ""
@@ -1028,7 +1123,7 @@ def renderizar(
                             "Exporte o PDF com a fonte Bold inteira (sem subconjunto)."
                         )
                 planos.append(
-                    (campo, alvo, fonte, texto, ranges_negrito, fonte_bold, bold_xref, bold_recurso)
+                    (campo, alvo, fonte, texto, ranges_negrito, fonte_bold, bold_xref, bold_recurso, editado)
                 )
                 page.add_redact_annot(alvo["bbox"], fill=False)
             page.apply_redactions(
@@ -1036,16 +1131,31 @@ def renderizar(
                 graphics=fitz.PDF_REDACT_LINE_ART_NONE,
                 text=fitz.PDF_REDACT_TEXT_REMOVE,
             )
-            for _campo, alvo, _fonte, _texto, _ranges, fonte_bold, bold_xref, bold_recurso in planos:
+            for _campo, alvo, _fonte, _texto, _ranges, fonte_bold, bold_xref, bold_recurso, _ed in planos:
                 garantir_recurso_fonte(doc, page, alvo["recurso"], alvo["xref"])
                 if fonte_bold is not None and bold_xref and bold_recurso:
                     garantir_recurso_fonte(doc, page, bold_recurso, bold_xref)
 
             ops = ["q"]
-            for campo, alvo, fonte, texto, ranges_negrito, fonte_bold, _bx, bold_recurso in planos:
-                if not texto:
-                    continue
+            for campo, alvo, fonte, texto, ranges_negrito, fonte_bold, _bx, bold_recurso, editado in planos:
                 bbox: fitz.Rect = alvo["bbox"]
+                area = fitz.Rect(bbox)
+                regiao: Optional[dict[str, Any]] = None
+                if regioes is not None:
+                    regiao = {
+                        "pagina": pidx + 1,
+                        "marcador": campo["marcador"],
+                        "texto": texto,
+                        "negrito": [[a, b] for a, b in ranges_negrito],
+                        "template": "" if editado else _linhas_com_informacao(campo["template"], dados),
+                        "valores": {} if editado else _valores_do_template(campo["template"], dados),
+                        "editado": editado,
+                    }
+                    regioes.append(regiao)
+                if not texto:
+                    if regiao is not None:
+                        regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
+                    continue
                 tam = alvo["tamanho"]
                 tc = _espacamento_do_marcador(fonte, alvo["chars"], tam)
                 alinhar = campo.get("alinhamento") or "auto"
@@ -1102,6 +1212,8 @@ def renderizar(
                         x = (bbox.x0 + bbox.x1) / 2.0 - w / 2.0
                     else:
                         x = alvo["origem"].x
+                    if w > 0:
+                        area |= fitz.Rect(x, y - tam * 0.85, x + w, y + tam * 0.25)
                     cursor = x
                     for trecho, negrito in segs:
                         if not trecho:
@@ -1116,6 +1228,8 @@ def renderizar(
                             f"<{f_use.codificar(trecho)}> Tj ET"
                         )
                         cursor += f_use.largura(trecho, tam, tc)
+                if regiao is not None:
+                    regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
             ops.append("Q")
             page.wrap_contents()
             novo = doc.get_new_xref()
@@ -1174,11 +1288,17 @@ def renderizar_composicao(
     avisos: Optional[list[str]] = None,
     redes: Optional[list[dict[str, str]]] = None,
     estilo_redes: Optional[str] = None,
+    *,
+    textos: Optional[dict[str, str]] = None,
+    regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
     """
     Frente e verso independentes: aplica os campos na página de frente de um
     modelo e na página de verso de outro e junta as duas num PDF (frente = 1,
     verso = 2), como um modelo frente e verso único.
+
+    ``textos``: textos editados na prévia (``"modelo:pagina:marcador"``).
+    ``regioes`` recebe as áreas dos campos com ``pagina_saida`` (0 = frente).
     """
     import fitz
 
@@ -1195,11 +1315,27 @@ def renderizar_composicao(
                 for c in carregar_config(mid).get("campos") or []
                 if c.get("template") and int(c.get("pagina") or 0) in (0, pagina)
             ]
+            prefixo = f"{mid}:"
+            textos_modelo = {k[len(prefixo):]: v for k, v in (textos or {}).items() if k.startswith(prefixo)}
+            regioes_face: list[dict[str, Any]] = []
             conteudo = (
-                renderizar(pdf, campos, dados, avisos=avisos, exigir_campos=False)
+                renderizar(
+                    pdf,
+                    campos,
+                    dados,
+                    avisos=avisos,
+                    exigir_campos=False,
+                    textos=textos_modelo,
+                    regioes=regioes_face if regioes is not None else None,
+                )
                 if campos
                 else pdf.read_bytes()
             )
+            if regioes is not None:
+                saida = 0 if face == "frente" else 1
+                for r in regioes_face:
+                    if r["pagina"] == pagina:
+                        regioes.append({**r, "modelo_id": mid, "pagina_saida": saida})
             conteudo = _aplicar_redes(mid, conteudo, redes, avisos, estilo=estilo_redes)
             src = fitz.open(stream=conteudo, filetype="pdf")
             try:
@@ -1252,14 +1388,40 @@ def previa_png(
     avisos: list[str] = []
     t0 = time.perf_counter()
     dados_ok = preparar_dados({k: v for k, v in (dados or {}).items() if not str(k).startswith("__")}, modelo)
+    try:
+        textos = normalizar_textos((dados or {}).get(TEXTOS_DADOS_KEY))
+    except ProvaPdfError:
+        textos = {}
+    regioes: list[dict[str, Any]] = []
     if composicao is not None:
-        saida = renderizar_composicao(composicao, dados_ok, avisos=avisos, redes=redes, estilo_redes=estilo_redes)
+        saida = renderizar_composicao(
+            composicao,
+            dados_ok,
+            avisos=avisos,
+            redes=redes,
+            estilo_redes=estilo_redes,
+            textos=textos,
+            regioes=regioes,
+        )
     else:
+        prefixo = f"{int(modelo_id)}:"
+        regioes_modelo: list[dict[str, Any]] = []
         saida = (
-            renderizar(pdf, campos, dados_ok, avisos=avisos, exigir_campos=False)
+            renderizar(
+                pdf,
+                campos,
+                dados_ok,
+                avisos=avisos,
+                exigir_campos=False,
+                textos={k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)},
+                regioes=regioes_modelo,
+            )
             if campos
             else pdf.read_bytes()
         )
+        regioes = [
+            {**r, "modelo_id": int(modelo_id), "pagina_saida": int(r["pagina"]) - 1} for r in regioes_modelo
+        ]
         saida = _aplicar_redes(modelo_id, saida, redes, avisos, exemplo=exemplo_redes, estilo=estilo_redes)
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
@@ -1270,7 +1432,9 @@ def previa_png(
         ]
     finally:
         doc.close()
-    return {"paginas": paginas, "ms": ms, "avisos": avisos}
+    for r in regioes:
+        r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+    return {"paginas": paginas, "ms": ms, "avisos": avisos, "regioes": regioes}
 
 
 # ---------------------------------------------------------------------------
@@ -1304,6 +1468,10 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
         composicao = composicao_do_job(job)
         redes_sel = selecao_redes_dos_dados(job.get("dados") or {})
         estilo_sel = estilo_redes_dos_dados(job.get("dados") or {})
+        try:
+            textos_job = normalizar_textos((job.get("dados") or {}).get(TEXTOS_DADOS_KEY))
+        except ProvaPdfError:
+            textos_job = {}
         if composicao is not None:
             # Frente de um modelo + verso de outro (frente e verso independentes).
             campos = [
@@ -1312,12 +1480,22 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
                 for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
                 if c.get("template")
             ]
-            conteudo = renderizar_composicao(composicao, dados, redes=redes_sel, estilo_redes=estilo_sel)
+            conteudo = renderizar_composicao(
+                composicao, dados, redes=redes_sel, estilo_redes=estilo_sel, textos=textos_job
+            )
         else:
             campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
             pdf_job = caminho_pdf(int(job["modelo_id"]))
             conteudo = (
-                renderizar(pdf_job, campos, dados, exigir_campos=False) if campos else pdf_job.read_bytes()
+                renderizar(
+                    pdf_job,
+                    campos,
+                    dados,
+                    exigir_campos=False,
+                    textos=textos_do_modelo(job.get("dados") or {}, int(job["modelo_id"])),
+                )
+                if campos
+                else pdf_job.read_bytes()
             )
             conteudo = _aplicar_redes(int(job["modelo_id"]), conteudo, redes_sel, None, estilo=estilo_sel)
 

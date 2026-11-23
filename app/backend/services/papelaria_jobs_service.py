@@ -314,6 +314,19 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if sel is not None:
                 cleaned[key_stripped] = json.dumps(sel, ensure_ascii=False)
             continue
+        if key_stripped == "__textos":
+            from services.papelaria_prova_pdf_service import ProvaPdfError, normalizar_textos
+
+            try:
+                textos = normalizar_textos(value)
+            except ProvaPdfError as exc:
+                raise ValueError(str(exc)) from exc
+            for chave_txt, texto_editado in textos.items():
+                if _PATH_PATTERN.search(texto_editado) or "\\\\" in texto_editado:
+                    raise ValueError("Texto editado não pode conter caminho de arquivo.")
+            if textos:
+                cleaned[key_stripped] = json.dumps(textos, ensure_ascii=False)
+            continue
         if key_stripped == "__composicao":
             from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
 

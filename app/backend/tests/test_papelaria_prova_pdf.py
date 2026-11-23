@@ -522,3 +522,90 @@ def test_reduzir_para_caber_desmarcado_nao_reduz():
         nome[:12],  # o fim sai da página e não é extraído
     )
     assert s["size"] == pytest.approx(11, abs=0.01)
+
+
+# --------------------------------------------------------------------------
+# Textos editados direto na prévia da página Papelaria.
+# --------------------------------------------------------------------------
+
+
+def test_renderizar_texto_editado_substitui_e_segue_config_do_campo():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    nome = _nome_com_largura(svc, 255.1 - 20 + 10)  # passaria da borda
+    saida = svc.renderizar(
+        pdf,
+        _campo_esquerda(),
+        {"nome_deputado": "Ana"},
+        textos={"1:NOMETITULAR": nome},
+    )
+    s = _span_do_texto(saida, nome)
+    assert "Ana" not in _textos(saida)
+    # Mesma regra do campo: «reduzir para caber» até a margem de 3 mm.
+    assert s["size"] < 11
+    assert s["largura_pagina"] - s["bbox"][2] == pytest.approx(svc.MARGEM_MINIMA_PT, abs=0.6)
+
+
+def test_renderizar_texto_editado_e_literal_e_vazio_apaga():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    saida = svc.renderizar(pdf, _campo_esquerda(), {"nome_deputado": "Ana"}, textos={"1:NOMETITULAR": "{uf} X"})
+    assert "{uf} X" in _textos(saida)
+    vazio = svc.renderizar(pdf, _campo_esquerda(), {"nome_deputado": "Ana"}, textos={"1:NOMETITULAR": ""})
+    assert "Ana" not in _textos(vazio) and "NOMETITULAR" not in _textos(vazio)
+
+
+def test_renderizar_devolve_regioes_dos_campos():
+    from services import papelaria_prova_pdf_service as svc
+
+    regioes: list[dict] = []
+    campos = [{**_campo_esquerda()[0], "template": "Dep. {nome_deputado}/{uf}"}]
+    svc.renderizar(_pdf_modelo(), campos, {"nome_deputado": "Ana", "uf": "SP"}, regioes=regioes)
+    assert len(regioes) == 1
+    r = regioes[0]
+    assert r["pagina"] == 1 and r["marcador"] == "NOMETITULAR"
+    assert r["texto"] == "Dep. Ana/SP"
+    assert r["template"] == "Dep. {nome_deputado}/{uf}"
+    assert r["valores"] == {"nome_deputado": "Ana", "uf": "SP"}
+    assert r["editado"] is False
+    x0, y0, x1, y1 = r["area"]
+    # NOMETITULAR em (20, 40) pt numa página de 255×142 pt.
+    assert 0.05 < x0 < 0.1 and x1 > x0 and 0.15 < y0 < y1 < 0.35
+
+
+def test_previa_png_aplica_textos_e_devolve_chaves(tmp_path, monkeypatch):
+    from services import papelaria_prova_pdf_service as svc
+
+    monkeypatch.setattr(svc, "RAIZ_MODELOS_PDF", tmp_path)
+    svc.salvar_pdf_modelo(9, filename="modelo.pdf", content=_pdf_modelo())
+    svc.salvar_campos(9, [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_deputado}"}])
+    dados = {
+        "nome_deputado": "Ana",
+        "__textos": json.dumps({"9:1:NOMETITULAR": "Texto livre", "8:1:NOMETITULAR": "outro modelo"}),
+    }
+    r = svc.previa_png(9, dados, dpi=40, modelo={})
+    assert [g["chave"] for g in r["regioes"]] == ["9:1:NOMETITULAR"]
+    reg = r["regioes"][0]
+    assert reg["texto"] == "Texto livre" and reg["editado"] is True and reg["pagina_saida"] == 0
+
+
+def test_normalizar_textos_valida_formato():
+    from services import papelaria_prova_pdf_service as svc
+
+    assert svc.normalizar_textos(None) == {}
+    assert svc.normalizar_textos('{"3:1:NOME": "x"}') == {"3:1:NOME": "x"}
+    for ruim in ("[]", '{"x": "y"}', '{"3:1:NOME": 5}', "{"):
+        with pytest.raises(svc.ProvaPdfError):
+            svc.normalizar_textos(ruim)
+    assert svc.textos_do_modelo({"__textos": '{"3:1:A": "a", "4:1:B": "b"}'}, 3) == {"1:A": "a"}
+
+
+def test_sanitize_dados_aceita_textos_editados():
+    from services import papelaria_jobs_service as jobs_svc
+
+    limpo = jobs_svc._sanitize_dados({"__textos": json.dumps({"3:1:NOME": "Ana"}), "nome": "x"})
+    assert json.loads(limpo["__textos"]) == {"3:1:NOME": "Ana"}
+    with pytest.raises(ValueError):
+        jobs_svc._sanitize_dados({"__textos": '{"ruim": "x"}'})

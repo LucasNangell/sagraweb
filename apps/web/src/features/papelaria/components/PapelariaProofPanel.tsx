@@ -52,6 +52,8 @@ import {
 } from "../preview";
 import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
+import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
+
 import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
 import { mockupJsonEfetivo, type ModeloComMockup } from "../mockup/mockupProduto";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
@@ -97,6 +99,9 @@ type Props = {
   activeDynamicFields?: ActiveDynamicFieldPlacement[];
   onActiveDynamicFieldsChange?: (next: ActiveDynamicFieldPlacement[]) => void;
   onLivePreviewValueChange?: (key: string, value: string) => void;
+  /** Texto editado direto na prévia do PDF. */
+  onEditarTextoPrevia?: (regiao: ProvaPdfRegiao, texto: string) => void;
+  onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
 };
 
 function resolvePreviewImageUrl(raw: string): string {
@@ -138,6 +143,8 @@ export function PapelariaProofPanel({
   activeDynamicFields = [],
   onActiveDynamicFieldsChange,
   onLivePreviewValueChange,
+  onEditarTextoPrevia,
+  onRestaurarTextoPrevia,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -817,6 +824,8 @@ export function PapelariaProofPanel({
               modeloId={composicao?.frente.modelo_id ?? selectedModelId}
               values={livePreviewValues ?? {}}
               composicao={composicao}
+              onEditarTexto={onEditarTextoPrevia}
+              onRestaurarTexto={onRestaurarTextoPrevia}
             />
           ) : hasLivePreview && runtimePreviewConfig ? (
             <article className="flex min-h-[min(45vh,400px)] flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">

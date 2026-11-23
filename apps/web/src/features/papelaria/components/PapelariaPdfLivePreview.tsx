@@ -1,10 +1,12 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Loader2, Pencil } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { previaPdfAoVivo, type ProvaPdfPrevia } from "@/api/papelariaProvaPdf";
+import { previaPdfAoVivo, type ProvaPdfPrevia, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
+
+import { PapelariaTextoEditor } from "./PapelariaTextoEditor";
 
 const DEBOUNCE_MS = 450;
 
@@ -34,12 +36,18 @@ export function PapelariaPdfLivePreview({
   values,
   composicao = null,
   className,
+  onEditarTexto,
+  onRestaurarTexto,
 }: {
   modeloId: number;
   values: Record<string, string>;
   /** Frente e verso independentes: junta a frente e o verso escolhidos. */
   composicao?: PapelariaComposicao | null;
   className?: string;
+  /** Texto digitado direto na prévia (com as regras do campo do PDF). */
+  onEditarTexto?: (regiao: ProvaPdfRegiao, texto: string) => void;
+  /** Volta o campo ao texto do template. */
+  onRestaurarTexto?: (regiao: ProvaPdfRegiao) => void;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
@@ -78,6 +86,40 @@ export function PapelariaPdfLivePreview({
   const atual = Math.min(pagina, Math.max(0, paginas.length - 1));
   const atualizando = query.isFetching || chave !== chaveDebounced;
 
+  const editavel = Boolean(onEditarTexto);
+  const regioes = useMemo(
+    () => (editavel ? (exibida?.regioes ?? []).filter((r) => r.pagina_saida === atual) : []),
+    [editavel, exibida?.regioes, atual],
+  );
+  const [editando, setEditando] = useState<string | null>(null);
+  const regiaoEditada = regioes.find((r) => r.chave === editando) ?? null;
+  useEffect(() => {
+    setEditando(null);
+  }, [modeloId, atual]);
+
+  // Caixa da imagem dentro da área rolável: as regiões são frações da página.
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [caixa, setCaixa] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const medir = useCallback(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    setCaixa({
+      left: img.offsetLeft + img.clientLeft,
+      top: img.offsetTop + img.clientTop,
+      width: img.clientWidth,
+      height: img.clientHeight,
+    });
+  }, []);
+  const temImagem = paginas.length > 0;
+  useLayoutEffect(() => {
+    const img = imgRef.current;
+    if (!img || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(medir);
+    ro.observe(img);
+    if (img.parentElement) ro.observe(img.parentElement);
+    return () => ro.disconnect();
+  }, [medir, temImagem]);
+
   return (
     <article
       className={cn(
@@ -92,7 +134,14 @@ export function PapelariaPdfLivePreview({
             Prévia em tempo real
           </h3>
           <p className="text-[10px] text-neutral-500">
-            Gerada a partir do PDF do modelo — igual à prova final.
+            {regioes.length ? (
+              <span className="inline-flex items-center gap-1">
+                <Pencil className="size-2.5" aria-hidden />
+                Clique num texto da prévia para editá-lo.
+              </span>
+            ) : (
+              "Gerada a partir do PDF do modelo — igual à prova final."
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -131,8 +180,10 @@ export function PapelariaPdfLivePreview({
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-50 p-3">
         {paginas.length ? (
           <img
+            ref={imgRef}
             src={paginas[atual]}
             alt={`Prévia da página ${atual + 1}`}
+            onLoad={medir}
             className={cn(
               "max-h-full max-w-full rounded border border-slate-200 bg-white object-contain shadow-sm transition-opacity",
               atualizando && "opacity-80",
@@ -144,6 +195,61 @@ export function PapelariaPdfLivePreview({
             Gerando prévia…
           </span>
         )}
+        {temImagem
+          ? regioes.map((r) => {
+              const [x0, y0, x1, y1] = r.area;
+              const ativa = r.chave === editando;
+              return (
+                <button
+                  key={r.chave}
+                  type="button"
+                  aria-label={`Editar texto: ${r.texto || r.marcador}`}
+                  title={r.editado ? "Texto editado — clique para alterar" : "Clique para editar"}
+                  data-testid="papelaria-previa-regiao"
+                  data-editado={r.editado ? "true" : undefined}
+                  className={cn(
+                    "absolute cursor-text rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
+                    ativa
+                      ? "bg-secondary-blue/10 outline outline-secondary-blue"
+                      : r.editado
+                        ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
+                        : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
+                  )}
+                  style={{
+                    left: caixa.left + x0 * caixa.width,
+                    top: caixa.top + y0 * caixa.height,
+                    width: Math.max(8, (x1 - x0) * caixa.width),
+                    height: Math.max(8, (y1 - y0) * caixa.height),
+                  }}
+                  onClick={() => setEditando(r.chave)}
+                />
+              );
+            })
+          : null}
+        {temImagem && regiaoEditada && onEditarTexto ? (
+          <PapelariaTextoEditor
+            key={regiaoEditada.chave}
+            regiao={regiaoEditada}
+            posicao={{
+              left: caixa.left + regiaoEditada.area[0] * caixa.width,
+              top: caixa.top + regiaoEditada.area[1] * caixa.height,
+              bottom: caixa.top + regiaoEditada.area[3] * caixa.height,
+            }}
+            onAplicar={(texto) => {
+              setEditando(null);
+              if (texto !== regiaoEditada.texto) onEditarTexto(regiaoEditada, texto);
+            }}
+            onRestaurar={
+              regiaoEditada.editado && onRestaurarTexto
+                ? () => {
+                    setEditando(null);
+                    onRestaurarTexto(regiaoEditada);
+                  }
+                : undefined
+            }
+            onCancelar={() => setEditando(null)}
+          />
+        ) : null}
         {query.isError && !paginas.length ? (
           <p className="flex max-w-sm items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />

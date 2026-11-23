@@ -1177,7 +1177,7 @@ def previa_pdf_ao_vivo(
     dados = {
         k: v
         for k, v in (payload.dados or {}).items()
-        if not str(k).startswith("__") or k in ("__redes", "__redes_estilo")
+        if not str(k).startswith("__") or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY)
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None

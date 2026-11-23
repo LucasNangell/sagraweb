@@ -123,10 +123,35 @@ export function saveProvaPdfCampos(
   });
 }
 
+/** Onde um campo do PDF ficou na prévia (para editar o texto direto nela). */
+export interface ProvaPdfRegiao {
+  /** `modelo:pagina:marcador` — chave do texto editado. */
+  chave: string;
+  modelo_id: number;
+  /** Página no PDF do modelo (1 = primeira). */
+  pagina: number;
+  /** Página da prévia (0 = frente). */
+  pagina_saida: number;
+  marcador: string;
+  /** Área em frações da página: [x0, y0, x1, y1], origem no canto superior esquerdo. */
+  area: [number, number, number, number];
+  /** Texto desenhado (sem as marcas de negrito). */
+  texto: string;
+  /** Trechos em negrito do texto: [início, fim). */
+  negrito: Array<[number, number]>;
+  /** Template do campo (linhas sem informação já removidas); vazio quando editado. */
+  template: string;
+  /** Valores das variáveis do template usados no desenho. */
+  valores: Record<string, string>;
+  /** O texto foi digitado na prévia (não vem mais do template). */
+  editado: boolean;
+}
+
 export interface ProvaPdfPrevia {
   paginas: string[];
   ms: number;
   avisos?: string[];
+  regioes?: ProvaPdfRegiao[];
 }
 
 export function previaProvaPdf(

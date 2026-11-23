@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({ previaPdfAoVivo: vi.fn() }));
@@ -55,5 +55,102 @@ describe("PapelariaPdfLivePreview", () => {
     api.previaPdfAoVivo.mockRejectedValue(new Error("A fonte não tem os caracteres ŵ"));
     renderPreview({ nome_deputado: "ŵ" });
     expect(await screen.findByText(/A fonte não tem os caracteres/)).toBeInTheDocument();
+  });
+});
+
+describe("PapelariaPdfLivePreview — edição de texto", () => {
+  beforeEach(() => {
+    api.previaPdfAoVivo.mockReset();
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,AAA"],
+      ms: 5,
+      regioes: [
+        {
+          chave: "7:1:NOME",
+          modelo_id: 7,
+          pagina: 1,
+          pagina_saida: 0,
+          marcador: "NOME",
+          area: [0.1, 0.2, 0.6, 0.3],
+          texto: "Ana",
+          negrito: [],
+          template: "{nome_deputado}",
+          valores: { nome_deputado: "Ana" },
+          editado: false,
+        },
+      ],
+    });
+  });
+
+  function renderEditavel(onEditarTexto = vi.fn(), onRestaurarTexto = vi.fn()) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview
+          modeloId={7}
+          values={{ nome_deputado: "Ana" }}
+          onEditarTexto={onEditarTexto}
+          onRestaurarTexto={onRestaurarTexto}
+        />
+      </QueryClientProvider>,
+    );
+    return { onEditarTexto, onRestaurarTexto };
+  }
+
+  it("clicar no texto abre o editor e Enter aplica", async () => {
+    const { onEditarTexto } = renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    const campo = screen.getByRole("textbox", { name: "Texto" });
+    expect(campo).toHaveValue("Ana");
+    fireEvent.change(campo, { target: { value: "Ana Maria" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(onEditarTexto).toHaveBeenCalledWith(expect.objectContaining({ chave: "7:1:NOME" }), "Ana Maria");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Esc cancela sem aplicar", async () => {
+    const { onEditarTexto } = renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    const campo = screen.getByRole("textbox", { name: "Texto" });
+    fireEvent.change(campo, { target: { value: "X" } });
+    fireEvent.keyDown(campo, { key: "Escape" });
+    expect(onEditarTexto).not.toHaveBeenCalled();
+  });
+
+  it("texto editado oferece restaurar o original", async () => {
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,AAA"],
+      ms: 5,
+      regioes: [
+        {
+          chave: "7:1:NOME",
+          modelo_id: 7,
+          pagina: 1,
+          pagina_saida: 0,
+          marcador: "NOME",
+          area: [0.1, 0.2, 0.6, 0.3],
+          texto: "Livre",
+          negrito: [],
+          template: "",
+          valores: {},
+          editado: true,
+        },
+      ],
+    });
+    const { onRestaurarTexto } = renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Livre" }));
+    fireEvent.click(screen.getByRole("button", { name: /Restaurar original/ }));
+    expect(onRestaurarTexto).toHaveBeenCalledWith(expect.objectContaining({ chave: "7:1:NOME" }));
+  });
+
+  it("sem callback de edição não mostra as áreas clicáveis", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview modeloId={7} values={{}} />
+      </QueryClientProvider>,
+    );
+    await screen.findByAltText("Prévia da página 1");
+    expect(screen.queryByTestId("papelaria-previa-regiao")).not.toBeInTheDocument();
   });
 });

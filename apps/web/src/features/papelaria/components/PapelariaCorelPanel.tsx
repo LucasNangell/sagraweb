@@ -45,6 +45,13 @@ import {
   COMPOSICAO_DADOS_KEY,
   usePapelariaComposicao,
 } from "./PapelariaFrenteVersoPicker";
+import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
+import {
+  interpretarEdicao,
+  TEXTOS_DADOS_KEY,
+  textosParaDados,
+} from "@/features/papelaria/papelariaTextosEditados";
+
 import { PapelariaModelosLista, resumoListaModelos } from "./PapelariaModelosLista";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
@@ -189,6 +196,8 @@ export function PapelariaCorelPanel({
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [excludedFields, setExcludedFields] = useState<string[]>([]);
+  /** Textos digitados direto na prévia (`modelo:pagina:marcador` → texto). */
+  const [textosEditados, setTextosEditados] = useState<Record<string, string>>({});
   const [activeDynamicFields, setActiveDynamicFields] = useState<
     ActiveDynamicFieldPlacement[]
   >([]);
@@ -996,19 +1005,52 @@ export function PapelariaCorelPanel({
       base[REDES_DADOS_KEY] = redesParaDados(redesEscolha);
       base[REDES_ESTILO_DADOS_KEY] = redesEstilo;
     }
+    const textos = textosParaDados(textosEditados);
+    if (textos) base[TEXTOS_DADOS_KEY] = textos;
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados]);
 
-  const valoresPrevia = useMemo(
-    () =>
-      redesBloco
+  const valoresPrevia = useMemo(() => {
+    const textos = textosParaDados(textosEditados);
+    if (!redesBloco && !textos) return fieldValues;
+    return {
+      ...fieldValues,
+      ...(redesBloco
         ? {
-            ...fieldValues,
             [REDES_DADOS_KEY]: redesParaDados(redesEscolha),
             [REDES_ESTILO_DADOS_KEY]: redesEstilo,
           }
-        : fieldValues,
-    [fieldValues, redesBloco, redesEscolha, redesEstilo],
+        : {}),
+      ...(textos ? { [TEXTOS_DADOS_KEY]: textos } : {}),
+    };
+  }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados]);
+
+  const camposEditaveisPrevia = useMemo(
+    () => new Set((camposFormulario ?? []).map((f) => f.key)),
+    [camposFormulario],
+  );
+  const removerTextoEditado = useCallback((chave: string) => {
+    setTextosEditados((prev) => {
+      if (!(chave in prev)) return prev;
+      const { [chave]: _removido, ...resto } = prev;
+      return resto;
+    });
+  }, []);
+  /**
+   * Texto editado na prévia: se a mudança é só numa variável (ex.: o nome),
+   * atualiza o campo do formulário; senão o texto vale para aquele campo do PDF.
+   */
+  const handleEditarTextoPrevia = useCallback(
+    (regiao: ProvaPdfRegiao, texto: string) => {
+      const edicao = interpretarEdicao(regiao, texto, camposEditaveisPrevia);
+      if (edicao.tipo === "variavel") {
+        removerTextoEditado(regiao.chave);
+        setFieldValues((prev) => ({ ...prev, [edicao.chave]: edicao.valor }));
+        return;
+      }
+      setTextosEditados((prev) => ({ ...prev, [regiao.chave]: edicao.texto }));
+    },
+    [camposEditaveisPrevia, removerTextoEditado],
   );
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
@@ -1883,6 +1925,8 @@ export function PapelariaCorelPanel({
             onLivePreviewValueChange={(key, value) =>
               setFieldValues((prev) => ({ ...prev, [key]: value }))
             }
+            onEditarTextoPrevia={handleEditarTextoPrevia}
+            onRestaurarTextoPrevia={(regiao) => removerTextoEditado(regiao.chave)}
           />
         </div>
       </div>

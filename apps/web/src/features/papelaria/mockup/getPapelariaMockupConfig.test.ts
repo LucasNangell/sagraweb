@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { getPapelariaMockupConfig } from "./getPapelariaMockupConfig";
+import {
+  escolherPresetPorPaginas,
+  getPapelariaMockupConfig,
+} from "./getPapelariaMockupConfig";
+import { PAPELARIA_MOCKUP_CONFIGS } from "./papelariaMockupConfigs";
+
+describe("escolherPresetPorPaginas", () => {
+  const frente = PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente;
+  const fv = PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente_verso;
+
+  it("com 2+ paginas prefere maxPaginas >= 2", () => {
+    expect(escolherPresetPorPaginas([frente, fv], true)?.id).toBe(
+      "cartao_visita_frente_verso",
+    );
+  });
+
+  it("com 1 pagina prefere maxPaginas <= 1", () => {
+    expect(escolherPresetPorPaginas([frente, fv], false)?.id).toBe(
+      "cartao_visita_frente",
+    );
+  });
+});
 
 describe("getPapelariaMockupConfig", () => {
   it("prioriza match por arquivoModelo", () => {
@@ -27,6 +48,17 @@ describe("getPapelariaMockupConfig", () => {
       pageCount: 1,
     });
     expect(r.config.id).toBe("cartao_visita_frente");
+  });
+
+  it("produto generico Frente e Verso nao herda preset de cartao", () => {
+    const r = getPapelariaMockupConfig({
+      produto: "Folheto Frente e Verso",
+      frenteVerso: "Frente e Verso",
+      pageCount: 2,
+    });
+    expect(r.config.id).not.toBe("cartao_visita_frente_verso");
+    expect(r.config.id).toBe("cartao_duplo_retrato_lateral");
+    expect(r.isFallback).toBe(true);
   });
 
   it("resolve Ct Duplo Retrato Lateral por produto", () => {

@@ -54,7 +54,10 @@ import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 
-import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
+import {
+  deveUsarPreviaPdfAoVivo,
+  PapelariaPdfLivePreview,
+} from "./PapelariaPdfLivePreview";
 import { mockupJsonEfetivo, type ModeloComMockup } from "../mockup/mockupProduto";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
@@ -358,17 +361,16 @@ export function PapelariaProofPanel({
   const activeFaceId =
     previewFaceId || runtimePreviewConfig?.faces[0]?.id || "frente";
 
-  // Campos dinâmicos (arrastar para posições) só existem na prévia por imagem.
-  const usaCamposDinamicos = Boolean(
-    basePreviewConfig?.habilitarCamposDinamicos && basePreviewConfig.camposDinamicos?.length,
+  // Prévia PDF (pipeline Ct Visita) sempre que o modelo tem prova PDF.
+  // Campos dinâmicos / prévia por imagem só como fallback sem PDF.
+  const hasPdfLivePreview = deveUsarPreviaPdfAoVivo(
+    temProvaPdf,
+    selectedModelId,
+    Boolean(livePreviewValues),
   );
-  const hasPdfLivePreview =
-    temProvaPdf &&
-    (Boolean(composicao) || !usaCamposDinamicos) &&
-    selectedModelId !== null &&
-    Boolean(livePreviewValues);
 
   const hasLivePreview =
+    !hasPdfLivePreview &&
     runtimePreviewConfig !== null &&
     selectedModelId !== null &&
     Boolean(livePreviewValues);

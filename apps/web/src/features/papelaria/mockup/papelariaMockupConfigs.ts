@@ -70,8 +70,9 @@ export const PAPELARIA_MOCKUP_CONFIGS = {
   cartao_visita_frente_verso: {
     id: "cartao_visita_frente_verso",
     nome: "Cartão de visita — frente e verso",
-    produtoMatch: ["ct visita fv", "visita fv", "frente e verso"],
-    arquivoModeloMatch: ["CtVisitaFV", "VisitaFV"],
+    // Mesmo produto/arquivo-base do cartão: a variante vem de pageCount / maxPaginas.
+    produtoMatch: ["ct visita", "cartão visita", "cartao visita", "ct visita fv", "visita fv"],
+    arquivoModeloMatch: ["CtVisitaFV", "VisitaFV", "CtVisita"],
     modo: "cartao_simples",
     larguraAbertaMm: 90,
     alturaAbertaMm: 50,

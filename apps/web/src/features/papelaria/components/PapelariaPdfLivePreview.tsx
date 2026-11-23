@@ -10,6 +10,18 @@ import { PapelariaTextoEditor } from "./PapelariaTextoEditor";
 
 const DEBOUNCE_MS = 450;
 
+/**
+ * Gate da prévia PDF ao vivo (pipeline Ct Visita): vale para qualquer produto
+ * com ``tem_prova_pdf`` — campos dinâmicos / prévia por imagem não bloqueiam.
+ */
+export function deveUsarPreviaPdfAoVivo(
+  temProvaPdf: boolean | undefined,
+  selectedModelId: number | null,
+  hasValues: boolean,
+): boolean {
+  return Boolean(temProvaPdf) && selectedModelId !== null && hasValues;
+}
+
 type Caixa = { left: number; top: number; width: number; height: number };
 
 /** Chave estável dos valores (ordem das chaves não importa). */

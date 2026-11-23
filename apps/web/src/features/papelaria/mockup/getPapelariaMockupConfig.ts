@@ -63,8 +63,44 @@ function fallbackByPageCount(pageCount: number): PapelariaMockupConfig {
   return cloneConfig(PAPELARIA_MOCKUP_CONFIGS.folha_simples);
 }
 
+function maxPaginasOf(preset: PapelariaMockupConfig): number {
+  if (typeof preset.maxPaginas === "number" && preset.maxPaginas > 0) {
+    return preset.maxPaginas;
+  }
+  return Math.max(1, preset.faces?.length ?? 1);
+}
+
+function arquivoSpecificity(preset: PapelariaMockupConfig): number {
+  const patterns = preset.arquivoModeloMatch ?? [];
+  if (!patterns.length) return 0;
+  return Math.max(...patterns.map((m) => m.length));
+}
+
 /**
- * Resolve mockup: MockupConfigJson (banco) → preset automático → fallback.
+ * Entre presets do mesmo produto/arquivo, escolhe a variante pela
+ * quantidade de páginas (2+ → maxPaginas >= 2; 1 → só frente).
+ */
+export function escolherPresetPorPaginas(
+  candidatos: PapelariaMockupConfig[],
+  querFrenteVerso: boolean,
+): PapelariaMockupConfig | null {
+  if (!candidatos.length) return null;
+  const ordered = [...candidatos].sort(
+    (a, b) => arquivoSpecificity(b) - arquivoSpecificity(a),
+  );
+  const preferred = querFrenteVerso
+    ? ordered.filter((p) => maxPaginasOf(p) >= 2)
+    : ordered.filter((p) => maxPaginasOf(p) <= 1);
+  return preferred[0] ?? ordered[0] ?? null;
+}
+
+function presetsNaoFallback(): PapelariaMockupConfig[] {
+  return PAPELARIA_MOCKUP_CONFIG_LIST.filter((p) => !p.isFallback);
+}
+
+/**
+ * Resolve mockup: MockupConfigJson (banco) → preset automático (por
+ * arquivo/produto + pageCount) → fallback.
  */
 export function getPapelariaMockupConfig(
   input: PapelariaMockupResolveInput,
@@ -101,52 +137,20 @@ export function getPapelariaMockupConfig(
     arquivoIndicaFv ||
     (frenteVerso.includes("frente") && frenteVerso.includes("verso"));
 
-  // CtVisita / Cartão de visita: o match genérico «CtVisita» não distingue
-  // só-frente de frente+verso — usa páginas / metadado F/V / sufixo FV.
-  const isCartaoVisita =
-    (arquivo &&
-      (matchArquivoModelo(arquivo, ["CtVisita", "CtVisitaF", "CtVisitaFV", "VisitaFV"]) ||
-        matchArquivoModelo(arquivo, ["cartao visita", "cartão visita"]))) ||
-    (produto && matchProduto(produto, ["ct visita", "cartão visita", "cartao visita"]));
-  if (isCartaoVisita) {
-    const preset = querFrenteVerso
-      ? PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente_verso
-      : PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente;
-    return { config: cloneConfig(preset), isFallback: false, source: "preset" };
-  }
+  const todos = presetsNaoFallback();
+  const porArquivo = arquivo
+    ? todos.filter((p) => matchArquivoModelo(arquivo, p.arquivoModeloMatch))
+    : [];
+  const porProduto = produto
+    ? todos.filter((p) => matchProduto(produto, p.produtoMatch))
+    : [];
 
-  const byArquivoSpecificity = PAPELARIA_MOCKUP_CONFIG_LIST.filter(
-    (p) => !p.isFallback && p.arquivoModeloMatch?.length,
-  ).sort((a, b) => {
-    const maxA = Math.max(...(a.arquivoModeloMatch ?? []).map((m) => m.length));
-    const maxB = Math.max(...(b.arquivoModeloMatch ?? []).map((m) => m.length));
-    return maxB - maxA;
-  });
-
-  for (const preset of byArquivoSpecificity) {
-    if (arquivo && matchArquivoModelo(arquivo, preset.arquivoModeloMatch)) {
-      return {
-        config: cloneConfig(preset),
-        isFallback: false,
-        source: "preset",
-      };
-    }
-  }
-
-  for (const preset of PAPELARIA_MOCKUP_CONFIG_LIST) {
-    if (preset.isFallback) continue;
-    if (produto && matchProduto(produto, preset.produtoMatch)) {
-      return {
-        config: cloneConfig(preset),
-        isFallback: false,
-        source: "preset",
-      };
-    }
-  }
-
-  if (querFrenteVerso && frenteVerso.includes("frente") && frenteVerso.includes("verso")) {
+  // Arquivo manda (ex.: CtVisitaFV.cdr); senão produto. pageCount escolhe F vs FV.
+  const candidatos = porArquivo.length > 0 ? porArquivo : porProduto;
+  const escolhido = escolherPresetPorPaginas(candidatos, querFrenteVerso);
+  if (escolhido) {
     return {
-      config: cloneConfig(PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente_verso),
+      config: cloneConfig(escolhido),
       isFallback: false,
       source: "preset",
     };

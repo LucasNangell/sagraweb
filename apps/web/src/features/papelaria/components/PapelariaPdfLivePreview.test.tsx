@@ -5,7 +5,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ previaPdfAoVivo: vi.fn() }));
 vi.mock("@/api/papelariaProvaPdf", () => api);
 
-import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
+import {
+  deveUsarPreviaPdfAoVivo,
+  PapelariaPdfLivePreview,
+} from "./PapelariaPdfLivePreview";
+
+describe("deveUsarPreviaPdfAoVivo", () => {
+  it("prioriza PDF mesmo com campos dinamicos no modelo", () => {
+    expect(deveUsarPreviaPdfAoVivo(true, 12, true)).toBe(true);
+  });
+
+  it("sem tem_prova_pdf nao usa previa PDF", () => {
+    expect(deveUsarPreviaPdfAoVivo(false, 12, true)).toBe(false);
+    expect(deveUsarPreviaPdfAoVivo(undefined, 12, true)).toBe(false);
+  });
+
+  it("exige modelo e valores", () => {
+    expect(deveUsarPreviaPdfAoVivo(true, null, true)).toBe(false);
+    expect(deveUsarPreviaPdfAoVivo(true, 12, false)).toBe(false);
+  });
+});
 
 function renderPreview(values: Record<string, string>) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

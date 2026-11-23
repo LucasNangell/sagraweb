@@ -10,7 +10,10 @@ export {
   PAPELARIA_MOCKUP_CONFIG_LIST,
 } from "./papelariaMockupConfigs";
 
-export { getPapelariaMockupConfig } from "./getPapelariaMockupConfig";
+export {
+  escolherPresetPorPaginas,
+  getPapelariaMockupConfig,
+} from "./getPapelariaMockupConfig";
 export type { PapelariaMockupResolveResultExtended } from "./getPapelariaMockupConfig";
 
 export {

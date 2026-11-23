@@ -544,7 +544,7 @@ def test_uppercase_grava_texto_em_maiusculas():
     assert "MARIA SILVA" in s["text"].replace("\u00a0", " ")
 
 
-def test_normalizar_campo_uppercase():
+def test_normalizar_campo_uppercase_e_bloquear_edicao():
     from services import papelaria_prova_pdf_service as svc
 
     norm = svc._normalizar_campo(
@@ -552,13 +552,42 @@ def test_normalizar_campo_uppercase():
             "marcador": "X",
             "template": "{a}",
             "uppercase": True,
+            "bloquear_edicao": True,
         },
         {"X"},
     )
     assert norm is not None
     assert norm["uppercase"] is True
+    assert norm["bloquear_edicao"] is True
     norm_off = svc._normalizar_campo({"marcador": "X", "template": "{a}"}, {"X"})
     assert norm_off["uppercase"] is False
+    assert norm_off["bloquear_edicao"] is False
+
+
+def test_bloquear_edicao_ignora_texto_da_previa():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    campos = [
+        {
+            "marcador": "NOMETITULAR",
+            "pagina": 1,
+            "template": "{nome_deputado}",
+            "alinhamento": "esquerda",
+            "ancora": "topo",
+            "reduzir_para_caber": True,
+            "bloquear_edicao": True,
+        }
+    ]
+    out = svc.renderizar(
+        pdf,
+        campos,
+        {"nome_deputado": "Maria Silva"},
+        textos={"1:NOMETITULAR": "Texto Digitado"},
+    )
+    _span_do_texto(out, "Maria Silva")
+    with pytest.raises(AssertionError):
+        _span_do_texto(out, "Texto Digitado")
 
 
 # --------------------------------------------------------------------------

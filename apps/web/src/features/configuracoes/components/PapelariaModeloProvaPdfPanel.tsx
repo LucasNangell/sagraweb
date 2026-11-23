@@ -321,6 +321,19 @@ export function PapelariaModeloProvaPdfPanel({
             />
             Maiúsculas (uppercase)
           </label>
+          <label
+            className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-600"
+            title="Impede que o usuário altere este texto ao clicar na prévia (Papelaria e portal)."
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(c.bloquear_edicao)}
+              disabled={!ligado}
+              onChange={(e) => opts.onChange({ bloquear_edicao: e.target.checked })}
+              data-testid={opts.testId ? `${opts.testId}-bloquear-edicao` : undefined}
+            />
+            Bloquear edição na prévia
+          </label>
         </div>
       </>
     );

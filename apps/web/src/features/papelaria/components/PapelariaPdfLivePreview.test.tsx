@@ -265,4 +265,31 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     await screen.findByAltText("Prévia da página 1");
     expect(screen.queryByTestId("papelaria-previa-regiao")).not.toBeInTheDocument();
   });
+
+  it("região com bloquear_edicao não abre o editor", async () => {
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,AAA"],
+      ms: 5,
+      regioes: [
+        {
+          chave: "7:1:NOME",
+          modelo_id: 7,
+          pagina: 1,
+          pagina_saida: 0,
+          marcador: "NOME",
+          area: [0.1, 0.2, 0.6, 0.3],
+          texto: "Ana",
+          negrito: [],
+          template: "{nome_deputado}",
+          valores: { nome_deputado: "Ana" },
+          editado: false,
+          bloquear_edicao: true,
+        },
+      ],
+    });
+    renderEditavel();
+    await screen.findByAltText("Prévia da página 1");
+    expect(screen.queryByRole("button", { name: /Editar texto/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("papelaria-previa-regiao-bloqueada")).toBeInTheDocument();
+  });
 });

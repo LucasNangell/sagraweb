@@ -40,6 +40,8 @@ export interface ProvaPdfCampo {
   reduzir_para_caber: boolean;
   /** Se true, o texto resolvido do campo é gravado em maiúsculas no PDF. */
   uppercase?: boolean;
+  /** Se true, o texto não pode ser editado na prévia (clique no PDF). */
+  bloquear_edicao?: boolean;
 }
 
 export type ProvaPdfRedesDisposicao = "vertical" | "horizontal" | "grade";
@@ -151,6 +153,8 @@ export interface ProvaPdfRegiao {
   tipo?: "campo" | "rede";
   /** Chave do catálogo de redes (`instagram`, `x`, …). */
   rede_chave?: string;
+  /** Campo marcado no admin para não permitir edição na prévia. */
+  bloquear_edicao?: boolean;
 }
 
 export interface ProvaPdfPrevia {

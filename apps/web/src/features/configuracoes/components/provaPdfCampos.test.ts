@@ -60,7 +60,7 @@ describe("hidratarCampos", () => {
     expect(orfaos).toHaveLength(0);
   });
 
-  it("preserva uppercase salvo no campo", () => {
+  it("preserva uppercase e bloquear_edicao salvos no campo", () => {
     const data = modelo({
       campos: [
         {
@@ -72,6 +72,7 @@ describe("hidratarCampos", () => {
           entrelinha: 1.2,
           reduzir_para_caber: true,
           uppercase: true,
+          bloquear_edicao: true,
         },
       ],
       analise: {
@@ -82,6 +83,7 @@ describe("hidratarCampos", () => {
     });
     const { mapa } = hidratarCampos(data);
     expect(mapa[chaveTexto(texto("NOME"))].uppercase).toBe(true);
+    expect(mapa[chaveTexto(texto("NOME"))].bloquear_edicao).toBe(true);
   });
 
   it("casa pagina 0 com o primeiro texto do marcador", () => {

@@ -431,7 +431,26 @@ export function PapelariaPdfLivePreview({
                     />
                     {regioesPagina.map((r) => {
                       const [x0, y0, x1, y1] = r.area;
-                      const ativa = r.chave === editando;
+                      const bloqueada = Boolean(r.bloquear_edicao);
+                      const ativa = !bloqueada && r.chave === editando;
+                      const estiloArea = {
+                        left: x0 * caixa.width,
+                        top: y0 * caixa.height,
+                        width: Math.max(8, (x1 - x0) * caixa.width),
+                        height: Math.max(8, (y1 - y0) * caixa.height),
+                      };
+                      if (bloqueada) {
+                        return (
+                          <div
+                            key={r.chave}
+                            aria-hidden
+                            title="Edição bloqueada nas configurações do modelo"
+                            data-testid="papelaria-previa-regiao-bloqueada"
+                            className="pointer-events-none absolute rounded-[2px]"
+                            style={estiloArea}
+                          />
+                        );
+                      }
                       return (
                         <button
                           key={r.chave}
@@ -448,17 +467,16 @@ export function PapelariaPdfLivePreview({
                                 ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
                                 : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
                           )}
-                          style={{
-                            left: x0 * caixa.width,
-                            top: y0 * caixa.height,
-                            width: Math.max(8, (x1 - x0) * caixa.width),
-                            height: Math.max(8, (y1 - y0) * caixa.height),
-                          }}
+                          style={estiloArea}
                           onClick={() => setEditando(r.chave)}
                         />
                       );
                     })}
-                    {regiaoEditada && regiaoEditada.pagina_saida === i && onEditarTexto && caixaEditada ? (
+                    {regiaoEditada &&
+                    !regiaoEditada.bloquear_edicao &&
+                    regiaoEditada.pagina_saida === i &&
+                    onEditarTexto &&
+                    caixaEditada ? (
                       <PapelariaTextoEditor
                         key={regiaoEditada.chave}
                         regiao={regiaoEditada}

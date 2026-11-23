@@ -566,6 +566,7 @@ def _normalizar_campo(raw: Any, marcadores: set[str]) -> Optional[dict[str, Any]
         "entrelinha": max(0.8, min(3.0, entrelinha)),
         "reduzir_para_caber": bool(raw.get("reduzir_para_caber", True)),
         "uppercase": bool(raw.get("uppercase", False)),
+        "bloquear_edicao": bool(raw.get("bloquear_edicao", False)),
     }
 
 
@@ -1081,7 +1082,12 @@ def renderizar(
                         )
                     fontes_cache[alvo["xref"]] = fonte
                 chave_local = f"{pidx + 1}:{campo['marcador']}"
-                editado = textos is not None and chave_local in textos
+                # Campos com edição bloqueada ignoram `__textos` da prévia.
+                editado = (
+                    textos is not None
+                    and chave_local in textos
+                    and not campo.get("bloquear_edicao")
+                )
                 if editado:
                     texto, ranges_negrito = _texto_editado(textos[chave_local])
                 else:
@@ -1154,6 +1160,7 @@ def renderizar(
                         "template": "" if editado else _linhas_com_informacao(campo["template"], dados),
                         "valores": {} if editado else _valores_do_template(campo["template"], dados),
                         "editado": editado,
+                        "bloquear_edicao": bool(campo.get("bloquear_edicao")),
                     }
                     regioes.append(regiao)
                 if not texto:

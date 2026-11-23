@@ -922,21 +922,6 @@ export function ClienteProofPage({
                 className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-sm"
                 data-tour="proof-editable-fields"
               >
-                <header className="border-b border-sagra-border px-4 py-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-600">
-                    Prévia em tempo real — informações do trabalho
-                  </h3>
-                  <p className="mt-1 text-sm text-neutral-600">
-                    Ajuste os campos ao lado de cada face. A prévia atualiza automaticamente.
-                  </p>
-                </header>
-                {publicPortal ? (
-                  <ClienteProofPortalInstructionBanner fiel={temProvaPdf} />
-                ) : (
-                  <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    {temProvaPdf ? PREVIEW_DISCLAIMER_PDF : PREVIEW_DISCLAIMER_EDIT}
-                  </div>
-                )}
                 <div ref={previewScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
                   {hasLivePreview ? (
                     <ClienteProofPapelariaEditPanel
@@ -963,6 +948,13 @@ export function ClienteProofPage({
                     </p>
                   )}
                 </div>
+                {publicPortal ? (
+                  <ClienteProofPortalInstructionBanner fiel={temProvaPdf} />
+                ) : (
+                  <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {temProvaPdf ? PREVIEW_DISCLAIMER_PDF : PREVIEW_DISCLAIMER_EDIT}
+                  </div>
+                )}
               </article>
             </div>
           ) : showFlipbook ? (

@@ -223,7 +223,7 @@ export function ClienteProofPortalInstructionBanner({
   fiel?: boolean;
 }) {
   return (
-    <div className="border-b border-amber-300 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-950 sm:px-5">
+    <div className="border-t border-amber-300 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-950 sm:px-5">
       <p>
         {fiel
           ? "Clique nos textos da prévia (frente e verso) para editá-los. A imagem usa o mesmo PDF e as mesmas fontes da prova."

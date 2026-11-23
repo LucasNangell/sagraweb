@@ -59,6 +59,7 @@ function PdfEditLayout({
           composicao={composicao}
           fetchPrevia={fetchPrevia}
           queryKeyPrefix="portal"
+          layout="row"
           onEditarTexto={disabled ? undefined : onEditarTextoPrevia}
           onRestaurarTexto={disabled ? undefined : onRestaurarTextoPrevia}
           className="cliente-proof-edit-preview-pdf"

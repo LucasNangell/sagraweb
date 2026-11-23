@@ -74,6 +74,28 @@ describe("PapelariaPdfLivePreview", () => {
       "data:image/png;base64,VERSO",
     );
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByTestId("papelaria-previa-pagina-0").parentElement).toHaveAttribute(
+      "data-layout",
+      "stack",
+    );
+  });
+
+  it("layout row coloca frente e verso lado a lado", async () => {
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,F", "data:image/png;base64,V"],
+      ms: 8,
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview modeloId={7} values={{}} layout="row" />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Frente")).toBeInTheDocument();
+    expect(screen.getByTestId("papelaria-previa-pagina-0").parentElement).toHaveAttribute(
+      "data-layout",
+      "row",
+    );
   });
 });
 

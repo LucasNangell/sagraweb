@@ -55,6 +55,8 @@ export function PapelariaPdfLivePreview({
   onRestaurarTexto,
   fetchPrevia = previaPdfAoVivo,
   queryKeyPrefix = "papelaria",
+  /** `stack` = frente acima do verso; `row` = frente à esquerda, verso à direita. */
+  layout = "stack",
 }: {
   modeloId: number;
   values: Record<string, string>;
@@ -69,6 +71,7 @@ export function PapelariaPdfLivePreview({
   fetchPrevia?: FetchPreviaPdf;
   /** Prefixo da queryKey (ex.: portal) para não misturar caches. */
   queryKeyPrefix?: string;
+  layout?: "stack" | "row";
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
@@ -188,7 +191,15 @@ export function PapelariaPdfLivePreview({
 
       <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-auto bg-slate-50 p-3">
         {paginas.length ? (
-          <div className="flex w-full max-w-full flex-col items-center gap-4">
+          <div
+            className={cn(
+              "flex w-full max-w-full items-start gap-4",
+              layout === "row"
+                ? "flex-row flex-wrap justify-center"
+                : "flex-col items-center",
+            )}
+            data-layout={layout}
+          >
             {paginas.map((src, i) => {
               const titulo = tituloPagina(i);
               const regioesPagina = todasRegioes.filter((r) => r.pagina_saida === i);
@@ -196,10 +207,15 @@ export function PapelariaPdfLivePreview({
               return (
                 <section
                   key={i}
-                  className="relative flex w-full max-w-full flex-col items-center gap-1"
+                  className={cn(
+                    "relative flex flex-col items-center gap-1",
+                    layout === "row" ? "min-w-0 flex-1 basis-[min(100%,280px)]" : "w-full max-w-full",
+                  )}
                   data-testid={`papelaria-previa-pagina-${i}`}
                 >
-                  <h4 className="w-full text-[11px] font-semibold text-slate-600">{titulo}</h4>
+                  <h4 className="w-full text-center text-[11px] font-semibold text-slate-600">
+                    {titulo}
+                  </h4>
                   <div className="relative inline-block max-w-full">
                     <img
                       ref={(el) => {
@@ -209,7 +225,10 @@ export function PapelariaPdfLivePreview({
                       alt={`Prévia da página ${i + 1}`}
                       onLoad={medir}
                       className={cn(
-                        "max-h-[min(55vh,520px)] max-w-full rounded border border-slate-200 bg-white object-contain shadow-sm transition-opacity",
+                        "max-w-full rounded border border-slate-200 bg-white object-contain shadow-sm transition-opacity",
+                        layout === "row"
+                          ? "max-h-[min(50vh,440px)] w-full"
+                          : "max-h-[min(55vh,520px)]",
                         atualizando && "opacity-80",
                       )}
                     />

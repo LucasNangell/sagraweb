@@ -95,6 +95,9 @@ export interface PapelariaAdminModelRecord {
   tem_imposicao_config?: boolean;
   /** PDF do modelo enviado e com ao menos um texto ligado (fonte da prévia). */
   tem_prova_pdf?: boolean;
+  /** Frente/verso padrão do produto + cores (pré-selecionado ao criar a prova). */
+  padrao_frente?: boolean;
+  padrao_verso?: boolean;
   preview_faces?: Array<{
     id: string;
     nome?: string;

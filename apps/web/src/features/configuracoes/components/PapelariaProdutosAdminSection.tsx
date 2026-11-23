@@ -587,6 +587,8 @@ function ModeloStrip({
                 <span className="pw-modelo-card__flags">
                   <Flag on={Boolean(m.tem_mockup_config)} label="Mockup" />
                   <Flag on={Boolean(m.tem_prova_pdf)} label="PDF" />
+                  {m.padrao_frente ? <Flag on label="Frente padrão" /> : null}
+                  {m.padrao_verso ? <Flag on label="Verso padrão" /> : null}
                   {m.tem_imposicao_config ? <Flag on label="Imp. antiga" tone="violet" /> : null}
                 </span>
               </button>

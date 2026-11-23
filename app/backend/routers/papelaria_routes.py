@@ -352,6 +352,13 @@ class PapelariaProvaPdfCamposPayload(BaseModel):
 
 class PapelariaProvaPdfPreviaPayload(BaseModel):
     dados: Dict[str, Any] = Field(default_factory=dict)
+    # Frente e verso independentes: {"frente": {"modelo_id", "pagina"}, "verso": {...}}
+    composicao: Optional[Dict[str, Any]] = None
+
+
+class PapelariaModeloPadraoPayload(BaseModel):
+    face: str
+    padrao: bool = True
 
 
 def _modelo_existe(modelo_id: int) -> None:
@@ -852,6 +859,40 @@ def obter_modelo_corel(
         raise HTTPException(500, "Erro ao carregar modelo.")
 
 
+@router.get("/modelos/{modelo_id}/faces")
+def faces_do_modelo(
+    modelo_id: int,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Frentes e versos que podem ser combinados no recorte (produto + cores) do modelo."""
+    from services import papelaria_faces_service as faces_svc
+
+    try:
+        return faces_svc.fontes_para_modelo(modelo_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.exception("Erro ao listar faces do modelo %s: %s", modelo_id, e)
+        raise HTTPException(500, "Erro ao listar frentes e versos.")
+
+
+@router.put("/admin/modelos/{modelo_id}/padrao")
+def definir_modelo_padrao(
+    modelo_id: int,
+    payload: PapelariaModeloPadraoPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Marca o modelo como frente/verso padrão do produto + cores (desmarca os demais)."""
+    from services import papelaria_faces_service as faces_svc
+
+    try:
+        return faces_svc.definir_padrao(modelo_id, payload.face, bool(payload.padrao))
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except faces_svc.ComposicaoError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/modelos/{modelo_id}/previa-pdf")
 def previa_pdf_ao_vivo(
     modelo_id: int,
@@ -868,12 +909,15 @@ def previa_pdf_ao_vivo(
     modelo = models_svc.get_modelo_by_id(int(modelo_id))
     if not modelo:
         raise HTTPException(404, "Modelo não encontrado.")
+    from services.papelaria_faces_service import ComposicaoError, validar_composicao
+
     dados = {
         k: v for k, v in (payload.dados or {}).items() if not str(k).startswith("__")
     }
     try:
-        return svc.previa_png(modelo_id, dados, dpi=110, modelo=modelo)
-    except svc.ProvaPdfError as e:
+        composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None
+        return svc.previa_png(modelo_id, dados, dpi=110, modelo=modelo, composicao=composicao)
+    except (svc.ProvaPdfError, ComposicaoError) as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         logger.exception("Erro na prévia PDF do modelo %s: %s", modelo_id, e)

@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileText, FolderOpen, Loader2, RotateCcw, Save, Tag, Trash2, Upload } from "lucide-react";
+import { FileText, FolderOpen, Layers, Loader2, RotateCcw, Save, Tag, Trash2, Upload } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import {
   clearPapelariaProvaEmailTemplate,
   deletePapelariaAdminModelo,
+  savePapelariaAdminModeloPadrao,
   savePapelariaAdminNomeExibicao,
   savePapelariaAdminPastaImposicao,
   uploadPapelariaProvaEmailTemplate,
@@ -14,7 +15,15 @@ import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
 import { Field, InlineMessage, PanelCard, StatusPill } from "./PapelariaWorkspaceUi";
 
-type Erros = Partial<Record<"nome" | "pasta" | "template" | "excluir", string>>;
+type Erros = Partial<Record<"nome" | "pasta" | "template" | "excluir" | "padrao", string>>;
+
+/** Faces que o modelo oferece: frente e verso (pág. 1 e 2), só frente ou só verso. */
+function facesDoModelo(frenteVersao: string | null | undefined): Array<"frente" | "verso"> {
+  const v = (frenteVersao ?? "").toLowerCase();
+  if (v.includes("frente") && v.includes("verso")) return ["frente", "verso"];
+  if (v.includes("verso")) return ["verso"];
+  return ["frente"];
+}
 
 export function PapelariaModeloDadosPanel({
   modelo,
@@ -81,6 +90,22 @@ export function PapelariaModeloDadosPanel({
       invalidate();
     },
     onError: (err: Error) => setErro("template", err.message),
+  });
+
+  const padraoMutation = useMutation({
+    mutationFn: (p: { face: "frente" | "verso"; padrao: boolean }) =>
+      savePapelariaAdminModeloPadrao(modelo.id, p.face, p.padrao),
+    onSuccess: (_data, p) => {
+      setErro("padrao");
+      toast.success(
+        p.padrao
+          ? `Definido como ${p.face} padrão de ${modelo.produto} · ${modelo.cores}.`
+          : `Deixou de ser ${p.face} padrão.`,
+      );
+      invalidate();
+      void qc.invalidateQueries({ queryKey: ["papelaria", "faces"] });
+    },
+    onError: (err: Error) => setErro("padrao", err.message),
   });
 
   const deleteMutation = useMutation({
@@ -207,6 +232,47 @@ export function PapelariaModeloDadosPanel({
             </div>
           </Field>
           {erros.nome ? <InlineMessage tone="error" className="mt-2">{erros.nome}</InlineMessage> : null}
+        </PanelCard>
+
+        {/* Frente e verso — modelo padrão */}
+        <PanelCard
+          className="pw-dados-grid__wide"
+          icon={<Layers className="size-3.5" aria-hidden />}
+          title="Modelo padrão"
+          description={
+            <>
+              Vem selecionado ao criar a prova de <strong>{modelo.produto}</strong> · {modelo.cores}. Em produto
+              frente e verso, a frente e o verso podem vir de modelos diferentes (modo Prova PDF); o usuário
+              troca na hora, se quiser.
+            </>
+          }
+        >
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {facesDoModelo(modelo.frente_versao).map((face) => {
+              const ativo = Boolean(face === "frente" ? modelo.padrao_frente : modelo.padrao_verso);
+              const pagina = face === "verso" && facesDoModelo(modelo.frente_versao).length === 2 ? 2 : 1;
+              return (
+                <label key={face} className="pw-switch-row flex-1">
+                  <input
+                    type="checkbox"
+                    className="pw-switch"
+                    checked={ativo}
+                    disabled={padraoMutation.isPending}
+                    onChange={(e) => padraoMutation.mutate({ face, padrao: e.target.checked })}
+                  />
+                  <span>
+                    <span className="block text-xs font-semibold text-slate-800">
+                      {face === "frente" ? "Frente padrão" : "Verso padrão"}
+                    </span>
+                    <span className="block text-[11px] text-slate-500">
+                      Usa a página {pagina} deste modelo. Marcar aqui desmarca o outro padrão do mesmo produto e cores.
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {erros.padrao ? <InlineMessage tone="error" className="mt-2">{erros.padrao}</InlineMessage> : null}
         </PanelCard>
 
         {/* Pasta de imposição */}

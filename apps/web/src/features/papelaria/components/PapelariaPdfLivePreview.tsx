@@ -4,6 +4,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { previaPdfAoVivo, type ProvaPdfPrevia } from "@/api/papelariaProvaPdf";
+import type { PapelariaComposicao } from "@/features/papelaria/types";
 
 const DEBOUNCE_MS = 450;
 
@@ -31,20 +32,31 @@ function useDebounced<T>(value: T, ms: number): T {
 export function PapelariaPdfLivePreview({
   modeloId,
   values,
+  composicao = null,
   className,
 }: {
   modeloId: number;
   values: Record<string, string>;
+  /** Frente e verso independentes: junta a frente e o verso escolhidos. */
+  composicao?: PapelariaComposicao | null;
   className?: string;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
   const [pagina, setPagina] = useState(0);
+  const chaveComposicao = composicao
+    ? `${composicao.frente.modelo_id}:${composicao.frente.pagina}|${composicao.verso.modelo_id}:${composicao.verso.pagina}`
+    : "";
 
   const query = useQuery({
-    queryKey: ["papelaria", "previa-pdf", modeloId, chaveDebounced],
+    queryKey: ["papelaria", "previa-pdf", modeloId, chaveComposicao, chaveDebounced],
     queryFn: ({ signal }) =>
-      previaPdfAoVivo(modeloId, JSON.parse(chaveDebounced) as Record<string, string>, signal),
+      previaPdfAoVivo(
+        modeloId,
+        JSON.parse(chaveDebounced) as Record<string, string>,
+        signal,
+        composicao,
+      ),
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
     retry: false,

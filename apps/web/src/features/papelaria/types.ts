@@ -34,6 +34,8 @@ export interface PapelariaCorelModelSummary {
   preview_faces?: PapelariaPreviewFaceMeta[];
   tem_imposicao_config?: boolean;
   imposicao_config_json?: string | null;
+  padrao_frente?: boolean;
+  padrao_verso?: boolean;
 }
 
 export interface PapelariaPreviewFaceMeta {
@@ -246,4 +248,36 @@ export interface PapelariaPreviewPagesResponse {
   pages: PapelariaPreviewPageItem[];
   total_pages?: number;
   truncated?: boolean;
+}
+
+
+/** Frente e verso independentes: uma página (face) de um modelo. */
+export interface PapelariaFaceRef {
+  modelo_id: number;
+  pagina: number;
+}
+
+export interface PapelariaComposicao {
+  frente: PapelariaFaceRef;
+  verso: PapelariaFaceRef;
+}
+
+export interface PapelariaFaceFonte extends PapelariaFaceRef {
+  rotulo: string;
+  arquivo_modelo: string;
+  /** PDF do modelo configurado com essa página (obrigatório para compor). */
+  tem_pdf: boolean;
+  padrao: boolean;
+}
+
+export interface PapelariaFacesResponse {
+  produto: string;
+  cores: string;
+  /** Pode escolher frente e verso (modo Prova PDF + produto frente e verso + opções com PDF). */
+  disponivel: boolean;
+  modo_prova_pdf: boolean;
+  papel_modelo: "frente_verso" | "frente" | "verso";
+  frente: PapelariaFaceFonte[];
+  verso: PapelariaFaceFonte[];
+  padrao: { frente: PapelariaFaceRef | null; verso: PapelariaFaceRef | null };
 }

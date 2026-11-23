@@ -294,6 +294,16 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if produto:
                 cleaned[key_stripped] = json.dumps(produto, ensure_ascii=False)
             continue
+        if key_stripped == "__composicao":
+            from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
+
+            try:
+                comp = normalizar_composicao(value)
+            except ComposicaoError as exc:
+                raise ValueError(str(exc)) from exc
+            if comp:
+                cleaned[key_stripped] = json.dumps(comp, ensure_ascii=False)
+            continue
         if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY, MANTER_DADOS_COREL_KEY):
             # Definidos só pelo servidor (nunca aceitar caminho vindo do cliente).
             continue
@@ -460,6 +470,23 @@ def create_job(
             from services import papelaria_prova_pdf_service as prova_pdf_svc
 
             prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
+
+    # Frente e verso independentes (frente de um modelo + verso de outro).
+    if "__composicao" in dados_clean:
+        from services.papelaria_faces_service import ComposicaoError, validar_composicao
+        from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
+
+        if tipo_job != TIPO_JOB_CREATE or get_modo() != MODO_PROVA_PDF:
+            raise ValueError("Frente e verso independentes exigem o modo de geração Prova PDF.")
+        try:
+            comp = validar_composicao(dados_clean["__composicao"], modelo)
+        except ComposicaoError as exc:
+            raise ValueError(str(exc)) from exc
+        if comp is None:
+            dados_clean.pop("__composicao", None)
+        else:
+            dados_clean["__composicao"] = json.dumps(comp, ensure_ascii=False)
+            prova_pdf_servidor = True
 
     # Já existe Corel na pasta da OS (fora cópia de segurança)? A prova é
     # montada a partir dele, com os campos do formulário aplicados por cima.

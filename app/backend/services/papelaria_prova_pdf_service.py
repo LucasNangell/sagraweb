@@ -874,6 +874,8 @@ def renderizar(
     campos: list[dict[str, Any]],
     dados: dict[str, Any],
     avisos: Optional[list[str]] = None,
+    *,
+    exigir_campos: bool = True,
 ) -> bytes:
     """
     Aplica os campos ao PDF do modelo e devolve o PDF final (bytes).
@@ -954,6 +956,8 @@ def renderizar(
                             for campo in ligados_span:
                                 por_pagina.setdefault(pidx, []).append((campo, alvo))
         if not por_pagina:
+            if not exigir_campos:
+                return doc.tobytes(garbage=3, deflate=True)
             raise ProvaPdfError("Nenhum campo configurado foi encontrado no PDF do modelo.")
 
         fontes_cache: dict[int, FonteEmbutida] = {}
@@ -1113,12 +1117,57 @@ def renderizar(
         doc.close()
 
 
+def renderizar_composicao(
+    composicao: dict[str, dict[str, int]],
+    dados: dict[str, Any],
+    avisos: Optional[list[str]] = None,
+) -> bytes:
+    """
+    Frente e verso independentes: aplica os campos na página de frente de um
+    modelo e na página de verso de outro e junta as duas num PDF (frente = 1,
+    verso = 2), como um modelo frente e verso único.
+    """
+    import fitz
+
+    final = fitz.open()
+    try:
+        for face in ("frente", "verso"):
+            parte = composicao[face]
+            mid, pagina = int(parte["modelo_id"]), int(parte["pagina"])
+            pdf = caminho_pdf(mid)
+            if not pdf.is_file():
+                raise ProvaPdfError(f"O modelo do {face} não tem PDF configurado.")
+            campos = [
+                c
+                for c in carregar_config(mid).get("campos") or []
+                if c.get("template") and int(c.get("pagina") or 0) in (0, pagina)
+            ]
+            conteudo = (
+                renderizar(pdf, campos, dados, avisos=avisos, exigir_campos=False)
+                if campos
+                else pdf.read_bytes()
+            )
+            src = fitz.open(stream=conteudo, filetype="pdf")
+            try:
+                if pagina > src.page_count:
+                    raise ProvaPdfError(
+                        f"O PDF do modelo do {face} não tem a página {pagina}."
+                    )
+                final.insert_pdf(src, from_page=pagina - 1, to_page=pagina - 1)
+            finally:
+                src.close()
+        return final.tobytes(garbage=3, deflate=True)
+    finally:
+        final.close()
+
+
 def previa_png(
     modelo_id: int,
     dados: dict[str, Any],
     dpi: int = 150,
     *,
     modelo: Optional[dict[str, Any]] = None,
+    composicao: Optional[dict[str, dict[str, int]]] = None,
 ) -> dict[str, Any]:
     """
     Aplica os valores e devolve as páginas em PNG (data URL).
@@ -1128,20 +1177,28 @@ def previa_png(
     """
     import fitz
 
-    pdf = caminho_pdf(modelo_id)
-    if not pdf.is_file():
-        raise ProvaPdfError("Envie primeiro o PDF do modelo.")
-    campos = [c for c in carregar_config(modelo_id).get("campos") or [] if c.get("template")]
-    if not campos:
-        raise ProvaPdfError("Ligue ao menos um texto do PDF a um campo.")
     from services.papelaria_corel_dados_service import preparar_dados
     from services import papelaria_models_service as models_svc
+
+    pdf = caminho_pdf(modelo_id)
+    campos: list[dict[str, Any]] = []
+    if composicao is None:
+        if not pdf.is_file():
+            raise ProvaPdfError("Envie primeiro o PDF do modelo.")
+        campos = [c for c in carregar_config(modelo_id).get("campos") or [] if c.get("template")]
+        if not campos:
+            raise ProvaPdfError("Ligue ao menos um texto do PDF a um campo.")
 
     if modelo is None:
         modelo = models_svc.get_modelo_by_id(int(modelo_id)) or {}
     avisos: list[str] = []
     t0 = time.perf_counter()
-    saida = renderizar(pdf, campos, preparar_dados(dados or {}, modelo), avisos=avisos)
+    dados_ok = preparar_dados(dados or {}, modelo)
+    saida = (
+        renderizar_composicao(composicao, dados_ok, avisos=avisos)
+        if composicao is not None
+        else renderizar(pdf, campos, dados_ok, avisos=avisos)
+    )
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
@@ -1175,13 +1232,26 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
         raise LookupError("Job não encontrado.")
     t0 = time.perf_counter()
     try:
+        from services.papelaria_faces_service import composicao_do_job
+
         modelo = models_svc.get_modelo_by_id(int(job["modelo_id"] or 0)) or {}
-        campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
         dados = preparar_dados(
             {k: v for k, v in (job.get("dados") or {}).items() if not str(k).startswith("__")},
             modelo,
         )
-        conteudo = renderizar(caminho_pdf(int(job["modelo_id"])), campos, dados)
+        composicao = composicao_do_job(job)
+        if composicao is not None:
+            # Frente de um modelo + verso de outro (frente e verso independentes).
+            campos = [
+                c
+                for face in ("frente", "verso")
+                for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
+                if c.get("template")
+            ]
+            conteudo = renderizar_composicao(composicao, dados)
+        else:
+            campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
+            conteudo = renderizar(caminho_pdf(int(job["modelo_id"])), campos, dados)
 
         ano, nro = int(job["ano_protocolo"]), int(job["nro_protocolo"])
         sefoc = jobs_svc.resolve_os_papelaria_dir(ano, nro, create=True)

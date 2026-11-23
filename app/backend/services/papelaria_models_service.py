@@ -393,6 +393,9 @@ def ensure_papelaria_modelos_table() -> None:
         ("PreviewConfigJson", "JSON NULL"),
         ("Ativo", "TINYINT(1) NOT NULL DEFAULT 1"),
         ("Ordem", "INT NOT NULL DEFAULT 0"),
+        # Frente/verso independentes: modelo padrão de cada face por produto + cores.
+        ("PadraoFrente", "TINYINT(1) NOT NULL DEFAULT 0"),
+        ("PadraoVerso", "TINYINT(1) NOT NULL DEFAULT 0"),
         ("AtualizadoEm", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
     ]
     for col, definition in legacy_migrations:
@@ -696,6 +699,9 @@ def _models_select_columns() -> str:
         cols.append("ProvaEmailTemplatePdf")
     if _table_has_column("ImposicaoConfigJson"):
         cols.append("ImposicaoConfigJson")
+    for col in ("PadraoFrente", "PadraoVerso"):
+        if _table_has_column(col):
+            cols.append(col)
     return ", ".join(cols)
 
 
@@ -799,6 +805,8 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "preview_config_json": preview_json,
         "tem_preview_config": bool(preview_json),
         "imposicao_config_json": imposicao_json,
+        "padrao_frente": bool(row.get("PadraoFrente")),
+        "padrao_verso": bool(row.get("PadraoVerso")),
         "tem_imposicao_config": _tem_imposicao_disponivel(
             produto=produto,
             modelo_imposicao_config_json=imposicao_json,
@@ -1776,6 +1784,11 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     warnings.extend(avisos_modo)
     if not any(m.get("id") == auto_id for m in modelos):
         auto_id = modelos[0]["id"] if len(modelos) == 1 else None
+    if auto_id is None:
+        # Sem prova anterior: o modelo marcado como frente padrão já vem selecionado.
+        padroes = [m for m in modelos if m.get("padrao_frente")]
+        if len(padroes) == 1:
+            auto_id = padroes[0]["id"]
 
     auto_model: Optional[dict[str, Any]] = None
     if auto_id:

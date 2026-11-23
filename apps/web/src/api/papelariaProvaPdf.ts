@@ -126,11 +126,12 @@ export function previaPdfAoVivo(
   modeloId: number,
   dados: Record<string, string>,
   signal?: AbortSignal,
+  composicao?: import("@/features/papelaria/types").PapelariaComposicao | null,
 ): Promise<ProvaPdfPrevia> {
   return apiFetch<ProvaPdfPrevia>(`/papelaria/modelos/${modeloId}/previa-pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dados }),
+    body: JSON.stringify(composicao ? { dados, composicao } : { dados }),
     signal,
   });
 }

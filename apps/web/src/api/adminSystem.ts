@@ -477,6 +477,19 @@ export async function savePapelariaAdminNomeExibicao(
   );
 }
 
+/** Marca/desmarca o modelo como frente ou verso padrão do produto + cores. */
+export async function savePapelariaAdminModeloPadrao(
+  modeloId: number,
+  face: "frente" | "verso",
+  padrao: boolean,
+): Promise<PapelariaAdminModelRecord> {
+  return apiFetch<PapelariaAdminModelRecord>(`/papelaria/admin/modelos/${modeloId}/padrao`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ face, padrao }),
+  });
+}
+
 export async function savePapelariaAdminPastaImposicao(
   modeloId: number,
   pastaImposicao: string | null,

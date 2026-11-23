@@ -53,6 +53,7 @@ import {
 import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
+import type { PapelariaComposicao } from "@/features/papelaria/types";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
 import { PapelariaProofMockup3D } from "./PapelariaProofMockup3D";
 import { PapelariaViewModeToggle } from "./PapelariaViewModeToggle";
@@ -68,6 +69,8 @@ type Props = {
   previewConfigJson?: string | null;
   /** Modelo com PDF configurado: a prévia ao vivo é o próprio PDF renderizado no servidor. */
   temProvaPdf?: boolean;
+  /** Frente de um modelo + verso de outro: a prévia junta as duas páginas. */
+  composicao?: PapelariaComposicao | null;
   livePreviewValues?: Record<string, string>;
   previa: Record<string, string> | null;
   selectedModelId: number | null;
@@ -109,6 +112,7 @@ export function PapelariaProofPanel({
   mockupConfigJson,
   previewConfigJson,
   temProvaPdf = false,
+  composicao = null,
   livePreviewValues,
   previa,
   selectedModelId,
@@ -346,7 +350,10 @@ export function PapelariaProofPanel({
     basePreviewConfig?.habilitarCamposDinamicos && basePreviewConfig.camposDinamicos?.length,
   );
   const hasPdfLivePreview =
-    temProvaPdf && !usaCamposDinamicos && selectedModelId !== null && Boolean(livePreviewValues);
+    temProvaPdf &&
+    (Boolean(composicao) || !usaCamposDinamicos) &&
+    selectedModelId !== null &&
+    Boolean(livePreviewValues);
 
   const hasLivePreview =
     runtimePreviewConfig !== null &&
@@ -800,7 +807,11 @@ export function PapelariaProofPanel({
               Carregando modelo...
             </div>
           ) : hasPdfLivePreview && selectedModelId !== null ? (
-            <PapelariaPdfLivePreview modeloId={selectedModelId} values={livePreviewValues ?? {}} />
+            <PapelariaPdfLivePreview
+              modeloId={composicao?.frente.modelo_id ?? selectedModelId}
+              values={livePreviewValues ?? {}}
+              composicao={composicao}
+            />
           ) : hasLivePreview && runtimePreviewConfig ? (
             <article className="flex min-h-[min(45vh,400px)] flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
               <header className="border-b border-sagra-border px-3 py-2">

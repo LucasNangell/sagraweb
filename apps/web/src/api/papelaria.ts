@@ -328,3 +328,11 @@ export async function fetchPapelariaJobPreviewPages(
 export function papelariaJobPreviewPageUrl(jobId: number, page: number): string {
   return apiUrl(`/papelaria/jobs/${jobId}/preview-pages/${page}.png`);
 }
+
+
+/** Frentes e versos combináveis no produto + cores do modelo (modo Prova PDF). */
+export async function fetchPapelariaFaces(
+  modeloId: number,
+): Promise<import("@/features/papelaria/types").PapelariaFacesResponse> {
+  return apiFetch(`/papelaria/modelos/${modeloId}/faces`);
+}

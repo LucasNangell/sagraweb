@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
 import { AlertTriangle, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -40,6 +40,11 @@ import {
   type PapelariaCorelDadosEstado,
 } from "./PapelariaCorelDadosModal";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
+import {
+  COMPOSICAO_DADOS_KEY,
+  PapelariaFrenteVersoPicker,
+  usePapelariaComposicao,
+} from "./PapelariaFrenteVersoPicker";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import type {
   ImposicaoVariante,
@@ -264,6 +269,27 @@ export function PapelariaCorelPanel({
     queryKey: queryKeys.papelaria.corelModelo(selectedModelId ?? 0),
     queryFn: () => fetchPapelariaCorelModelo(selectedModelId!),
     enabled: selectedModelId !== null,
+  });
+
+  // Frente e verso independentes (modo Prova PDF): frente de um modelo + verso de outro.
+  const {
+    faces: facesComposicao,
+    composicao,
+    setComposicao,
+    marcarEscolhaManual,
+  } = usePapelariaComposicao(selectedModelId, modelDetailQuery.data?.frente_versao);
+  const modelosExtrasIds = useMemo(() => {
+    if (!composicao) return [];
+    return [...new Set([composicao.frente.modelo_id, composicao.verso.modelo_id])].filter(
+      (id) => id !== selectedModelId,
+    );
+  }, [composicao, selectedModelId]);
+  const modelosExtrasQueries = useQueries({
+    queries: modelosExtrasIds.map((id) => ({
+      queryKey: queryKeys.papelaria.corelModelo(id),
+      queryFn: () => fetchPapelariaCorelModelo(id),
+      staleTime: 60_000,
+    })),
   });
 
   const refreshPapelariaJobs = useCallback(() => {
@@ -765,6 +791,7 @@ export function PapelariaCorelPanel({
   }, [modelDetailQuery.data]);
 
   const handleSelectModel = (model: PapelariaCorelModelSummary) => {
+    marcarEscolhaManual();
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
     setExcludedFields([]);
@@ -799,17 +826,22 @@ export function PapelariaCorelPanel({
   }, [clienteAlteracaoPendente?.campos_alterados]);
 
   /** Campos exibidos: modelo (sem variáveis só dos objetos do produto) + campos do produto. */
-  const camposFormulario = useMemo(
-    () =>
-      modelDetailQuery.data
-        ? camposVisiveis(
-            modelDetailQuery.data.campos_formulario,
-            modelDetailQuery.data.campos,
-            camposProduto,
-          )
-        : undefined,
-    [modelDetailQuery.data, camposProduto],
-  );
+  const extrasCamposKey = modelosExtrasQueries.map((q) => q.dataUpdatedAt).join("|");
+  const camposFormulario = useMemo(() => {
+    if (!modelDetailQuery.data) return undefined;
+    const base = camposVisiveis(
+      modelDetailQuery.data.campos_formulario,
+      modelDetailQuery.data.campos,
+      camposProduto,
+    );
+    // Composição frente/verso: soma os campos dos modelos da frente e do verso.
+    const vistos = new Set(base.map((f) => f.key));
+    const extras = modelosExtrasQueries
+      .flatMap((q) => q.data?.campos_formulario ?? [])
+      .filter((f) => !vistos.has(f.key) && vistos.add(f.key));
+    return extras.length ? [...base, ...extras] : base;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDetailQuery.data, camposProduto, extrasCamposKey]);
   const previewConfigJsonEfetivo = useMemo(
     () =>
       previewConfigComProduto(
@@ -879,15 +911,19 @@ export function PapelariaCorelPanel({
     if (camposProduto) {
       base[CAMPOS_PRODUTO_DADOS_KEY] = JSON.stringify(camposProduto);
     }
+    if (composicao) {
+      base[COMPOSICAO_DADOS_KEY] = JSON.stringify(composicao);
+    }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao]);
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
     createJobMutation.mutate({
       ano: anoNum,
       nro: nroNum,
-      modelo_id: selectedModelId,
+      // Na composição, a prova pertence ao modelo da frente.
+      modelo_id: composicao?.frente.modelo_id ?? selectedModelId,
       dados: dadosForJob,
       lancar_andamento: lancarAndamento,
       manter_dados_corel: manterDadosCorelRef.current,
@@ -1489,6 +1525,13 @@ export function PapelariaCorelPanel({
                       </p>
                     ) : (
                       <>
+                        {facesComposicao && composicao ? (
+                          <PapelariaFrenteVersoPicker
+                            faces={facesComposicao}
+                            value={composicao}
+                            onChange={setComposicao}
+                          />
+                        ) : null}
                         {camposProduto ? (
                           <CamposProdutoAviso
                             arquivo={camposProduto.arquivo}
@@ -1614,6 +1657,13 @@ export function PapelariaCorelPanel({
                   <h3 className="mb-2 text-xs font-bold text-neutral-700">
                     Informações do cliente
                   </h3>
+                  {facesComposicao && composicao ? (
+                    <PapelariaFrenteVersoPicker
+                      faces={facesComposicao}
+                      value={composicao}
+                      onChange={setComposicao}
+                    />
+                  ) : null}
                   {camposProduto ? (
                     <CamposProdutoAviso
                       arquivo={camposProduto.arquivo}
@@ -1735,7 +1785,8 @@ export function PapelariaCorelPanel({
             arquivoModelo={arquivoModeloAtivo}
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
             previewConfigJson={previewConfigJsonEfetivo}
-            temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf)}
+            temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao)}
+            composicao={composicao}
             livePreviewValues={fieldValues}
             previa={previa}
             selectedModelId={selectedModelId}

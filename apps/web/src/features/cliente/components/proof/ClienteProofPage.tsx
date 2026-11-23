@@ -922,7 +922,13 @@ export function ClienteProofPage({
                 className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-sm"
                 data-tour="proof-editable-fields"
               >
-                <div ref={previewScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div
+                  ref={previewScrollRef}
+                  className={cn(
+                    "min-h-0 flex-1",
+                    temProvaPdf ? "flex flex-col overflow-hidden p-2 sm:p-3" : "overflow-y-auto p-4",
+                  )}
+                >
                   {hasLivePreview ? (
                     <ClienteProofPapelariaEditPanel
                       previewConfig={livePreviewParsed?.ok ? livePreviewParsed.config : null}

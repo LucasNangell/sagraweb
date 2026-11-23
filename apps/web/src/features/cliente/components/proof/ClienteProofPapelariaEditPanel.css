@@ -1,13 +1,23 @@
 .cliente-proof-edit--pdf {
-  gap: 1rem;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
 }
 
 .cliente-proof-edit__pdf-preview {
-  min-height: min(55vh, 520px);
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .cliente-proof-edit-preview-pdf {
-  min-height: min(55vh, 520px);
+  min-height: 0;
+  flex: 1 1 auto;
+  height: 100%;
 }
 
 .cliente-proof-edit {

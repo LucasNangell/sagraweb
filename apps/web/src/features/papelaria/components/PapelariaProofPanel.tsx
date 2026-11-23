@@ -808,7 +808,7 @@ export function PapelariaProofPanel({
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
           {!selectedModelId ? (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-neutral-400">
               <div>
@@ -828,6 +828,7 @@ export function PapelariaProofPanel({
               composicao={composicao}
               onEditarTexto={onEditarTextoPrevia}
               onRestaurarTexto={onRestaurarTextoPrevia}
+              className="min-h-0 flex-1"
             />
           ) : hasLivePreview && runtimePreviewConfig ? (
             <article className="flex min-h-[min(45vh,400px)] flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">

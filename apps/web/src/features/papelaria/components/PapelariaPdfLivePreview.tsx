@@ -1,7 +1,22 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { AlertTriangle, Loader2, Pencil } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Loader2,
+  Maximize2,
+  Pencil,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent,
+} from "react";
 
 import { previaPdfAoVivo, type ProvaPdfPrevia, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
@@ -9,6 +24,9 @@ import type { PapelariaComposicao } from "@/features/papelaria/types";
 import { PapelariaTextoEditor } from "./PapelariaTextoEditor";
 
 const DEBOUNCE_MS = 450;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
 
 /**
  * Gate da prévia PDF ao vivo (pipeline Ct Visita): vale para qualquer produto
@@ -22,7 +40,13 @@ export function deveUsarPreviaPdfAoVivo(
   return Boolean(temProvaPdf) && selectedModelId !== null && hasValues;
 }
 
+export function clampZoom(zoom: number): number {
+  const stepped = Math.round(zoom / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(stepped.toFixed(2))));
+}
+
 type Caixa = { left: number; top: number; width: number; height: number };
+type Size = { w: number; h: number };
 
 /** Chave estável dos valores (ordem das chaves não importa). */
 function chaveValores(values: Record<string, string>): string {
@@ -130,6 +154,70 @@ export function PapelariaPdfLivePreview({
     setEditando(null);
   }, [modeloId]);
 
+  const [zoom, setZoom] = useState(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<Size>({ w: 0, h: 0 });
+  const [naturais, setNaturais] = useState<Size[]>([]);
+
+  useEffect(() => {
+    setZoom(1);
+    setNaturais([]);
+  }, [modeloId, chaveComposicao, layout]);
+
+  useLayoutEffect(() => {
+    const el = viewportRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setViewport({ w: Math.max(0, width), h: Math.max(0, height) });
+    });
+    ro.observe(el);
+    setViewport({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+
+  const registrarNatural = useCallback((indice: number, img: HTMLImageElement) => {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return;
+    setNaturais((prev) => {
+      const next = prev.slice();
+      while (next.length <= indice) next.push({ w: 0, h: 0 });
+      if (next[indice]?.w === w && next[indice]?.h === h) return prev;
+      next[indice] = { w, h };
+      return next;
+    });
+  }, []);
+
+  const tamanhosExibicao = useMemo(() => {
+    const n = Math.max(paginas.length, 1);
+    const pad = 16;
+    const gap = 16;
+    const titleH = 22;
+    const availW = Math.max(80, viewport.w - pad);
+    const availH = Math.max(80, viewport.h - pad);
+    return paginas.map((_, i) => {
+      const nat = naturais[i];
+      if (!nat?.w || !nat?.h || !viewport.w || !viewport.h) {
+        return { w: undefined as number | undefined, h: undefined as number | undefined };
+      }
+      let boxW = availW;
+      let boxH = availH - titleH;
+      if (layout === "row" && n > 1) {
+        boxW = (availW - gap * (n - 1)) / n;
+      } else if (layout === "stack" && n > 1) {
+        boxH = (availH - gap * (n - 1) - titleH * n) / n;
+      }
+      const fit = Math.min(boxW / nat.w, boxH / nat.h);
+      return {
+        w: Math.max(40, nat.w * fit * zoom),
+        h: Math.max(40, nat.h * fit * zoom),
+      };
+    });
+  }, [paginas, naturais, viewport, layout, zoom]);
+
   // Caixa de cada imagem (frações da página → pixels).
   const imgRefs = useRef<Array<HTMLImageElement | null>>([]);
   const [caixas, setCaixas] = useState<Caixa[]>([]);
@@ -157,7 +245,14 @@ export function PapelariaPdfLivePreview({
     }
     medir();
     return () => ro.disconnect();
-  }, [medir, temImagem, paginas.length]);
+  }, [medir, temImagem, paginas.length, zoom, tamanhosExibicao]);
+
+  const onWheelZoom = useCallback((e: WheelEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom((z) => clampZoom(z + delta));
+  }, []);
 
   const caixaVazia: Caixa = { left: 0, top: 0, width: 0, height: 0 };
   const caixaEditada =
@@ -165,10 +260,12 @@ export function PapelariaPdfLivePreview({
       ? (caixas[regiaoEditada.pagina_saida] ?? caixaVazia)
       : null;
 
+  const zoomLabel = `${Math.round(zoom * 100)}%`;
+
   return (
     <article
       className={cn(
-        "flex min-h-[min(45vh,400px)] flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]",
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
         className,
       )}
       data-testid="papelaria-pdf-live-preview"
@@ -182,33 +279,77 @@ export function PapelariaPdfLivePreview({
             {todasRegioes.length ? (
               <span className="inline-flex items-center gap-1">
                 <Pencil className="size-2.5" aria-hidden />
-                Clique num texto da prévia para editá-lo.
+                Clique num texto da prévia para editá-lo. Ctrl+scroll para zoom.
               </span>
             ) : (
-              "Gerada a partir do PDF do modelo — igual à prova final."
+              "Gerada a partir do PDF do modelo — igual à prova final. Ctrl+scroll para zoom."
             )}
           </p>
         </div>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-[10px] text-neutral-500 transition-opacity",
-            atualizando ? "opacity-100" : "opacity-0",
-          )}
-          aria-live="polite"
-        >
-          <Loader2 className="size-3 animate-spin" aria-hidden />
-          Atualizando
-        </span>
+        <div className="flex items-center gap-1.5">
+          <div
+            className="inline-flex items-center gap-0.5 rounded border border-sagra-border bg-neutral-50 p-0.5"
+            data-testid="papelaria-previa-zoom"
+          >
+            <button
+              type="button"
+              className="rounded p-1 text-neutral-600 hover:bg-white hover:text-secondary-blue disabled:opacity-40"
+              aria-label="Diminuir zoom"
+              disabled={zoom <= ZOOM_MIN}
+              onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+            >
+              <ZoomOut className="size-3.5" aria-hidden />
+            </button>
+            <span className="min-w-[2.75rem] text-center text-[10px] font-semibold tabular-nums text-neutral-700">
+              {zoomLabel}
+            </span>
+            <button
+              type="button"
+              className="rounded p-1 text-neutral-600 hover:bg-white hover:text-secondary-blue disabled:opacity-40"
+              aria-label="Aumentar zoom"
+              disabled={zoom >= ZOOM_MAX}
+              onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+            >
+              <ZoomIn className="size-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="ml-0.5 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium text-neutral-600 hover:bg-white hover:text-secondary-blue"
+              aria-label="Ajustar à área"
+              title="Ajustar à área"
+              onClick={() => setZoom(1)}
+            >
+              <Maximize2 className="size-3" aria-hidden />
+              Ajustar
+            </button>
+          </div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-[10px] text-neutral-500 transition-opacity",
+              atualizando ? "opacity-100" : "opacity-0",
+            )}
+            aria-live="polite"
+          >
+            <Loader2 className="size-3 animate-spin" aria-hidden />
+            Atualizando
+          </span>
+        </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-auto bg-slate-50 p-3">
+      <div
+        ref={viewportRef}
+        className="relative flex min-h-0 flex-1 flex-col items-center overflow-auto bg-slate-50 p-2"
+        onWheel={onWheelZoom}
+        data-testid="papelaria-previa-viewport"
+      >
         {paginas.length ? (
           <div
             className={cn(
-              "flex w-full max-w-full items-start gap-4",
+              "flex w-full items-start gap-4",
               layout === "row"
                 ? "flex-row flex-wrap justify-center"
                 : "flex-col items-center",
+              zoom > 1 ? "min-w-max" : "max-w-full",
             )}
             data-layout={layout}
           >
@@ -216,31 +357,44 @@ export function PapelariaPdfLivePreview({
               const titulo = tituloPagina(i);
               const regioesPagina = todasRegioes.filter((r) => r.pagina_saida === i);
               const caixa = caixas[i] ?? { left: 0, top: 0, width: 0, height: 0 };
+              const size = tamanhosExibicao[i];
               return (
                 <section
                   key={i}
                   className={cn(
                     "relative flex flex-col items-center gap-1",
-                    layout === "row" ? "min-w-0 flex-1 basis-[min(100%,280px)]" : "w-full max-w-full",
+                    layout === "row" && zoom <= 1 ? "min-w-0" : undefined,
                   )}
                   data-testid={`papelaria-previa-pagina-${i}`}
                 >
                   <h4 className="w-full text-center text-[11px] font-semibold text-slate-600">
                     {titulo}
                   </h4>
-                  <div className="relative inline-block max-w-full">
+                  <div className="relative inline-block">
                     <img
                       ref={(el) => {
                         imgRefs.current[i] = el;
+                        if (el?.complete && el.naturalWidth) registrarNatural(i, el);
                       }}
                       src={src}
                       alt={`Prévia da página ${i + 1}`}
-                      onLoad={medir}
+                      onLoad={(e) => {
+                        registrarNatural(i, e.currentTarget);
+                        medir();
+                      }}
+                      width={size?.w}
+                      height={size?.h}
+                      style={
+                        size?.w && size?.h
+                          ? { width: size.w, height: size.h }
+                          : undefined
+                      }
                       className={cn(
-                        "max-w-full rounded border border-slate-200 bg-white object-contain shadow-sm transition-opacity",
-                        layout === "row"
-                          ? "max-h-[min(50vh,440px)] w-full"
-                          : "max-h-[min(55vh,520px)]",
+                        "rounded border border-slate-200 bg-white object-contain shadow-sm transition-opacity",
+                        !size?.w &&
+                          (layout === "row"
+                            ? "max-h-full max-w-full w-auto"
+                            : "max-h-full max-w-full"),
                         atualizando && "opacity-80",
                       )}
                     />
@@ -304,13 +458,13 @@ export function PapelariaPdfLivePreview({
             })}
           </div>
         ) : query.isError ? null : (
-          <span className="inline-flex items-center gap-2 text-xs text-neutral-500">
+          <span className="m-auto inline-flex items-center gap-2 text-xs text-neutral-500">
             <Loader2 className="size-4 animate-spin" aria-hidden />
             Gerando prévia…
           </span>
         )}
         {query.isError && !paginas.length ? (
-          <p className="flex max-w-sm items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="m-auto flex max-w-sm items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
             {(query.error as Error)?.message || "Não foi possível gerar a prévia."}
           </p>

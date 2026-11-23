@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({ previaPdfAoVivo: vi.fn() }));
 vi.mock("@/api/papelariaProvaPdf", () => api);
 
 import {
+  clampZoom,
   deveUsarPreviaPdfAoVivo,
   PapelariaPdfLivePreview,
 } from "./PapelariaPdfLivePreview";
@@ -23,6 +24,15 @@ describe("deveUsarPreviaPdfAoVivo", () => {
   it("exige modelo e valores", () => {
     expect(deveUsarPreviaPdfAoVivo(true, null, true)).toBe(false);
     expect(deveUsarPreviaPdfAoVivo(true, 12, false)).toBe(false);
+  });
+});
+
+describe("clampZoom", () => {
+  it("limita entre 50% e 300% em passos de 25%", () => {
+    expect(clampZoom(0.1)).toBe(0.5);
+    expect(clampZoom(1.12)).toBe(1);
+    expect(clampZoom(1.2)).toBe(1.25);
+    expect(clampZoom(4)).toBe(3);
   });
 });
 
@@ -56,6 +66,11 @@ describe("PapelariaPdfLivePreview", () => {
     );
     expect(api.previaPdfAoVivo).toHaveBeenCalledTimes(1);
     expect(api.previaPdfAoVivo.mock.calls[0]![0]).toBe(7);
+    expect(screen.getByTestId("papelaria-previa-zoom")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar zoom" }));
+    expect(screen.getByText("125%")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ajustar à área" }));
+    expect(screen.getByText("100%")).toBeInTheDocument();
 
     update({ nome_deputado: "Ana M" });
     update({ nome_deputado: "Ana Maria" });

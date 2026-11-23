@@ -161,7 +161,21 @@ def build_portal_papelaria_edit_payload(
     preview_json = preview_config_com_produto(
         (modelo or {}).get("preview_config_json"), produto
     )
-    job_dados = {k: v for k, v in job_dados_raw.items() if not str(k).startswith("__")}
+    # Metadados do job (não são campos do formulário / prévia).
+    _META_JOB = frozenset(
+        {
+            "prova_numero",
+            "prova_pdf_ms",
+            "prova_web_pdf_name",
+            "gerado_por",
+            "gerado_por_corel_do_pdf",
+        }
+    )
+    job_dados = {
+        k: ("" if v is None else str(v))
+        for k, v in job_dados_raw.items()
+        if not str(k).startswith("__") and k not in _META_JOB
+    }
 
     from services.papelaria_faces_service import composicao_do_job
     from services.papelaria_prova_pdf_service import tem_modelo_pdf

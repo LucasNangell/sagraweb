@@ -871,7 +871,8 @@ def serve_proof_preview_base(
 class ProofPortalPreviaPdfPayload(BaseModel):
     """Valores do formulário para a prévia PDF ao vivo no portal (token)."""
 
-    dados: dict[str, str] = Field(default_factory=dict)
+    # Aceita número/bool do job (ex.: prova_numero) e normaliza para string.
+    dados: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/client/proof/{ano}/{os_id}/previa-pdf")
@@ -907,12 +908,17 @@ def previa_pdf_portal(
     job = get_job(int(edit["job_id"])) if edit.get("job_id") else None
     composicao = composicao_do_job(job) if job else edit.get("composicao")
 
-    dados = {
-        k: v
-        for k, v in (payload.dados or {}).items()
-        if not str(k).startswith("__")
-        or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY)
-    }
+    dados: dict[str, Any] = {}
+    for k, v in (payload.dados or {}).items():
+        if str(k).startswith("__") and k not in (
+            "__redes",
+            "__redes_estilo",
+            svc.TEXTOS_DADOS_KEY,
+        ):
+            continue
+        if v is None:
+            continue
+        dados[str(k)] = v if isinstance(v, str) else str(v)
     try:
         return svc.previa_png(
             modelo_id,

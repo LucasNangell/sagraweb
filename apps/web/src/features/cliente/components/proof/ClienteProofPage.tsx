@@ -485,7 +485,11 @@ export function ClienteProofPage({
       return;
     }
     if (isPapelaria && papelaria) {
-      setFieldValues({ ...(papelaria.job_dados ?? {}) });
+      const seed: Record<string, string> = {};
+      for (const [k, v] of Object.entries(papelaria.job_dados ?? {})) {
+        seed[k] = v == null ? "" : String(v);
+      }
+      setFieldValues(seed);
       setTextosEditados(parseTextosExtras(papelaria.previa_extras?.[TEXTOS_DADOS_KEY]));
       setRedesJson(papelaria.previa_extras?.[REDES_DADOS_KEY]);
       setRedesEstilo(papelaria.previa_extras?.[REDES_ESTILO_DADOS_KEY]);

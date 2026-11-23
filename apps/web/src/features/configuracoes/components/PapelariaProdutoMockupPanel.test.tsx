@@ -72,3 +72,36 @@ describe("PapelariaProdutoMockupPanel", () => {
     );
   });
 });
+
+
+describe("PapelariaProdutoMockupPanel · herdado", () => {
+  it("mostra o mockup herdado de um modelo excluído e salva no produto", async () => {
+    Object.values(api).forEach((fn) => fn.mockReset());
+    api.fetchPapelariaProdutoMockup.mockResolvedValue({
+      produto: "Ct Visita",
+      frente: null,
+      frente_verso: '{"id":"cartao_visita_frente_verso_flip","modo":"cartao_simples"}',
+      salvo: { frente: false, frente_verso: false },
+      herdado: { frente: null, frente_verso: { modelo_id: 12, arquivo: "CtVisitaFV.cdr", ativo: false } },
+    });
+    api.savePapelariaProdutoMockup.mockResolvedValue({
+      produto: "Ct Visita",
+      frente: null,
+      frente_verso: '{"id":"cartao_visita_frente_verso_flip","modo":"cartao_simples"}',
+      salvo: { frente: false, frente_verso: true },
+      herdado: { frente: null, frente_verso: null },
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("radio", { name: /Frente e verso/ }));
+    expect(screen.getByText(/Herdado de CtVisitaFV.cdr \(modelo excluído\)/)).toBeInTheDocument();
+    expect((screen.getByLabelText("MockupConfigJson do produto") as HTMLTextAreaElement).value).toContain(
+      "cartao_visita_frente_verso_flip",
+    );
+    expect(screen.getByText(/salve para fixar no produto/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Salvar no produto/ }));
+    await vi.waitFor(() =>
+      expect(api.savePapelariaProdutoMockup).toHaveBeenCalledWith("Ct Visita", "frente_verso", expect.stringContaining("flip")),
+    );
+    expect(await screen.findByText("Configurado no produto")).toBeInTheDocument();
+  });
+});

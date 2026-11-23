@@ -6,6 +6,7 @@ import {
   fetchPapelariaProdutoMockup,
   savePapelariaProdutoMockup,
   validatePapelariaAdminMockupConfig,
+  type PapelariaMockupHerdado,
 } from "@/api/adminSystem";
 import { toast } from "@/components/ui/toastStore";
 import { PapelariaProofMockup3D } from "@/features/papelaria/components/PapelariaProofMockup3D";
@@ -86,7 +87,7 @@ export function PapelariaProdutoMockupPanel({
               id: "frente",
               label: (
                 <>
-                  Só frente{query.data?.frente ? " ✓" : ""}
+                  Só frente{query.data?.salvo?.frente ? " ✓" : query.data?.herdado?.frente ? " ↺" : ""}
                 </>
               ),
             },
@@ -94,7 +95,7 @@ export function PapelariaProdutoMockupPanel({
               id: "frente_verso",
               label: (
                 <>
-                  Frente e verso{query.data?.frente_verso ? " ✓" : ""}
+                  Frente e verso{query.data?.salvo?.frente_verso ? " ✓" : query.data?.herdado?.frente_verso ? " ↺" : ""}
                 </>
               ),
               title: temVerso ? undefined : "Este produto ainda não tem versos cadastrados",
@@ -114,6 +115,8 @@ export function PapelariaProdutoMockupPanel({
           produto={produto}
           variante={variante}
           salvo={query.data?.[variante] ?? null}
+          salvoNoProduto={Boolean(query.data?.salvo?.[variante])}
+          herdado={query.data?.herdado?.[variante] ?? null}
           modelos={modelos}
         />
       )}
@@ -125,16 +128,24 @@ function MockupEditor({
   produto,
   variante,
   salvo,
+  salvoNoProduto = true,
+  herdado = null,
   modelos,
 }: {
   produto: string;
   variante: Variante;
+  /** Configuração em vigor (salva no produto ou herdada dos modelos). */
   salvo: string | null;
+  salvoNoProduto?: boolean;
+  herdado?: PapelariaMockupHerdado;
   modelos: PapelariaAdminModelRecord[];
 }) {
   const qc = useQueryClient();
   const [jsonText, setJsonText] = useState(() => pretty(salvo));
-  const [savedText, setSavedText] = useState(jsonText);
+  // Herdada ainda não está gravada no produto: salvar fixa.
+  const [savedText, setSavedText] = useState(() => (salvoNoProduto ? pretty(salvo) : ""));
+  const [herdadoAtivo, setHerdadoAtivo] = useState(Boolean(herdado) && !salvoNoProduto);
+  const textoHerdado = herdado ? pretty(salvo) : "";
   const [presetId, setPresetId] = useState<keyof typeof PAPELARIA_MOCKUP_CONFIGS>(
     variante === "frente_verso" ? "cartao_visita_frente_verso" : "folha_a4_simples",
   );
@@ -144,6 +155,7 @@ function MockupEditor({
   const parsed = useMemo(() => (jsonText.trim() ? parseMockupConfigJson(jsonText) : null), [jsonText]);
   const previewConfig = parsed?.ok ? parsed.config : null;
   const dirty = jsonText.trim() !== savedText.trim();
+  const herdadoIntacto = herdadoAtivo && jsonText.trim() === textoHerdado.trim();
 
   // Mockups antigos configurados por modelo, para migrar para o produto.
   const legados = useMemo(
@@ -162,7 +174,8 @@ function MockupEditor({
       setLocalError(null);
       const novo = pretty(data[variante]);
       setJsonText(novo);
-      setSavedText(novo);
+      setSavedText(data.salvo?.[variante] === false ? "" : novo);
+      setHerdadoAtivo(Boolean(data.herdado?.[variante]) && !data.salvo?.[variante]);
       toast.success(
         data[variante]
           ? `Mockup «${variante === "frente" ? "Só frente" : "Frente e verso"}» de ${produto} salvo.`
@@ -211,6 +224,14 @@ function MockupEditor({
           actions={
             savedText.trim() ? (
               <StatusPill tone="ok">Configurado no produto</StatusPill>
+            ) : herdadoAtivo && herdado ? (
+              <StatusPill
+                tone="warn"
+                title="Configuração antiga do modelo, usada enquanto o produto não tem a sua. Salve para fixar no produto."
+              >
+                Herdado de {herdado.arquivo || `modelo ${herdado.modelo_id}`}
+                {herdado.ativo ? "" : " (modelo excluído)"}
+              </StatusPill>
             ) : (
               <StatusPill tone="muted">Preset automático</StatusPill>
             )
@@ -318,7 +339,11 @@ function MockupEditor({
 
         <div className="pw-savebar">
           <span className={dirty ? "pw-savebar__dirty" : "pw-savebar__clean"}>
-            {dirty ? "Alterações não salvas" : "Sem alterações pendentes"}
+            {herdadoIntacto
+              ? "Em uso a configuração herdada do modelo — salve para fixar no produto"
+              : dirty
+                ? "Alterações não salvas"
+                : "Sem alterações pendentes"}
           </span>
           <div className="flex flex-wrap gap-2">
             {savedText.trim() ? (
@@ -327,7 +352,11 @@ function MockupEditor({
                 className="sagra-btn sagra-btn--delete-outline sagra-btn--sm"
                 disabled={saveMutation.isPending}
                 onClick={() => {
-                  if (window.confirm("Remover o mockup desta variação? O produto volta ao preset automático.")) {
+                  if (
+                    window.confirm(
+                      "Remover o mockup desta variação do produto? Volta a valer o mockup antigo dos modelos (se houver) ou o preset automático.",
+                    )
+                  ) {
                     saveMutation.mutate(null);
                   }
                 }}

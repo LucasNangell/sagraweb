@@ -83,3 +83,42 @@ def test_aplicar_no_modelo_por_variacao(banco):
 
     sem = svc.aplicar_no_modelo({"produto": "Bloco A5", "frente_versao": "Frente", "mockup_config_json": '{"x": 1}'})
     assert sem["mockup_config_json"] == '{"x": 1}' and sem["mockup_origem"] == "modelo"
+
+
+def test_herda_mockup_dos_modelos_inclusive_excluidos(banco, monkeypatch):
+    """Produto sem mockup salvo usa o dos modelos — inclusive dos combinados excluídos."""
+    from services import papelaria_produto_mockup_service as svc
+
+    giro_180 = json.dumps({"id": "flip", "interacao": {"rotateYVerso": 180}})
+    giro_45 = json.dumps({"id": "flip", "interacao": {"rotateYVerso": 45}})
+    modelos = [
+        {"ID": 12, "Produto": "Ct Visita", "FrenteVerso": "Frente e Verso", "ArquivoModelo": "CtVisitaFV.cdr", "Ativo": 0, "MockupConfigJson": giro_180},
+        {"ID": 13, "Produto": "Ct Visita", "FrenteVerso": "Frente e Verso", "ArquivoModelo": "CtVisitaFVA.cdr", "Ativo": 0, "MockupConfigJson": giro_180},
+        {"ID": 26, "Produto": "Ct Visita", "FrenteVerso": "Frente e Verso", "ArquivoModelo": "Insta.cdr", "Ativo": 0, "MockupConfigJson": '{"id": "outro"}'},
+        {"ID": 15, "Produto": "Ct Visita", "FrenteVerso": "Somente Frente", "ArquivoModelo": "CtVisita.cdr", "Ativo": 1, "MockupConfigJson": giro_45},
+    ]
+    original = svc.db.execute_query
+
+    def execute_query(sql, params=None):
+        if " ".join(sql.split()).startswith("SELECT ID, Produto, FrenteVerso"):
+            return [dict(m) for m in modelos]
+        return original(sql, params)
+
+    monkeypatch.setattr(svc.db, "execute_query", execute_query)
+    svc.invalidar_cache()
+    o = svc.obter("Ct Visita")
+    assert json.loads(o["frente_verso"])["interacao"]["rotateYVerso"] == 180  # mais comum entre os FV
+    assert o["herdado"]["frente_verso"] == {"modelo_id": 12, "arquivo": "CtVisitaFV.cdr", "ativo": False}
+    assert json.loads(o["frente"])["interacao"]["rotateYVerso"] == 45
+    assert o["salvo"] == {"frente": False, "frente_verso": False}
+
+    # Modelo só frente usado numa prova de 2 páginas recebe as duas variações.
+    m = svc.aplicar_no_modelo({"produto": "Ct Visita", "frente_versao": "Somente Frente", "mockup_config_json": giro_45})
+    assert json.loads(m["mockup_produto"]["frente_verso"])["interacao"]["rotateYVerso"] == 180
+
+    # Salvo no produto prevalece sobre o herdado.
+    banco.append({"ID": 1, "Produto": "Ct Visita", "Variante": "frente_verso", "MockupConfigJson": '{"id": "novo"}'})
+    svc.invalidar_cache()
+    o = svc.obter("Ct Visita")
+    assert json.loads(o["frente_verso"])["id"] == "novo"
+    assert o["salvo"]["frente_verso"] is True and o["herdado"]["frente_verso"] is None

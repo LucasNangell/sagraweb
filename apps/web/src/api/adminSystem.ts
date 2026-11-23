@@ -449,10 +449,17 @@ export async function fetchPapelariaAdminModelo(
   );
 }
 
+export type PapelariaMockupHerdado = { modelo_id: number; arquivo: string; ativo: boolean } | null;
+
 export type PapelariaProdutoMockup = {
   produto: string;
+  /** Configuração em vigor: a salva no produto ou, sem ela, a herdada dos modelos. */
   frente: string | null;
   frente_verso: string | null;
+  /** Variações gravadas no produto. */
+  salvo?: { frente?: boolean; frente_verso?: boolean };
+  /** De qual modelo veio a configuração herdada (só quando não há salva). */
+  herdado?: { frente?: PapelariaMockupHerdado; frente_verso?: PapelariaMockupHerdado };
 };
 
 /** Mockup 3D do produto (variações «frente» e «frente_verso»). */

@@ -8,6 +8,7 @@ reserva enquanto o produto não tiver a sua.
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -23,7 +24,7 @@ VARIANTES = (VARIANTE_FRENTE, VARIANTE_FRENTE_VERSO)
 
 _CACHE_TTL_S = 15.0
 _lock = threading.Lock()
-_cache: dict[str, Any] = {"em": 0.0, "dados": None}
+_cache: dict[str, Any] = {"em": 0.0, "dados": None, "herdados": None}
 _tabela_ok = False
 
 _SQL_TABELA = """
@@ -90,10 +91,62 @@ def _carregar() -> dict[str, dict[str, Optional[str]]]:
             continue
         item = dados.setdefault(_chave(r.get("Produto") or ""), {v: None for v in VARIANTES})
         item[variante] = _como_texto(r.get("MockupConfigJson"))
+    herdados = _carregar_herdados()
     with _lock:
         _cache["dados"] = dados
+        _cache["herdados"] = herdados
         _cache["em"] = time.monotonic()
     return dados
+
+
+def _normalizado(texto: str) -> str:
+    try:
+        return json.dumps(json.loads(texto), sort_keys=True, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return texto
+
+
+def _carregar_herdados() -> dict[str, dict[str, Optional[dict[str, Any]]]]:
+    """
+    Mockup antigo (MockupConfigJson dos modelos) por produto e variação —
+    inclusive de modelos excluídos, para não perder a configuração quando os
+    modelos combinados saem. Escolhe a configuração mais comum, preferindo
+    modelos ativos.
+    """
+    try:
+        rows = db.execute_query(
+            """
+            SELECT ID, Produto, FrenteVerso, ArquivoModelo, Ativo, MockupConfigJson
+            FROM tabPapelariaModelos
+            WHERE MockupConfigJson IS NOT NULL
+            """
+        ) or []
+    except Exception as exc:
+        logger.warning("Mockup herdado dos modelos indisponível: %s", exc)
+        return {}
+    grupos: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for r in rows:
+        texto = _como_texto(r.get("MockupConfigJson"))
+        if not texto or texto in ("null", "{}"):
+            continue
+        chave = (_chave(r.get("Produto") or ""), variante_do_modelo(r.get("FrenteVerso")))
+        grupos.setdefault(chave, []).append(
+            {
+                "json": texto,
+                "norm": _normalizado(texto),
+                "modelo_id": int(r["ID"]),
+                "arquivo": str(r.get("ArquivoModelo") or ""),
+                "ativo": bool(r.get("Ativo")),
+            }
+        )
+    out: dict[str, dict[str, Optional[dict[str, Any]]]] = {}
+    for (produto, variante), itens in grupos.items():
+        contagem: dict[str, int] = {}
+        for it in itens:
+            contagem[it["norm"]] = contagem.get(it["norm"], 0) + 1
+        escolhido = sorted(itens, key=lambda it: (not it["ativo"], -contagem[it["norm"]], it["modelo_id"]))[0]
+        out.setdefault(produto, {v: None for v in VARIANTES})[variante] = escolhido
+    return out
 
 
 def invalidar_cache() -> None:
@@ -102,12 +155,23 @@ def invalidar_cache() -> None:
 
 
 def obter(produto: str) -> dict[str, Any]:
+    """
+    Mockup do produto por variação. Sem configuração salva no produto, vale a
+    herdada dos modelos (``herdado`` diz de qual) — salvar fixa no produto.
+    """
     item = _carregar().get(_chave(produto)) or {}
-    return {
-        "produto": produto,
-        VARIANTE_FRENTE: item.get(VARIANTE_FRENTE),
-        VARIANTE_FRENTE_VERSO: item.get(VARIANTE_FRENTE_VERSO),
-    }
+    with _lock:
+        herdados = (_cache.get("herdados") or {}).get(_chave(produto)) or {}
+    out: dict[str, Any] = {"produto": produto, "salvo": {}, "herdado": {}}
+    for v in VARIANTES:
+        salvo = item.get(v)
+        h = herdados.get(v)
+        out[v] = salvo or (h["json"] if h else None)
+        out["salvo"][v] = bool(salvo)
+        out["herdado"][v] = (
+            None if salvo or not h else {"modelo_id": h["modelo_id"], "arquivo": h["arquivo"], "ativo": h["ativo"]}
+        )
+    return out
 
 
 def salvar(produto: str, variante: str, mockup_config_json: Any) -> dict[str, Any]:

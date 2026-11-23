@@ -524,6 +524,43 @@ def test_reduzir_para_caber_desmarcado_nao_reduz():
     assert s["size"] == pytest.approx(11, abs=0.01)
 
 
+def test_uppercase_grava_texto_em_maiusculas():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    campos = [
+        {
+            "marcador": "NOMETITULAR",
+            "pagina": 1,
+            "template": "{nome_deputado}",
+            "alinhamento": "esquerda",
+            "ancora": "topo",
+            "reduzir_para_caber": True,
+            "uppercase": True,
+        }
+    ]
+    out = svc.renderizar(pdf, campos, {"nome_deputado": "Maria Silva"})
+    s = _span_do_texto(out, "MARIA SILVA")
+    assert "MARIA SILVA" in s["text"].replace("\u00a0", " ")
+
+
+def test_normalizar_campo_uppercase():
+    from services import papelaria_prova_pdf_service as svc
+
+    norm = svc._normalizar_campo(
+        {
+            "marcador": "X",
+            "template": "{a}",
+            "uppercase": True,
+        },
+        {"X"},
+    )
+    assert norm is not None
+    assert norm["uppercase"] is True
+    norm_off = svc._normalizar_campo({"marcador": "X", "template": "{a}"}, {"X"})
+    assert norm_off["uppercase"] is False
+
+
 # --------------------------------------------------------------------------
 # Textos editados direto na prévia da página Papelaria.
 # --------------------------------------------------------------------------

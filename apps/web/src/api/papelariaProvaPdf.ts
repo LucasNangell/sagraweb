@@ -38,6 +38,8 @@ export interface ProvaPdfCampo {
   ancora: ProvaPdfAncora;
   entrelinha: number;
   reduzir_para_caber: boolean;
+  /** Se true, o texto resolvido do campo é gravado em maiúsculas no PDF. */
+  uppercase?: boolean;
 }
 
 export type ProvaPdfRedesDisposicao = "vertical" | "horizontal" | "grade";

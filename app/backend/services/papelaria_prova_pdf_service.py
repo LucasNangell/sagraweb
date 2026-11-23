@@ -565,6 +565,7 @@ def _normalizar_campo(raw: Any, marcadores: set[str]) -> Optional[dict[str, Any]
         "ancora": ancora,
         "entrelinha": max(0.8, min(3.0, entrelinha)),
         "reduzir_para_caber": bool(raw.get("reduzir_para_caber", True)),
+        "uppercase": bool(raw.get("uppercase", False)),
     }
 
 
@@ -1085,6 +1086,9 @@ def renderizar(
                     texto, ranges_negrito = _texto_editado(textos[chave_local])
                 else:
                     texto, ranges_negrito = _texto_do_campo(campo["template"], dados)
+                if campo.get("uppercase"):
+                    texto = texto.upper()
+                    # Ranges de negrito: offsets se mantêm (mesma quantidade de chars).
                 fonte_bold: Optional[FonteEmbutida] = None
                 bold_xref = 0
                 bold_recurso = ""

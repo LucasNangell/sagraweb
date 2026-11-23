@@ -18,6 +18,7 @@ export function campoVazio(t: ProvaPdfTexto): ProvaPdfCampo {
     ancora: "auto",
     entrelinha: 1.2,
     reduzir_para_caber: true,
+    uppercase: false,
   };
 }
 

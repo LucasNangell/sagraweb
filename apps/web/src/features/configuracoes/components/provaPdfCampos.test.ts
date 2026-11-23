@@ -55,8 +55,33 @@ describe("hidratarCampos", () => {
     const { mapa, orfaos } = hidratarCampos(data);
     expect(mapa[chaveTexto(texto("NOME"))].template).toBe("{nome_deputado}");
     expect(mapa[chaveTexto(texto("NOME"))].alinhamento).toBe("centro");
+    expect(mapa[chaveTexto(texto("NOME"))].uppercase).toBe(false);
     expect(mapa[chaveTexto(texto("FIXO"))].template).toBe("");
     expect(orfaos).toHaveLength(0);
+  });
+
+  it("preserva uppercase salvo no campo", () => {
+    const data = modelo({
+      campos: [
+        {
+          marcador: "NOME",
+          pagina: 1,
+          template: "{nome_deputado}",
+          alinhamento: "auto",
+          ancora: "auto",
+          entrelinha: 1.2,
+          reduzir_para_caber: true,
+          uppercase: true,
+        },
+      ],
+      analise: {
+        paginas: [],
+        fontes: [],
+        textos: [texto("NOME")],
+      },
+    });
+    const { mapa } = hidratarCampos(data);
+    expect(mapa[chaveTexto(texto("NOME"))].uppercase).toBe(true);
   });
 
   it("casa pagina 0 com o primeiro texto do marcador", () => {

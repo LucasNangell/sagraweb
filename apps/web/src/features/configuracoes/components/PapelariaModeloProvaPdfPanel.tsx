@@ -308,6 +308,19 @@ export function PapelariaModeloProvaPdfPanel({
             />
             Reduzir se passar da margem de 3 mm
           </label>
+          <label
+            className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-600"
+            title="Grava o texto deste campo sempre em maiúsculas no PDF (prévia e prova)."
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(c.uppercase)}
+              disabled={!ligado}
+              onChange={(e) => opts.onChange({ uppercase: e.target.checked })}
+              data-testid={opts.testId ? `${opts.testId}-uppercase` : undefined}
+            />
+            Maiúsculas (uppercase)
+          </label>
         </div>
       </>
     );

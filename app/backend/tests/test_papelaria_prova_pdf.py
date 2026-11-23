@@ -444,3 +444,81 @@ def test_previa_png_aceita_modelo_e_usa_cache_de_cores(tmp_path, monkeypatch):
     r2 = svc.previa_png(9, {"nome_deputado": "Bia"}, dpi=50, modelo={})
     assert r1["paginas"] and r2["paginas"] and r1["paginas"] != r2["paginas"]
     assert len(chamadas) == 1
+
+
+# --------------------------------------------------------------------------
+# «Reduzir para caber»: margem mínima fixa de 3 mm, redução mínima.
+# --------------------------------------------------------------------------
+
+
+def _span_do_texto(pdf: bytes, trecho: str) -> dict:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        page = doc[0]
+        largura = page.rect.width
+        for b in page.get_text("dict")["blocks"]:
+            for l in b.get("lines", []):
+                for s in l["spans"]:
+                    if trecho in s["text"].replace(" ", " "):
+                        return {**s, "largura_pagina": largura}
+    finally:
+        doc.close()
+    raise AssertionError(f"texto {trecho!r} não encontrado")
+
+
+def _campo_esquerda(reduzir: bool = True) -> list[dict]:
+    return [
+        {
+            "marcador": "NOMETITULAR",
+            "pagina": 1,
+            "template": "{nome_deputado}",
+            "alinhamento": "esquerda",
+            "ancora": "topo",
+            "reduzir_para_caber": reduzir,
+        }
+    ]
+
+
+def _nome_com_largura(svc, alvo_pt: float) -> str:
+    """Nome em Arial 11 pt com largura ≈ alvo_pt."""
+    fonte = fitz.Font(fontfile=_FONTE)
+    nome = "Maria"
+    while fonte.text_length(nome + "a", fontsize=11) < alvo_pt:
+        nome += "a"
+    return nome
+
+
+def test_reduzir_para_caber_nao_reduz_texto_que_respeita_3mm():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()  # NOMETITULAR em x=20 pt (~7 mm), página 90 mm
+    # Termina a ~5 mm da borda: antes era reduzido (margem = texto mais perto
+    # da borda, 7 mm); agora cabe dentro da margem mínima de 3 mm.
+    nome = _nome_com_largura(svc, 255.1 - 20 - 14.2)
+    s = _span_do_texto(svc.renderizar(pdf, _campo_esquerda(), {"nome_deputado": nome}), nome)
+    assert s["size"] == pytest.approx(11, abs=0.01)
+    assert s["largura_pagina"] - s["bbox"][2] >= svc.MARGEM_MINIMA_PT - 0.5
+
+
+def test_reduzir_para_caber_reduz_o_minimo_ate_3mm():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    nome = _nome_com_largura(svc, 255.1 - 20 + 10)  # passaria da borda
+    s = _span_do_texto(svc.renderizar(pdf, _campo_esquerda(), {"nome_deputado": nome}), nome)
+    assert s["size"] < 11
+    # Encosta na margem de 3 mm (tolerância de meio ponto pelo arredondamento do glifo).
+    folga = s["largura_pagina"] - s["bbox"][2]
+    assert folga == pytest.approx(svc.MARGEM_MINIMA_PT, abs=0.6)
+
+
+def test_reduzir_para_caber_desmarcado_nao_reduz():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_modelo()
+    nome = _nome_com_largura(svc, 255.1 - 20 + 10)
+    s = _span_do_texto(
+        svc.renderizar(pdf, _campo_esquerda(reduzir=False), {"nome_deputado": nome}),
+        nome[:12],  # o fim sai da página e não é extraído
+    )
+    assert s["size"] == pytest.approx(11, abs=0.01)

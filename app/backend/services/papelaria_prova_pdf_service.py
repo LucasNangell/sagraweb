@@ -35,6 +35,11 @@ WORKER_ID_SERVIDOR = "servidor-prova-pdf"
 ALINHAMENTOS = ("auto", "esquerda", "centro", "direita")
 ANCORAS = ("auto", "topo", "base", "centro")
 MAX_PDF_BYTES = 30 * 1024 * 1024
+# «Reduzir para caber»: distância mínima do texto até a borda da página.
+MARGEM_MINIMA_MM = 3.0
+MARGEM_MINIMA_PT = MARGEM_MINIMA_MM * 72.0 / 25.4
+# Limite de legibilidade: abaixo disso o texto não é mais reduzido (gera aviso).
+FATOR_REDUCAO_MINIMO = 0.6
 # Caracteres que um campo costuma precisar (aviso se a fonte embutida não tiver).
 CARACTERES_COMUNS = (
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -951,21 +956,6 @@ def renderizar(
         if not por_pagina:
             raise ProvaPdfError("Nenhum campo configurado foi encontrado no PDF do modelo.")
 
-        # Margem da página = a menor distância de um texto do PDF até a borda
-        # (o texto novo pode ocupar até ela antes de ser reduzido).
-        margem_pagina: dict[int, float] = {}
-        for pidx in por_pagina:
-            pg = doc[pidx]
-            ws = pg.rect.width
-            dist = [
-                min(s["bbox"][0], ws - s["bbox"][2])
-                for b in pg.get_text("dict")["blocks"]
-                for l in b.get("lines", [])
-                for s in l["spans"]
-                if s["text"].strip()
-            ]
-            margem_pagina[pidx] = max(5.67, min(dist) if dist else 14.17)  # ≥ 2 mm
-
         fontes_cache: dict[int, FonteEmbutida] = {}
         for pidx, itens in por_pagina.items():
             page = doc[pidx]
@@ -1050,7 +1040,7 @@ def renderizar(
                 if ancora == "auto":
                     ancora = ancora_sugerida(bbox.y0, bbox.y1, altura_pg)
                 segs_linhas = _segmentos_por_linha(texto, ranges_negrito)
-                margem = margem_pagina.get(pidx, 0.0)
+                margem = MARGEM_MINIMA_PT
                 if alinhar == "esquerda":
                     disponivel = largura_pg - margem - alvo["origem"].x
                 elif alinhar == "direita":
@@ -1065,8 +1055,19 @@ def renderizar(
                     ),
                     default=0.0,
                 )
+                # «Reduzir para caber»: só quando a linha mais larga invadiria a
+                # margem mínima de 3 mm da página — e só o necessário para
+                # encostar nela (fonte e espaçamento escalam juntos).
                 if campo.get("reduzir_para_caber", True) and disponivel > 0 and maior > disponivel:
-                    fator = max(0.6, disponivel / maior)
+                    fator = disponivel / maior
+                    if fator < FATOR_REDUCAO_MINIMO:
+                        fator = FATOR_REDUCAO_MINIMO
+                        if avisos is not None:
+                            avisos.append(
+                                f"O campo «{campo['marcador']}» ficou longo demais: mesmo reduzido a "
+                                f"{int(FATOR_REDUCAO_MINIMO * 100)}% ele passa da margem de "
+                                f"{MARGEM_MINIMA_MM:g} mm da página."
+                            )
                     tam *= fator
                     tc *= fator
                 entrelinha = tam * float(campo.get("entrelinha") or 1.2)

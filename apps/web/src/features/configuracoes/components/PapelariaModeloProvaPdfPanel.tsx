@@ -275,14 +275,17 @@ export function PapelariaModeloProvaPdfPanel({
               </option>
             ))}
           </select>
-          <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-600">
+          <label
+            className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-600"
+            title="Só reduz se o texto ficar a menos de 3 mm da borda da página — e apenas o necessário para respeitar os 3 mm."
+          >
             <input
               type="checkbox"
               checked={c.reduzir_para_caber}
               disabled={!ligado}
               onChange={(e) => opts.onChange({ reduzir_para_caber: e.target.checked })}
             />
-            Reduzir para caber
+            Reduzir se passar da margem de 3 mm
           </label>
         </div>
       </>

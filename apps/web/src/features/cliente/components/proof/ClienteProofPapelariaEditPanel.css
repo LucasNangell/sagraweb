@@ -1,3 +1,15 @@
+.cliente-proof-edit--pdf {
+  gap: 1rem;
+}
+
+.cliente-proof-edit__pdf-preview {
+  min-height: min(55vh, 520px);
+}
+
+.cliente-proof-edit-preview-pdf {
+  min-height: min(55vh, 520px);
+}
+
 .cliente-proof-edit {
   /* 964 / 567 — cartão horizontal típico */
   --preview-ar: 1.699;

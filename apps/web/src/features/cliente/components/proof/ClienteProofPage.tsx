@@ -5,9 +5,11 @@ import { Link } from "@tanstack/react-router";
 
 import { cn } from "@sagra/ui";
 
+import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 import {
   fetchProofPortalData,
   fetchProofPreviewPages,
+  previaPdfPortal,
   proofPdfUrl,
   proofPreviewBaseUrl,
   respondProof,
@@ -16,6 +18,12 @@ import {
 import type { PapelariaField } from "@/features/papelaria/types";
 import { parsePreviewConfigJson } from "@/features/papelaria/preview";
 import { getPapelariaMockupConfig } from "@/features/papelaria/mockup";
+import {
+  interpretarEdicao,
+  TEXTOS_DADOS_KEY,
+  textosParaDados,
+} from "@/features/papelaria/papelariaTextosEditados";
+import { REDES_DADOS_KEY, REDES_ESTILO_DADOS_KEY } from "@/features/papelaria/components/PapelariaRedesPicker";
 import {
   hasSeenPortalAprovacaoAlteracoesTour,
   hasSeenPortalAprovacaoTour,
@@ -113,6 +121,49 @@ const PREVIEW_DISCLAIMER_EDIT =
   "Esta é apenas uma visualização prévia aproximada e não constitui prova oficial. " +
   "Ao enviar a solicitação de alterações, você receberá uma nova prova para aprovação.";
 
+const PREVIEW_DISCLAIMER_PDF =
+  "A prévia usa o mesmo PDF e as mesmas fontes da prova. Clique nos textos da imagem para editá-los. " +
+  "Ao enviar a solicitação, você receberá uma nova prova oficial para aprovação.";
+
+function parseTextosExtras(raw: string | undefined): Record<string, string> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function atualizarRedesJson(
+  atual: string | undefined,
+  chaveRede: string,
+  valor: string,
+): string {
+  let lista: Array<{ chave: string; valor: string }> = [];
+  try {
+    const parsed = JSON.parse(atual || "[]") as unknown;
+    if (Array.isArray(parsed)) {
+      lista = parsed
+        .filter((x): x is { chave: string; valor: string } =>
+          Boolean(x && typeof x === "object" && typeof (x as { chave?: unknown }).chave === "string"),
+        )
+        .map((x) => ({ chave: x.chave, valor: String(x.valor ?? "") }));
+    }
+  } catch {
+    lista = [];
+  }
+  const trimmed = valor.trim();
+  const sem = lista.filter((r) => r.chave !== chaveRede);
+  if (trimmed) sem.push({ chave: chaveRede, valor: trimmed });
+  return JSON.stringify(sem);
+}
+
 export function ClienteProofPage({
   token,
   osId,
@@ -130,6 +181,9 @@ export function ClienteProofPage({
   const [observacao, setObservacao] = useState("");
   const [alteracoesAdicionais, setAlteracoesAdicionais] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [textosEditados, setTextosEditados] = useState<Record<string, string>>({});
+  const [redesJson, setRedesJson] = useState<string | undefined>(undefined);
+  const [redesEstilo, setRedesEstilo] = useState<string | undefined>(undefined);
   const [editMode, setEditMode] = useState(false);
   const [alteracoesRequestMode, setAlteracoesRequestMode] = useState(false);
   const [done, setDone] = useState<"approved" | "rejected" | null>(null);
@@ -246,10 +300,60 @@ export function ClienteProofPage({
     return parsePreviewConfigJson(raw);
   }, [papelaria?.preview_config_json]);
 
+  const temProvaPdf = Boolean(papelaria?.tem_prova_pdf && papelaria?.modelo_id);
   const hasLivePreview =
-    livePreviewParsed?.ok === true &&
     Boolean(papelaria?.modelo_id) &&
-    Object.keys(fieldValues).length > 0;
+    (temProvaPdf ||
+      (livePreviewParsed?.ok === true && Object.keys(fieldValues).length > 0));
+
+  const camposEditaveisPrevia = useMemo(
+    () => new Set((papelaria?.campos_formulario ?? []).map((f) => f.key)),
+    [papelaria?.campos_formulario],
+  );
+
+  const previaValues = useMemo(() => {
+    const out: Record<string, string> = { ...fieldValues };
+    const textos = textosParaDados(textosEditados);
+    if (textos) out[TEXTOS_DADOS_KEY] = textos;
+    if (redesJson?.trim()) out[REDES_DADOS_KEY] = redesJson;
+    if (redesEstilo?.trim()) out[REDES_ESTILO_DADOS_KEY] = redesEstilo;
+    return out;
+  }, [fieldValues, textosEditados, redesJson, redesEstilo]);
+
+  const fetchPreviaPortal = useMemo(
+    () => previaPdfPortal(ano, osId, token),
+    [ano, osId, token],
+  );
+
+  const handleEditarTextoPrevia = (regiao: ProvaPdfRegiao, texto: string) => {
+    if (regiao.tipo === "rede" && regiao.rede_chave) {
+      setRedesJson((prev) => atualizarRedesJson(prev, regiao.rede_chave!, texto));
+      return;
+    }
+    const edicao = interpretarEdicao(regiao, texto, camposEditaveisPrevia);
+    if (edicao.tipo === "variavel") {
+      setTextosEditados((prev) => {
+        const next = { ...prev };
+        delete next[regiao.chave];
+        return next;
+      });
+      setFieldValues((prev) => ({ ...prev, [edicao.chave]: edicao.valor }));
+      return;
+    }
+    setTextosEditados((prev) => ({ ...prev, [regiao.chave]: edicao.texto }));
+  };
+
+  const handleRestaurarTextoPrevia = (regiao: ProvaPdfRegiao) => {
+    if (regiao.tipo === "rede" && regiao.rede_chave) {
+      setRedesJson((prev) => atualizarRedesJson(prev, regiao.rede_chave!, ""));
+      return;
+    }
+    setTextosEditados((prev) => {
+      const next = { ...prev };
+      delete next[regiao.chave];
+      return next;
+    });
+  };
 
   const pdfFit = useMemo(() => {
     const preview = previewQuery.data;
@@ -288,11 +392,20 @@ export function ClienteProofPage({
             papelaria?.job_dados ?? {},
             fieldValues,
           );
+          const textos = textosParaDados(textosEditados);
+          if (textos) changes[TEXTOS_DADOS_KEY] = textos;
+          const redesOrig = papelaria?.previa_extras?.[REDES_DADOS_KEY] ?? "";
+          if ((redesJson ?? "") !== redesOrig && redesJson !== undefined) {
+            changes[REDES_DADOS_KEY] = redesJson;
+          }
           if (Object.keys(changes).length > 0) {
             alteracoesPayload = changes;
           }
         } else {
-          alteracoesPayload = fieldValues;
+          alteracoesPayload = { ...fieldValues };
+          const textos = textosParaDados(textosEditados);
+          if (textos) alteracoesPayload[TEXTOS_DADOS_KEY] = textos;
+          if (redesJson?.trim()) alteracoesPayload[REDES_DADOS_KEY] = redesJson;
         }
       }
 
@@ -373,6 +486,9 @@ export function ClienteProofPage({
     }
     if (isPapelaria && papelaria) {
       setFieldValues({ ...(papelaria.job_dados ?? {}) });
+      setTextosEditados(parseTextosExtras(papelaria.previa_extras?.[TEXTOS_DADOS_KEY]));
+      setRedesJson(papelaria.previa_extras?.[REDES_DADOS_KEY]);
+      setRedesEstilo(papelaria.previa_extras?.[REDES_ESTILO_DADOS_KEY]);
       setEditMode(true);
       if (publicPortal) setAlteracoesRequestMode(true);
       return;
@@ -409,9 +525,12 @@ export function ClienteProofPage({
         Object.keys(
           collectChangedFields(original, fieldValues),
         ).length > 0;
+      const hasTextos = Object.keys(textosEditados).length > 0;
+      const redesOrig = papelaria?.previa_extras?.[REDES_DADOS_KEY] ?? "";
+      const hasRedes = Boolean(redesJson !== undefined && (redesJson ?? "") !== redesOrig);
       const hasAdditional = Boolean(alteracoesAdicionais.trim());
       const hasFiles = uploadedExampleFiles.length > 0;
-      if (!hasFieldChanges && !hasAdditional && !hasFiles) {
+      if (!hasFieldChanges && !hasTextos && !hasRedes && !hasAdditional && !hasFiles) {
         setErrorMsg(
           "Descreva as alterações desejadas, altere os campos ou envie um arquivo de exemplo.",
         );
@@ -808,24 +927,30 @@ export function ClienteProofPage({
                   </p>
                 </header>
                 {publicPortal ? (
-                  <ClienteProofPortalInstructionBanner />
+                  <ClienteProofPortalInstructionBanner fiel={temProvaPdf} />
                 ) : (
                   <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    {PREVIEW_DISCLAIMER_EDIT}
+                    {temProvaPdf ? PREVIEW_DISCLAIMER_PDF : PREVIEW_DISCLAIMER_EDIT}
                   </div>
                 )}
                 <div ref={previewScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
                   {hasLivePreview ? (
                     <ClienteProofPapelariaEditPanel
-                      previewConfig={livePreviewParsed!.config}
+                      previewConfig={livePreviewParsed?.ok ? livePreviewParsed.config : null}
                       camposFormulario={papelaria!.campos_formulario ?? []}
                       fieldValues={fieldValues}
+                      previaValues={previaValues}
                       modeloId={papelaria!.modelo_id}
                       disabled={respondMutation.isPending}
                       resolvePreviewBaseUrl={resolvePreviewBase}
                       onFieldChange={(key, value) =>
                         setFieldValues((prev) => ({ ...prev, [key]: value }))
                       }
+                      temProvaPdf={temProvaPdf}
+                      composicao={papelaria!.composicao ?? null}
+                      fetchPrevia={fetchPreviaPortal}
+                      onEditarTextoPrevia={handleEditarTextoPrevia}
+                      onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
                     />
                   ) : (
                     <p className="py-8 text-center text-sm text-neutral-500">

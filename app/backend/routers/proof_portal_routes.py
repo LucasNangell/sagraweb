@@ -868,6 +868,70 @@ def serve_proof_preview_base(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class ProofPortalPreviaPdfPayload(BaseModel):
+    """Valores do formulário para a prévia PDF ao vivo no portal (token)."""
+
+    dados: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/client/proof/{ano}/{os_id}/previa-pdf")
+def previa_pdf_portal(
+    ano: int,
+    os_id: int,
+    payload: ProofPortalPreviaPdfPayload,
+    token: str = Query(...),
+):
+    """
+    Prévia PDF ao vivo no portal de aprovação: mesma renderização da Papelaria
+    (fontes embutidas, frente/verso, regiões editáveis). Escopo do token.
+    """
+    proof = _validate_proof_token(os_id, ano, token)
+    from services.proof_papelaria_service import build_portal_papelaria_edit_payload
+    from services import papelaria_prova_pdf_service as svc
+    from services import papelaria_models_service as models_svc
+    from services.papelaria_jobs_service import get_job
+    from services.papelaria_faces_service import composicao_do_job
+
+    edit = build_portal_papelaria_edit_payload(proof, ano, os_id)
+    if not edit or not edit.get("tem_prova_pdf") or not edit.get("modelo_id"):
+        raise HTTPException(
+            status_code=404,
+            detail="Prévia PDF não disponível para esta prova.",
+        )
+    modelo_id = int(edit["modelo_id"])
+    modelo = models_svc.get_modelo_by_id(modelo_id)
+    if not modelo:
+        raise HTTPException(status_code=404, detail="Modelo não encontrado.")
+
+    # Composição só a do job (cliente não escolhe outro frente/verso).
+    job = get_job(int(edit["job_id"])) if edit.get("job_id") else None
+    composicao = composicao_do_job(job) if job else edit.get("composicao")
+
+    dados = {
+        k: v
+        for k, v in (payload.dados or {}).items()
+        if not str(k).startswith("__")
+        or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY)
+    }
+    try:
+        return svc.previa_png(
+            modelo_id,
+            dados,
+            dpi=110,
+            modelo=modelo,
+            composicao=composicao,
+        )
+    except svc.ProvaPdfError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(
+            "Erro na prévia PDF do portal OS %s/%s: %s", os_id, ano, e
+        )
+        raise HTTPException(
+            status_code=500, detail="Erro ao gerar a prévia do modelo."
+        ) from e
+
+
 class ProofResponseRequest(BaseModel):
 
     token: str = Field(..., min_length=10)

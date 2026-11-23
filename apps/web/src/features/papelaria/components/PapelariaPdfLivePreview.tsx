@@ -39,6 +39,13 @@ function tituloPagina(indice: number): string {
  * formulário com a mesma renderização da prova final (fonte, cor, negrito,
  * linhas que somem quando vazias). Substitui a prévia por imagem + posições.
  */
+export type FetchPreviaPdf = (
+  modeloId: number,
+  dados: Record<string, string>,
+  signal?: AbortSignal,
+  composicao?: PapelariaComposicao | null,
+) => Promise<ProvaPdfPrevia>;
+
 export function PapelariaPdfLivePreview({
   modeloId,
   values,
@@ -46,6 +53,8 @@ export function PapelariaPdfLivePreview({
   className,
   onEditarTexto,
   onRestaurarTexto,
+  fetchPrevia = previaPdfAoVivo,
+  queryKeyPrefix = "papelaria",
 }: {
   modeloId: number;
   values: Record<string, string>;
@@ -56,6 +65,10 @@ export function PapelariaPdfLivePreview({
   onEditarTexto?: (regiao: ProvaPdfRegiao, texto: string) => void;
   /** Volta o campo ao texto do template. */
   onRestaurarTexto?: (regiao: ProvaPdfRegiao) => void;
+  /** Por padrão chama a API autenticada; o portal passa a variante com token. */
+  fetchPrevia?: FetchPreviaPdf;
+  /** Prefixo da queryKey (ex.: portal) para não misturar caches. */
+  queryKeyPrefix?: string;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
@@ -64,9 +77,9 @@ export function PapelariaPdfLivePreview({
     : "";
 
   const query = useQuery({
-    queryKey: ["papelaria", "previa-pdf", modeloId, chaveComposicao, chaveDebounced],
+    queryKey: [queryKeyPrefix, "previa-pdf", modeloId, chaveComposicao, chaveDebounced],
     queryFn: ({ signal }) =>
-      previaPdfAoVivo(
+      fetchPrevia(
         modeloId,
         JSON.parse(chaveDebounced) as Record<string, string>,
         signal,

@@ -145,6 +145,81 @@ class TestProofPortalPreviewEndpoints:
             serve_proof_preview_page(2026, 5557, 1, token="bad")
         assert exc.value.status_code == 403
 
+    def test_previa_pdf_portal_exige_tem_prova_pdf(self, monkeypatch):
+        from routers.proof_portal_routes import (
+            ProofPortalPreviaPdfPayload,
+            previa_pdf_portal,
+        )
+
+        monkeypatch.setattr(
+            "routers.proof_portal_routes._validate_proof_token",
+            lambda *_a, **_k: self._proof_row(),
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.build_portal_papelaria_edit_payload",
+            lambda *_a, **_k: {
+                "modelo_id": 7,
+                "job_id": 99,
+                "tem_prova_pdf": False,
+            },
+        )
+        with pytest.raises(HTTPException) as exc:
+            previa_pdf_portal(
+                2026,
+                5557,
+                ProofPortalPreviaPdfPayload(dados={"nome_deputado": "Ana"}),
+                token="tok",
+            )
+        assert exc.value.status_code == 404
+
+    def test_previa_pdf_portal_ok(self, monkeypatch):
+        from routers.proof_portal_routes import (
+            ProofPortalPreviaPdfPayload,
+            previa_pdf_portal,
+        )
+
+        monkeypatch.setattr(
+            "routers.proof_portal_routes._validate_proof_token",
+            lambda *_a, **_k: self._proof_row(),
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.build_portal_papelaria_edit_payload",
+            lambda *_a, **_k: {
+                "modelo_id": 7,
+                "job_id": 99,
+                "tem_prova_pdf": True,
+                "composicao": None,
+            },
+        )
+        monkeypatch.setattr(
+            "services.papelaria_models_service.get_modelo_by_id",
+            lambda *_a, **_k: {"id": 7, "produto": "Cartão"},
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.get_job",
+            lambda *_a, **_k: {"id": 99, "modelo_id": 7, "dados": {}},
+        )
+        monkeypatch.setattr(
+            "services.papelaria_faces_service.composicao_do_job",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_prova_pdf_service.previa_png",
+            lambda *a, **k: {
+                "paginas": ["data:image/png;base64,AAA"],
+                "ms": 12,
+                "avisos": [],
+                "regioes": [],
+            },
+        )
+        out = previa_pdf_portal(
+            2026,
+            5557,
+            ProofPortalPreviaPdfPayload(dados={"nome_deputado": "Ana"}),
+            token="tok",
+        )
+        assert len(out["paginas"]) == 1
+
 
 class TestProofPreviewService:
     def test_ensure_proof_preview_pages_cria_png(self, tmp_path, monkeypatch):

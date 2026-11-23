@@ -216,17 +216,24 @@ export function ClienteProofExampleFileModal({
   );
 }
 
-export function ClienteProofPortalInstructionBanner() {
+export function ClienteProofPortalInstructionBanner({
+  fiel = false,
+}: {
+  /** Prévia PDF ao vivo (mesmas fontes da prova). */
+  fiel?: boolean;
+}) {
   return (
     <div className="border-b border-amber-300 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-950 sm:px-5">
       <p>
-        Altere os dados do trabalho diretamente nos campos abaixo e veja uma prévia aproximada de
-        como ficará o trabalho após as alterações.
+        {fiel
+          ? "Altere os dados nos campos ou clique nos textos da prévia (frente e verso). A imagem usa o mesmo PDF e as mesmas fontes da prova."
+          : "Altere os dados do trabalho diretamente nos campos abaixo e veja uma prévia aproximada de como ficará o trabalho após as alterações."}
       </p>
       <p className="mt-3 rounded-lg border border-amber-300/80 bg-amber-100/80 px-3 py-2.5 font-semibold text-amber-950">
         <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
-        A prévia não constitui uma prova oficial. Ao solicitar as alterações você receberá uma nova
-        prova para aprovação.
+        {fiel
+          ? "Ao solicitar as alterações você receberá uma nova prova oficial para aprovação."
+          : "A prévia não constitui uma prova oficial. Ao solicitar as alterações você receberá uma nova prova para aprovação."}
       </p>
       <p className="mt-3">
         Caso as alterações que você deseja não estejam disponíveis nos campos abaixo, descreva-as

@@ -1,6 +1,7 @@
 import { apiUrl } from "@/lib/api";
+import type { ProvaPdfPrevia } from "@/api/papelariaProvaPdf";
 import type { ProvaWebManifestBase } from "@/api/provaWeb";
-import type { PapelariaField } from "@/features/papelaria/types";
+import type { PapelariaComposicao, PapelariaField } from "@/features/papelaria/types";
 
 export interface ProofPortalPapelariaData {
   proof_id: number;
@@ -10,6 +11,11 @@ export interface ProofPortalPapelariaData {
   campos_formulario: PapelariaField[];
   preview_config_json?: string | null;
   tem_preview_config?: boolean;
+  /** Modelo com PDF de prova: prévia ao vivo igual à Papelaria. */
+  tem_prova_pdf?: boolean;
+  composicao?: PapelariaComposicao | null;
+  /** `__redes` / `__textos` etc. gravados no job para a prévia. */
+  previa_extras?: Record<string, string>;
   produto?: string;
   arquivo_modelo?: string;
   frente_verso?: string;
@@ -116,6 +122,28 @@ export async function fetchProofPreviewPages(
 ): Promise<ProofPreviewPagesData> {
   const params = new URLSearchParams({ token });
   return proofApiFetch(`/client/proof/${ano}/${osId}/preview-pages?${params}`);
+}
+
+/** Prévia PDF ao vivo no portal (token) — mesma renderização da Papelaria. */
+export function previaPdfPortal(
+  ano: number,
+  osId: number,
+  token: string,
+): (
+  _modeloId: number,
+  dados: Record<string, string>,
+  signal?: AbortSignal,
+  _composicao?: PapelariaComposicao | null,
+) => Promise<ProvaPdfPrevia> {
+  return (_modeloId, dados, signal) => {
+    const params = new URLSearchParams({ token });
+    return proofApiFetch(`/client/proof/${ano}/${osId}/previa-pdf?${params}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dados }),
+      signal,
+    });
+  };
 }
 
 export async function fetchProofPessoaNome(

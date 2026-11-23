@@ -150,9 +150,9 @@ def build_portal_papelaria_edit_payload(
 
     modelo_id = job.get("modelo_id")
     modelo = get_modelo_with_preview(int(modelo_id)) if modelo_id else None
-    job_dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    job_dados_raw = job.get("dados") if isinstance(job.get("dados"), dict) else {}
     # Corel real da pasta: mesmos campos do produto que o SEFOC vê/editou.
-    produto = carregar_de_dados(job_dados)
+    produto = carregar_de_dados(job_dados_raw)
     campos_formulario = campos_formulario_com_produto(
         (modelo or {}).get("campos_formulario") or [],
         (modelo or {}).get("campos") or {},
@@ -161,7 +161,26 @@ def build_portal_papelaria_edit_payload(
     preview_json = preview_config_com_produto(
         (modelo or {}).get("preview_config_json"), produto
     )
-    job_dados = {k: v for k, v in job_dados.items() if not str(k).startswith("__")}
+    job_dados = {k: v for k, v in job_dados_raw.items() if not str(k).startswith("__")}
+
+    from services.papelaria_faces_service import composicao_do_job
+    from services.papelaria_prova_pdf_service import tem_modelo_pdf
+
+    composicao = composicao_do_job(job)
+    tem_pdf = bool(modelo_id) and (
+        tem_modelo_pdf(int(modelo_id))
+        or (
+            composicao is not None
+            and tem_modelo_pdf(int(composicao["frente"]["modelo_id"]))
+            and tem_modelo_pdf(int(composicao["verso"]["modelo_id"]))
+        )
+    )
+    # Chaves internas usadas na prévia PDF ao vivo (redes / textos editados).
+    extras_previa: dict[str, str] = {}
+    for chave in ("__redes", "__redes_estilo", "__textos"):
+        val = job_dados_raw.get(chave)
+        if val is not None and str(val).strip() != "":
+            extras_previa[chave] = val if isinstance(val, str) else str(val)
 
     return {
         "proof_id": ctx["proof_id"],
@@ -171,6 +190,9 @@ def build_portal_papelaria_edit_payload(
         "campos_formulario": campos_formulario,
         "preview_config_json": preview_json,
         "tem_preview_config": bool(preview_json),
+        "tem_prova_pdf": tem_pdf,
+        "composicao": composicao,
+        "previa_extras": extras_previa,
         "produto": ctx.get("produto") or (modelo or {}).get("produto") or "",
         "arquivo_modelo": ctx.get("arquivo_modelo") or "",
         "frente_verso": ctx.get("frente_verso") or "",

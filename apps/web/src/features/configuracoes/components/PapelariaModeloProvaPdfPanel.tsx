@@ -47,6 +47,22 @@ const ALINHAMENTOS: Array<{ id: ProvaPdfAlinhamento; label: string }> = [
   { id: "centro", label: "Centro" },
   { id: "direita", label: "Direita" },
 ];
+/** Variáveis padrão do formulário da Papelaria (mesma ordem do backend). */
+const VARIAVEIS_PADRAO: Array<{ key: string; label: string }> = [
+  { key: "nome_deputado", label: "Nome do deputado/deputada" },
+  { key: "genero", label: "Gênero/Cargo" },
+  { key: "genero_curto", label: "Deputado/Deputada (derivado do gênero)" },
+  { key: "artigo", label: "do/da (derivado do gênero)" },
+  { key: "partido", label: "Partido" },
+  { key: "uf", label: "UF" },
+  { key: "anexo", label: "Anexo" },
+  { key: "gabinete", label: "Gabinete" },
+  { key: "email", label: "E-mail" },
+  { key: "nome_assessor", label: "Nome do assessor/assessora" },
+  { key: "contato_assessor", label: "Contato do assessor/assessora" },
+  { key: "funcao_assessor", label: "Função do assessor/assessora" },
+];
+
 const ANCORAS: Array<{ id: ProvaPdfAncora; label: string }> = [
   { id: "auto", label: "Automático" },
   { id: "topo", label: "Cresce p/ baixo" },
@@ -116,10 +132,12 @@ export function PapelariaModeloProvaPdfPanel({
         .filter((c): c is ProvaPdfCampo => Boolean(c?.template?.trim())),
     [orfaosKeys, campos],
   );
-  const variaveisModelo = useMemo(
-    () => (detalheQuery.data?.campos_formulario ?? []).map((f) => ({ key: f.key, label: f.label })),
-    [detalheQuery.data],
-  );
+  const variaveisModelo = useMemo(() => {
+    const doModelo = (detalheQuery.data?.campos_formulario ?? []).map((f) => ({ key: f.key, label: f.label }));
+    // Modelo novo (só PDF) ainda sem campos: sugere as variáveis padrão do sistema.
+    if (doModelo.length) return doModelo;
+    return VARIAVEIS_PADRAO;
+  }, [detalheQuery.data]);
   const camposLigados = useMemo(
     () => Object.values(campos).filter((c) => c.template.trim()),
     [campos],

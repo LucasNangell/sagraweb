@@ -749,6 +749,38 @@ def obter_inspecao_cdr_admin(
         raise HTTPException(500, "Erro ao consultar inspeção de .cdr.")
 
 
+@router.post("/admin/modelos/criar-de-pdf")
+async def criar_modelo_de_pdf(
+    produto: str = Form(...),
+    frente_verso: str = Form("Frente"),
+    cores: str = Form(""),
+    nome_exibicao: str = Form(""),
+    file: UploadFile = File(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Nova frente ou novo verso só com o PDF (sem .cdr)."""
+    from services import papelaria_modelo_admin_service as admin_svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+
+    try:
+        content = await file.read()
+        if len(content) > pdf_svc.MAX_PDF_BYTES:
+            raise ValueError("PDF maior que 30 MB.")
+        return admin_svc.create_modelo_from_pdf(
+            produto=produto,
+            frente_verso=frente_verso,
+            cores=cores,
+            nome_exibicao=nome_exibicao.strip() or None,
+            filename=file.filename or "modelo.pdf",
+            content=content,
+        )
+    except (ValueError, pdf_svc.ProvaPdfError) as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao criar modelo via PDF: %s", e)
+        raise HTTPException(500, "Erro ao criar o modelo a partir do PDF.")
+
+
 @router.post("/admin/modelos/criar-de-cdr")
 async def criar_modelo_de_cdr(
     produto: str = Form(...),

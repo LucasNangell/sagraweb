@@ -654,6 +654,12 @@ def salvar_campos(
     config["campos"] = normalizados
     config["atualizado_em"] = time.strftime("%Y-%m-%d %H:%M:%S")
     _salvar_config(modelo_id, config)
+    try:
+        from services.papelaria_modelo_admin_service import sincronizar_campos_modelo_pdf
+
+        sincronizar_campos_modelo_pdf(modelo_id, normalizados)
+    except Exception as exc:  # o vínculo já foi salvo; o formulário é recalculado no próximo salvar
+        logger.warning("Prova PDF: não foi possível atualizar os campos do modelo %s: %s", modelo_id, exc)
     return obter_modelo_pdf(modelo_id)
 
 

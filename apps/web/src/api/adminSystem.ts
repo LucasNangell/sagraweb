@@ -1217,3 +1217,36 @@ export async function seedOrcamentoPassosPriors(
     body: JSON.stringify({ force }),
   });
 }
+
+/** Nova frente ou novo verso só com o PDF do modelo (sem .cdr). */
+export async function createPapelariaModeloFromPdf(payload: {
+  produto: string;
+  frenteVerso: "Frente" | "Verso";
+  cores: string;
+  nomeExibicao?: string;
+  file: File;
+}): Promise<PapelariaAdminModelRecord> {
+  const form = new FormData();
+  form.append("produto", payload.produto);
+  form.append("frente_verso", payload.frenteVerso);
+  form.append("cores", payload.cores);
+  if (payload.nomeExibicao) form.append("nome_exibicao", payload.nomeExibicao);
+  form.append("file", payload.file);
+  const res = await fetch(apiUrl("/papelaria/admin/modelos/criar-de-pdf"), {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    let message = text || `Criação falhou (${res.status})`;
+    try {
+      const data = JSON.parse(text) as { detail?: unknown };
+      if (typeof data.detail === "string") message = data.detail;
+    } catch {
+      /* resposta não-JSON */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as PapelariaAdminModelRecord;
+}

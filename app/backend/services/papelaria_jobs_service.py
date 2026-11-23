@@ -477,6 +477,10 @@ def create_job(
             prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
 
     if gerar_corel:
+        if str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf"):
+            raise ValueError(
+                "Este modelo foi cadastrado só com PDF — não há arquivo CorelDRAW para gerar."
+            )
         # O worker usa o .cdr do modelo inteiro: a composição frente/verso não se aplica.
         prova_pdf_servidor = False
         dados_clean.pop("__composicao", None)
@@ -497,6 +501,16 @@ def create_job(
         else:
             dados_clean["__composicao"] = json.dumps(comp, ensure_ascii=False)
             prova_pdf_servidor = True
+
+    if (
+        tipo_job == TIPO_JOB_CREATE
+        and not prova_pdf_servidor
+        and str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf")
+    ):
+        raise ValueError(
+            "Este modelo ainda não tem textos ligados aos campos. Configure em "
+            "Configurações → Papelaria → Textos e prévia."
+        )
 
     # Já existe Corel na pasta da OS (fora cópia de segurança)? A prova é
     # montada a partir dele, com os campos do formulário aplicados por cima.

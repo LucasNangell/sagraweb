@@ -307,3 +307,132 @@ def create_modelo_from_cdr(
         "campos_formulario": build_campos_formulario(variaveis, campo_labels or None),
     }
 
+
+
+# ---------------------------------------------------------------------------
+# Modelo a partir do PDF (modo Prova PDF): sem .cdr.
+# ---------------------------------------------------------------------------
+
+_PDF_NOME_RE = re.compile(r"[^a-zA-Z0-9._-]+")
+
+
+def eh_modelo_somente_pdf(modelo: dict[str, Any]) -> bool:
+    """Modelo cadastrado só com PDF (sem arquivo CorelDRAW)."""
+    return str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf")
+
+
+def _nome_pdf_modelo(filename: str) -> str:
+    base = os.path.basename((filename or "").strip()) or "modelo.pdf"
+    stem, _ext = os.path.splitext(base)
+    stem = _PDF_NOME_RE.sub("-", stem).strip("-._") or "modelo"
+    return f"{stem[:180]}.pdf"
+
+
+def create_modelo_from_pdf(
+    *,
+    produto: str,
+    frente_verso: str,
+    cores: str,
+    filename: str,
+    content: bytes,
+    nome_exibicao: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Cria uma frente ou um verso só com o PDF exportado do CorelDRAW. Os campos
+    do formulário saem dos textos ligados em «Textos e prévia».
+    """
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services.papelaria_models_service import _table_has_column
+
+    ensure_papelaria_modelos_table()
+    produto = (produto or "").strip()
+    if not produto:
+        raise ValueError("Produto obrigatório.")
+    fv = "Verso" if "verso" in (frente_verso or "").lower() else "Frente"
+    if not content or not content.startswith(b"%PDF"):
+        raise ValueError("Envie um arquivo PDF.")
+    analise = pdf_svc.analisar_pdf(content)  # valida antes de gravar o modelo
+    if not analise["textos"]:
+        raise ValueError(
+            "O PDF não tem textos editáveis (estão em curvas?). Exporte com os textos como texto."
+        )
+    cores_val = (cores or "").strip() or "Policromia"
+    arquivo = _nome_pdf_modelo(filename)
+
+    rows = db.execute_query("SELECT COALESCE(MAX(Ordem), 0) AS max_ordem FROM tabPapelariaModelos")
+    ordem = int((rows[0].get("max_ordem") if rows else 0) or 0) + 10
+    cols = ["Produto", "FrenteVerso", "Cores", "ArquivoModelo", "CamposJson", "VariaveisJson", "Ativo", "Ordem"]
+    vals = ["%(produto)s", "%(fv)s", "%(cores)s", "%(arquivo)s", "%(campos)s", "%(variaveis)s", "1", "%(ordem)s"]
+    if _table_has_column("NomeProduto"):
+        cols.extend(["NomeProduto", "NomeArquivo", "ConfigCampos"])
+        vals.extend(["%(produto)s", "%(arquivo)s", "%(campos)s"])
+    nome_custom = (nome_exibicao or "").strip() or None
+    if _table_has_column("NomeExibicao") and nome_custom:
+        cols.append("NomeExibicao")
+        vals.append("%(nome)s")
+    params = {
+        "produto": produto,
+        "fv": fv,
+        "cores": cores_val,
+        "arquivo": arquivo,
+        "campos": "{}",
+        "variaveis": "[]",
+        "ordem": ordem,
+        "nome": nome_custom,
+    }
+    db.execute_query(
+        f"INSERT INTO tabPapelariaModelos ({', '.join(cols)}) VALUES ({', '.join(vals)})",
+        params,
+    )
+    criado = db.execute_query(
+        """
+        SELECT ID FROM tabPapelariaModelos
+        WHERE Produto = %(produto)s AND FrenteVerso = %(fv)s AND Cores = %(cores)s
+          AND ArquivoModelo = %(arquivo)s
+        ORDER BY ID DESC LIMIT 1
+        """,
+        params,
+    )
+    if not criado:
+        raise RuntimeError("Modelo criado mas não encontrado após inserção.")
+    modelo_id = int(criado[0]["ID"])
+    pdf_svc.salvar_pdf_modelo(modelo_id, filename=arquivo, content=content)
+    modelo = get_modelo_admin_by_id(modelo_id)
+    if not modelo:
+        raise RuntimeError("Modelo não encontrado após criação.")
+    return modelo
+
+
+def sincronizar_campos_modelo_pdf(modelo_id: int, campos_pdf: list[dict[str, Any]]) -> None:
+    """
+    Modelo só com PDF: as variáveis dos textos ligados viram os campos do
+    formulário da página Papelaria (VariaveisJson / CamposJson).
+    """
+    from services.papelaria_models_service import _order_variaveis_list, get_modelo_by_id
+
+    modelo = get_modelo_by_id(int(modelo_id))
+    if not modelo or not eh_modelo_somente_pdf(modelo):
+        return
+    variaveis: set[str] = set()
+    campos: dict[str, str] = {}
+    for c in campos_pdf or []:
+        template = str(c.get("template") or "")
+        if not template.strip():
+            continue
+        variaveis.update(extrair_variaveis(template.replace("**", "")))
+        # {artigo} / {genero_curto} são derivados do gênero.
+        if re.search(r"\{(artigo|genero_curto)\}", template):
+            variaveis.add("genero")
+        campos[str(c.get("marcador") or "")] = template
+    db.execute_query(
+        """
+        UPDATE tabPapelariaModelos
+        SET VariaveisJson = %(v)s, CamposJson = %(c)s
+        WHERE ID = %(id)s
+        """,
+        {
+            "v": json.dumps(_order_variaveis_list(sorted(variaveis)), ensure_ascii=False),
+            "c": json.dumps(campos, ensure_ascii=False),
+            "id": int(modelo_id),
+        },
+    )

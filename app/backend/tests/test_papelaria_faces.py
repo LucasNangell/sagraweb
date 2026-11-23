@@ -250,3 +250,74 @@ def test_create_job_gerar_corel_vai_para_o_worker(monkeypatch):
     r = _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)
     assert r["inserted"]["status"] == jobs.STATUS_PENDING
     assert r["gerados"] == []
+
+
+# --------------------------------------------------------------- modelo só PDF
+
+
+def test_criar_modelo_de_pdf_e_campos_dos_textos_ligados(tmp_path, monkeypatch):
+    from services import papelaria_modelo_admin_service as admin
+    from services import papelaria_models_service as models_svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    monkeypatch.setattr(admin, "ensure_papelaria_modelos_table", lambda: None)
+    monkeypatch.setattr(models_svc, "_table_has_column", lambda col: col == "NomeExibicao")
+    linhas: dict[int, dict] = {}
+    updates: list[dict] = []
+
+    def execute_query(sql, params=None):
+        sql_n = " ".join(sql.split())
+        if sql_n.startswith("SELECT COALESCE(MAX(Ordem)"):
+            return [{"max_ordem": 50}]
+        if sql_n.startswith("INSERT INTO tabPapelariaModelos"):
+            linhas[77] = dict(params)
+            return []
+        if sql_n.startswith("SELECT ID FROM tabPapelariaModelos"):
+            return [{"ID": 77}]
+        if sql_n.startswith("UPDATE tabPapelariaModelos SET VariaveisJson"):
+            updates.append(dict(params))
+            return []
+        raise AssertionError(sql_n)
+
+    monkeypatch.setattr(admin.db, "execute_query", execute_query)
+    registro = {"id": 77, "produto": "Ct Visita", "frente_versao": "Verso", "arquivo_modelo": "verso-assessor.pdf"}
+    monkeypatch.setattr(admin, "get_modelo_admin_by_id", lambda mid: registro)
+    monkeypatch.setattr(models_svc, "get_modelo_by_id", lambda mid: registro)
+
+    r = admin.create_modelo_from_pdf(
+        produto="Ct Visita",
+        frente_verso="Verso",
+        cores="Policromia",
+        filename="Verso Assessor (final).pdf",
+        content=_pdf(["NOMEASSESSOR"]),
+    )
+    assert r["id"] == 77
+    assert linhas[77]["fv"] == "Verso" and linhas[77]["arquivo"] == "Verso-Assessor-final.pdf"
+    assert pdf_svc.caminho_pdf(77).is_file()
+
+    pdf_svc.salvar_campos(
+        77, [{"marcador": "NOMEASSESSOR", "pagina": 1, "template": "{nome_assessor} — {genero_curto}"}]
+    )
+    assert updates, "deveria atualizar os campos do formulário"
+    assert set(json.loads(updates[-1]["v"])) == {"nome_assessor", "genero"}
+
+    with pytest.raises(ValueError, match="PDF"):
+        admin.create_modelo_from_pdf(
+            produto="Ct Visita", frente_verso="Verso", cores="", filename="x.pdf", content=b"nada"
+        )
+
+
+def test_modelo_so_pdf_nao_vai_para_o_worker(monkeypatch):
+    from tests.test_papelaria_prova_pdf import _run_create
+    from services import papelaria_jobs_service as jobs
+    from tests.test_papelaria_jobs_service import MODEL_SAMPLE
+
+    so_pdf = {**MODEL_SAMPLE, "arquivo_modelo": "verso.pdf"}
+    monkeypatch.setattr("tests.test_papelaria_jobs_service.MODEL_SAMPLE", so_pdf)
+    with pytest.raises(ValueError, match="textos ligados"):
+        _run_create(monkeypatch, modo="prova_pdf", tem_pdf=False)
+    original = jobs.create_job
+    monkeypatch.setattr(jobs, "create_job", lambda **kw: original(**{**kw, "gerar_corel": True}))
+    with pytest.raises(ValueError, match="só com PDF"):
+        _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)

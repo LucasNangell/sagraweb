@@ -737,15 +737,19 @@ export function ClienteProofPage({
       data-tour-approve-modal={modal === "approve" ? "true" : "false"}
       className={cn(
         fillHeight && "flex min-h-0 w-full flex-1 flex-col",
-        fillHeight && !editMode && "h-full min-h-0 overflow-hidden",
-        fillHeight && editMode && "min-h-0 overflow-y-auto",
+        // Edição PDF: mesma tela cheia do modo visualização — a prévia precisa
+        // de altura definida para caber no máximo sem ficar minúscula.
+        fillHeight && (!editMode || (editMode && isPapelaria)) && "h-full min-h-0 overflow-hidden",
+        fillHeight && editMode && !isPapelaria && "min-h-0 overflow-y-auto",
       )}
     >
       <div
         className={cn(
           "flex flex-1 flex-col gap-4 lg:flex-row lg:gap-0",
-          fillHeight && !editMode && "min-h-0 overflow-hidden lg:items-stretch",
-          fillHeight && editMode && "min-h-0 lg:items-start",
+          fillHeight &&
+            (!editMode || (editMode && isPapelaria)) &&
+            "min-h-0 overflow-hidden lg:items-stretch",
+          fillHeight && editMode && !isPapelaria && "min-h-0 lg:items-start",
           fillHeight && "border-t border-sagra-border/80",
         )}
       >
@@ -754,10 +758,10 @@ export function ClienteProofPage({
             "flex shrink-0 flex-col gap-4",
             fillHeight
               ? editMode && isPapelaria
-                ? "w-full border-b border-sagra-border/80 p-4 lg:w-72 lg:max-w-xs lg:border-b-0 lg:border-r lg:p-5"
+                ? "w-full border-b border-sagra-border/80 p-4 lg:h-full lg:w-72 lg:max-w-xs lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5"
                 : "w-full border-b border-sagra-border/80 p-4 lg:w-[min(100%,22rem)] lg:max-w-md lg:border-b-0 lg:border-r lg:p-5"
               : "w-full lg:w-[min(100%,22rem)] lg:max-w-md",
-            editMode && isPapelaria && "lg:sticky lg:top-4 lg:self-start lg:overflow-visible",
+            editMode && isPapelaria && "lg:self-stretch",
             !editMode && "overflow-y-auto",
           )}
         >

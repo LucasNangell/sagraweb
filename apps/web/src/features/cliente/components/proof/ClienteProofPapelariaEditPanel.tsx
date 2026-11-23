@@ -51,8 +51,8 @@ function PdfEditLayout({
 }: Props) {
   // Só a prévia PDF: o cliente edita clicando nos textos (frente/verso).
   return (
-    <div className="cliente-proof-edit cliente-proof-edit--pdf h-full min-h-0">
-      <div className="cliente-proof-edit__pdf-preview min-h-0 flex-1">
+    <div className="cliente-proof-edit cliente-proof-edit--pdf flex h-full min-h-0 w-full flex-1 flex-col">
+      <div className="cliente-proof-edit__pdf-preview flex min-h-0 w-full flex-1 flex-col">
         <PapelariaPdfLivePreview
           modeloId={modeloId}
           values={previaValues}
@@ -62,7 +62,7 @@ function PdfEditLayout({
           layout="row"
           onEditarTexto={disabled ? undefined : onEditarTextoPrevia}
           onRestaurarTexto={disabled ? undefined : onRestaurarTextoPrevia}
-          className="cliente-proof-edit-preview-pdf min-h-0 flex-1"
+          className="cliente-proof-edit-preview-pdf h-full min-h-0 w-full flex-1"
         />
       </div>
     </div>

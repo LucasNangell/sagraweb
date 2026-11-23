@@ -9,6 +9,7 @@ import {
   clampZoom,
   deveUsarPreviaPdfAoVivo,
   PapelariaPdfLivePreview,
+  tamanhoPaginaPrevia,
 } from "./PapelariaPdfLivePreview";
 
 describe("deveUsarPreviaPdfAoVivo", () => {
@@ -33,6 +34,42 @@ describe("clampZoom", () => {
     expect(clampZoom(1.12)).toBe(1);
     expect(clampZoom(1.2)).toBe(1.25);
     expect(clampZoom(4)).toBe(3);
+  });
+});
+
+describe("tamanhoPaginaPrevia", () => {
+  it("em zoom 1 ocupa o maximo que cabe na viewport (contain)", () => {
+    const size = tamanhoPaginaPrevia({
+      natural: { w: 900, h: 1270 },
+      viewport: { w: 800, h: 700 },
+      layout: "row",
+      pageCount: 1,
+      zoom: 1,
+    });
+    expect(size).not.toBeNull();
+    // Altura limita: (700-16-22)=662 → scale 662/1270; largura 900*scale < 784
+    expect(size!.h).toBeCloseTo(662, 0);
+    expect(size!.w).toBeCloseTo((900 / 1270) * 662, 0);
+    expect(size!.w).toBeLessThanOrEqual(800);
+  });
+
+  it("zoom 2 dobra o tamanho ajustado", () => {
+    const base = tamanhoPaginaPrevia({
+      natural: { w: 900, h: 1270 },
+      viewport: { w: 800, h: 700 },
+      layout: "row",
+      pageCount: 1,
+      zoom: 1,
+    })!;
+    const z2 = tamanhoPaginaPrevia({
+      natural: { w: 900, h: 1270 },
+      viewport: { w: 800, h: 700 },
+      layout: "row",
+      pageCount: 1,
+      zoom: 2,
+    })!;
+    expect(z2.w).toBeCloseTo(base.w * 2, 0);
+    expect(z2.h).toBeCloseTo(base.h * 2, 0);
   });
 });
 

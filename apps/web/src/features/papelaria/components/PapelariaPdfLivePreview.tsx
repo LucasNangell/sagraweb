@@ -48,6 +48,45 @@ export function clampZoom(zoom: number): number {
 type Caixa = { left: number; top: number; width: number; height: number };
 type Size = { w: number; h: number };
 
+/**
+ * Tamanho de cada página para caber na viewport (contain) × zoom do usuário.
+ * ``zoom = 1`` = maior tamanho que cabe sem scroll; >1 amplia com scroll.
+ */
+export function tamanhoPaginaPrevia(opts: {
+  natural: Size;
+  viewport: Size;
+  layout: "stack" | "row";
+  pageCount: number;
+  zoom: number;
+  pad?: number;
+  gap?: number;
+  titleH?: number;
+}): Size | null {
+  const { natural: nat, viewport, layout, pageCount, zoom } = opts;
+  const pad = opts.pad ?? 16;
+  const gap = opts.gap ?? 16;
+  const titleH = opts.titleH ?? 22;
+  if (!nat.w || !nat.h || viewport.w < 40 || viewport.h < 40) return null;
+
+  const n = Math.max(pageCount, 1);
+  let boxW = Math.max(40, viewport.w - pad);
+  let boxH = Math.max(40, viewport.h - pad - titleH);
+  if (layout === "row" && n > 1) {
+    boxW = Math.max(40, (viewport.w - pad - gap * (n - 1)) / n);
+  } else if (layout === "stack" && n > 1) {
+    boxH = Math.max(
+      40,
+      (viewport.h - pad - gap * (n - 1) - titleH * n) / n,
+    );
+  }
+  const fit = Math.min(boxW / nat.w, boxH / nat.h);
+  if (!Number.isFinite(fit) || fit <= 0) return null;
+  return {
+    w: Math.max(40, nat.w * fit * zoom),
+    h: Math.max(40, nat.h * fit * zoom),
+  };
+}
+
 /** Chave estável dos valores (ordem das chaves não importa). */
 function chaveValores(values: Record<string, string>): string {
   const ordenado: Record<string, string> = {};
@@ -192,29 +231,21 @@ export function PapelariaPdfLivePreview({
   }, []);
 
   const tamanhosExibicao = useMemo(() => {
-    const n = Math.max(paginas.length, 1);
-    const pad = 16;
-    const gap = 16;
-    const titleH = 22;
-    const availW = Math.max(80, viewport.w - pad);
-    const availH = Math.max(80, viewport.h - pad);
     return paginas.map((_, i) => {
       const nat = naturais[i];
-      if (!nat?.w || !nat?.h || !viewport.w || !viewport.h) {
+      if (!nat?.w || !nat?.h) {
         return { w: undefined as number | undefined, h: undefined as number | undefined };
       }
-      let boxW = availW;
-      let boxH = availH - titleH;
-      if (layout === "row" && n > 1) {
-        boxW = (availW - gap * (n - 1)) / n;
-      } else if (layout === "stack" && n > 1) {
-        boxH = (availH - gap * (n - 1) - titleH * n) / n;
-      }
-      const fit = Math.min(boxW / nat.w, boxH / nat.h);
-      return {
-        w: Math.max(40, nat.w * fit * zoom),
-        h: Math.max(40, nat.h * fit * zoom),
-      };
+      const size = tamanhoPaginaPrevia({
+        natural: nat,
+        viewport,
+        layout,
+        pageCount: paginas.length,
+        zoom,
+      });
+      return size
+        ? { w: size.w, h: size.h }
+        : { w: undefined as number | undefined, h: undefined as number | undefined };
     });
   }, [paginas, naturais, viewport, layout, zoom]);
 
@@ -265,7 +296,7 @@ export function PapelariaPdfLivePreview({
   return (
     <article
       className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
+        "flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
         className,
       )}
       data-testid="papelaria-pdf-live-preview"

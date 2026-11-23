@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PapelariaFaceFonte, PapelariaFacesResponse } from "@/features/papelaria/types";
 
-import { composicaoInicial, ehFrenteVerso, PapelariaFrenteVersoPicker } from "./PapelariaFrenteVersoPicker";
+import {
+  composicaoInicial,
+  composicaoSalvaValida,
+  ehFrenteVerso,
+  PapelariaFrenteVersoPicker,
+} from "./PapelariaFrenteVersoPicker";
 
 function fonte(modelo_id: number, pagina: number, extra: Partial<PapelariaFaceFonte> = {}): PapelariaFaceFonte {
   return { modelo_id, pagina, rotulo: `M${modelo_id} p${pagina}`, arquivo_modelo: `m${modelo_id}.cdr`, tem_pdf: true, padrao: false, ...extra };
@@ -48,6 +53,43 @@ describe("composicaoInicial", () => {
   it("detecta produto frente e verso", () => {
     expect(ehFrenteVerso("Frente e Verso")).toBe(true);
     expect(ehFrenteVerso("Somente Frente")).toBe(false);
+  });
+});
+
+describe("composicaoSalvaValida", () => {
+  it("restaura seed válida nas listas com PDF", () => {
+    expect(
+      composicaoSalvaValida(faces(), {
+        frente: { modelo_id: 12, pagina: 1 },
+        verso: { modelo_id: 30, pagina: 1 },
+      }),
+    ).toEqual({
+      frente: { modelo_id: 12, pagina: 1 },
+      verso: { modelo_id: 30, pagina: 1 },
+    });
+  });
+
+  it("rejeita seed com face sem PDF ou inexistente", () => {
+    expect(
+      composicaoSalvaValida(faces(), {
+        frente: { modelo_id: 13, pagina: 1 },
+        verso: { modelo_id: 30, pagina: 1 },
+      }),
+    ).toBeNull();
+    expect(
+      composicaoSalvaValida(faces(), {
+        frente: { modelo_id: 12, pagina: 1 },
+        verso: { modelo_id: 99, pagina: 1 },
+      }),
+    ).toBeNull();
+  });
+
+  it("sem seed cai no padrão via composicaoInicial", () => {
+    expect(composicaoSalvaValida(faces(), null)).toBeNull();
+    expect(composicaoInicial(faces(), 15, "auto")).toEqual({
+      frente: { modelo_id: 15, pagina: 1 },
+      verso: { modelo_id: 30, pagina: 1 },
+    });
   });
 });
 

@@ -712,6 +712,243 @@ class TestBuildOsContextCoercion:
         assert ctx["prefill"]["partido"] == "PL"
         assert ctx["cliente_alteracao"] is None
 
+    def test_build_os_context_restaura_ultima_prova(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: [
+                {
+                    "NroProtocolo": 5100,
+                    "AnoProtocolo": 2026,
+                    "NomeUsuario": "Teste",
+                    "Titular": "Nome Teste",
+                    "SiglaOrgao": "PL/DF",
+                    "GabSalaUsuario": 716,
+                    "RamalUsuario": 55716,
+                    "Titulo": "Titulo",
+                    "TipoPublicacaoLink": "Ct Visita",
+                    "Cores": 4,
+                    "CoresDescricao": None,
+                    "FrenteVerso": 1,
+                    "Observ": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(svc, "build_prefill_corel", lambda *_a, **_k: {})
+        monkeypatch.setattr(
+            svc,
+            "list_modelos",
+            lambda *a, **k: [
+                {
+                    "id": 7,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "A.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "A",
+                    "ordem": 1,
+                    "padrao_frente": True,
+                },
+                {
+                    "id": 12,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "B.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "B",
+                    "ordem": 2,
+                },
+            ],
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.load_cliente_alteracao_prova",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.list_jobs_for_os",
+            lambda *_a, **_k: [
+                {
+                    "id": 99,
+                    "tipo_job": "create",
+                    "status": "completed",
+                    "tem_arquivo_pdf": True,
+                    "modelo_id": 12,
+                    "dados": {
+                        "__composicao": {
+                            "frente": {"modelo_id": 12, "pagina": 1},
+                            "verso": {"modelo_id": 30, "pagina": 1},
+                        }
+                    },
+                }
+            ],
+        )
+
+        ctx = svc.build_os_context(2026, 5100)
+        assert ctx["autoSelectedModelId"] == 12
+        assert ctx["ultima_prova"] == {
+            "job_id": 99,
+            "modelo_id": 12,
+            "composicao": {
+                "frente": {"modelo_id": 12, "pagina": 1},
+                "verso": {"modelo_id": 30, "pagina": 1},
+            },
+        }
+
+    def test_build_os_context_alt_pendente_prioriza_modelo_e_job(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: [
+                {
+                    "NroProtocolo": 5101,
+                    "AnoProtocolo": 2026,
+                    "NomeUsuario": "Teste",
+                    "Titular": "Nome Teste",
+                    "SiglaOrgao": "PL/DF",
+                    "GabSalaUsuario": 716,
+                    "RamalUsuario": 55716,
+                    "Titulo": "Titulo",
+                    "TipoPublicacaoLink": "Ct Visita",
+                    "Cores": 4,
+                    "CoresDescricao": None,
+                    "FrenteVerso": 1,
+                    "Observ": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(svc, "build_prefill_corel", lambda *_a, **_k: {})
+        monkeypatch.setattr(
+            svc,
+            "list_modelos",
+            lambda *a, **k: [
+                {
+                    "id": 7,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "A.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "A",
+                    "ordem": 1,
+                    "padrao_frente": True,
+                },
+                {
+                    "id": 12,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "B.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "B",
+                    "ordem": 2,
+                },
+            ],
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.load_cliente_alteracao_prova",
+            lambda *_a, **_k: {
+                "campos": {},
+                "observacao_cliente": "Ajuste",
+                "versao": "1",
+                "modelo_id": 12,
+                "job_id": 55,
+            },
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
+            lambda *_a, **_k: True,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.get_job",
+            lambda _job_id: {
+                "id": 55,
+                "modelo_id": 12,
+                "dados": {
+                    "__composicao": {
+                        "frente": {"modelo_id": 12, "pagina": 1},
+                        "verso": {"modelo_id": 7, "pagina": 2},
+                    }
+                },
+            },
+        )
+
+        ctx = svc.build_os_context(2026, 5101)
+        assert ctx["autoSelectedModelId"] == 12
+        assert ctx["cliente_alteracao"]["modelo_id"] == 12
+        assert ctx["ultima_prova"]["job_id"] == 55
+        assert ctx["ultima_prova"]["composicao"]["verso"]["modelo_id"] == 7
+
+    def test_build_os_context_sem_job_usa_padrao_frente(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: [
+                {
+                    "NroProtocolo": 5102,
+                    "AnoProtocolo": 2026,
+                    "NomeUsuario": "Teste",
+                    "Titular": "Nome Teste",
+                    "SiglaOrgao": "PL/DF",
+                    "GabSalaUsuario": 716,
+                    "RamalUsuario": 55716,
+                    "Titulo": "Titulo",
+                    "TipoPublicacaoLink": "Ct Visita",
+                    "Cores": 4,
+                    "CoresDescricao": None,
+                    "FrenteVerso": 1,
+                    "Observ": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(svc, "build_prefill_corel", lambda *_a, **_k: {})
+        monkeypatch.setattr(
+            svc,
+            "list_modelos",
+            lambda *a, **k: [
+                {
+                    "id": 7,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "A.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "A",
+                    "ordem": 1,
+                    "padrao_frente": True,
+                },
+                {
+                    "id": 12,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Frente e Verso",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "B.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "B",
+                    "ordem": 2,
+                },
+            ],
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.load_cliente_alteracao_prova",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.list_jobs_for_os",
+            lambda *_a, **_k: [],
+        )
+
+        ctx = svc.build_os_context(2026, 5102)
+        assert ctx["autoSelectedModelId"] == 7
+        assert ctx["ultima_prova"] is None
+
     def test_build_os_context_os_menor_5000_com_produto_papelaria(self, monkeypatch):
         from services import papelaria_models_service as svc
 

@@ -178,6 +178,13 @@ export interface PapelariaCompararCorelResponse {
   diferencas?: PapelariaCorelDiferenca[];
 }
 
+/** Última prova da OS (job) — restaura modelo e composição frente/verso. */
+export interface PapelariaUltimaProva {
+  job_id: number | null;
+  modelo_id: number;
+  composicao: PapelariaComposicao | null;
+}
+
 export interface PapelariaOsContext {
   os: PapelariaOsContextOs;
   prefill: Record<string, string>;
@@ -187,6 +194,8 @@ export interface PapelariaOsContext {
   autoSelectedModel?: PapelariaCorelModelDetail | null;
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
+  /** Modelo + composição da última prova (ou do job da alteração pendente). */
+  ultima_prova?: PapelariaUltimaProva | null;
   prova_modo?: "prova_web" | "prova_email" | "prova_pdf";
   /** Variável → fonte de preenchimento (Configurações → Variáveis). */
   variaveis_fonte?: Record<string, string>;

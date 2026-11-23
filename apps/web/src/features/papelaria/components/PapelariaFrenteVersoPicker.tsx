@@ -75,14 +75,34 @@ export function composicaoMantendoVerso(
   return { frente, verso };
 }
 
+/** Seed da última prova: só aceita faces ainda listadas com PDF. */
+export function composicaoSalvaValida(
+  faces: PapelariaFacesResponse,
+  seed: PapelariaComposicao | null | undefined,
+): PapelariaComposicao | null {
+  if (!seed?.frente || !seed?.verso) return null;
+  const ok = (lista: PapelariaFaceFonte[], r: PapelariaFaceRef) =>
+    lista.some((f) => f.tem_pdf && mesma(f, r));
+  if (!ok(faces.frente, seed.frente) || !ok(faces.verso, seed.verso)) return null;
+  return {
+    frente: { modelo_id: seed.frente.modelo_id, pagina: seed.frente.pagina },
+    verso: { modelo_id: seed.verso.modelo_id, pagina: seed.verso.pagina },
+  };
+}
+
 /**
  * Estado da composição frente/verso da página Papelaria. Só fica ativo em
  * produto frente e verso com modo Prova PDF e opções com PDF configurado.
+ *
+ * ``composicaoInicialSalva`` (última prova) é aplicada uma vez por ``seedKey``
+ * (OS); escolha manual no card não é sobrescrita depois.
  */
 export function usePapelariaComposicao(
   selectedModelId: number | null,
   frenteVersaoModelo: string | null | undefined,
   frenteVersoOs?: string | null,
+  composicaoInicialSalva?: PapelariaComposicao | null,
+  seedKey?: string | null,
 ) {
   // Produto frente e verso: o modelo é combinado ou a própria OS pede frente e verso
   // (frentes e versos cadastrados separadamente).
@@ -98,6 +118,14 @@ export function usePapelariaComposicao(
   });
   const [composicao, setComposicao] = useState<PapelariaComposicao | null>(null);
   const origemRef = useRef<"auto" | "card">("auto");
+  const seedAplicadaRef = useRef(false);
+  const seedKeyRef = useRef<string | null | undefined>(seedKey);
+
+  if (seedKeyRef.current !== seedKey) {
+    seedKeyRef.current = seedKey;
+    seedAplicadaRef.current = false;
+    origemRef.current = "auto";
+  }
 
   const faces = habilitado ? facesQuery.data : undefined;
   useEffect(() => {
@@ -105,12 +133,24 @@ export function usePapelariaComposicao(
       setComposicao(null);
       return;
     }
-    setComposicao((anterior) => composicaoMantendoVerso(faces, selectedModelId, origemRef.current, anterior));
-  }, [faces, selectedModelId]);
+    if (!seedAplicadaRef.current) {
+      seedAplicadaRef.current = true;
+      const restaurada = composicaoSalvaValida(faces, composicaoInicialSalva);
+      if (restaurada) {
+        setComposicao(restaurada);
+        return;
+      }
+    }
+    const origem = origemRef.current;
+    setComposicao((anterior) =>
+      composicaoMantendoVerso(faces, selectedModelId, origem, anterior),
+    );
+  }, [faces, selectedModelId, composicaoInicialSalva]);
 
   /** Chamar ao escolher um card de modelo (frente e verso daquele modelo). */
   const marcarEscolhaManual = useCallback(() => {
     origemRef.current = "card";
+    seedAplicadaRef.current = true;
   }, []);
 
   const ativa = faces?.disponivel ? composicao : null;

@@ -304,6 +304,8 @@ export function PapelariaCorelPanel({
     selectedModelId,
     modelDetailQuery.data?.frente_versao,
     contextQuery.data?.os.frente_verso,
+    contextQuery.data?.ultima_prova?.composicao ?? null,
+    hasOs ? `${anoNum}-${nroNum}` : null,
   );
   const modelosExtrasIds = useMemo(() => {
     if (!composicao) return [];

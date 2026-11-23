@@ -1729,28 +1729,87 @@ def is_papelaria_os_by_product(
     return any(normalizar_texto_produto(m["produto"]) == prod_norm for m in todos)
 
 
-def _campos_produto_da_ultima_prova(
-    ano: int, nro: int
-) -> tuple[Optional[dict[str, Any]], dict[str, str]]:
-    """Campos do produto real da última prova criada (e seus valores)."""
+def _job_ultima_prova(
+    ano: int,
+    nro: int,
+    *,
+    job_id: Optional[int] = None,
+    exigir_pdf: bool = True,
+) -> Optional[dict[str, Any]]:
+    """
+    Job da última prova relevante: o indicado por ``job_id`` (ex.: alteração
+    do cliente) ou o último create concluído com PDF da OS.
+    """
     try:
-        from services.papelaria_campos_produto import carregar_de_dados
-        from services.papelaria_jobs_service import TIPO_JOB_CREATE, list_jobs_for_os
+        from services.papelaria_jobs_service import (
+            STATUS_COMPLETED,
+            TIPO_JOB_CREATE,
+            get_job,
+            list_jobs_for_os,
+        )
+
+        if job_id:
+            try:
+                job = get_job(int(job_id))
+            except Exception:
+                job = None
+            if job:
+                return job
 
         for job in list_jobs_for_os(ano, nro, limit=20):
             if (job.get("tipo_job") or "") != TIPO_JOB_CREATE:
                 continue
             if job.get("status") in ("failed", "cancelled"):
                 continue
-            dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
-            produto = carregar_de_dados(dados)
-            if not produto:
-                return None, {}
-            valores = {
-                c["key"]: str(dados.get(c["key"]) or "")
-                for c in produto.get("campos") or []
-            }
-            return produto, valores
+            if exigir_pdf:
+                if not (
+                    job.get("tem_arquivo_pdf") or job.get("status") == STATUS_COMPLETED
+                ):
+                    continue
+            return job
+    except Exception as exc:
+        logger.warning("Última prova da SP %s/%s indisponível: %s", nro, ano, exc)
+    return None
+
+
+def _ultima_prova_resumo(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """``modelo_id`` + composição do job para restaurar a seleção na UI."""
+    if not job:
+        return None
+    try:
+        mid = int(job.get("modelo_id") or 0)
+    except (TypeError, ValueError):
+        mid = 0
+    if mid <= 0:
+        return None
+    from services.papelaria_faces_service import composicao_do_job
+
+    return {
+        "job_id": int(job.get("id") or 0) or None,
+        "modelo_id": mid,
+        "composicao": composicao_do_job(job),
+    }
+
+
+def _campos_produto_da_ultima_prova(
+    ano: int, nro: int
+) -> tuple[Optional[dict[str, Any]], dict[str, str]]:
+    """Campos do produto real da última prova criada (e seus valores)."""
+    try:
+        from services.papelaria_campos_produto import carregar_de_dados
+
+        job = _job_ultima_prova(ano, nro, exigir_pdf=False)
+        if not job:
+            return None, {}
+        dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+        produto = carregar_de_dados(dados)
+        if not produto:
+            return None, {}
+        valores = {
+            c["key"]: str(dados.get(c["key"]) or "")
+            for c in produto.get("campos") or []
+        }
+        return produto, valores
     except Exception as exc:
         logger.warning("Campos do produto da SP %s/%s indisponíveis: %s", nro, ano, exc)
     return None, {}
@@ -1869,20 +1928,44 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         produto, cores, frente_verso, todos_modelos
     )
 
-    if alt:
+    # Job da alteração pendente ou da última prova (modelo + composição).
+    job_prova_id: Optional[int] = None
+    if cliente_alteracao and cliente_alteracao.get("job_id"):
         try:
-            alt_modelo_id = int(alt.get("modelo_id") or 0)
+            job_prova_id = int(cliente_alteracao["job_id"])
+        except (TypeError, ValueError):
+            job_prova_id = None
+    job_prova = _job_ultima_prova(ano, nro, job_id=job_prova_id)
+    ultima_prova = _ultima_prova_resumo(job_prova)
+
+    # Prioridade: alt pendente → última prova → match único / padrao_frente.
+    resolved_from_prova: Optional[int] = None
+    if cliente_alteracao:
+        try:
+            alt_modelo_id = int(cliente_alteracao.get("modelo_id") or 0)
         except (TypeError, ValueError):
             alt_modelo_id = 0
         if alt_modelo_id and any(m.get("id") == alt_modelo_id for m in modelos):
-            auto_id = alt_modelo_id
+            resolved_from_prova = alt_modelo_id
+    if resolved_from_prova is None and ultima_prova and ultima_prova.get("modelo_id"):
+        mid = int(ultima_prova["modelo_id"])
+        if any(m.get("id") == mid for m in modelos):
+            resolved_from_prova = mid
+    if resolved_from_prova is not None:
+        auto_id = resolved_from_prova
 
     from services.papelaria_prova_modo import filtrar_modelos_para_modo, get_modo
 
     modelos, avisos_modo = filtrar_modelos_para_modo(modelos)
     warnings.extend(avisos_modo)
     if not any(m.get("id") == auto_id for m in modelos):
-        auto_id = modelos[0]["id"] if len(modelos) == 1 else None
+        auto_id = None
+        if resolved_from_prova is not None and any(
+            m.get("id") == resolved_from_prova for m in modelos
+        ):
+            auto_id = resolved_from_prova
+        elif len(modelos) == 1:
+            auto_id = modelos[0]["id"]
     if auto_id is None:
         # Sem prova anterior: o modelo marcado como frente padrão já vem selecionado.
         padroes = [m for m in modelos if m.get("padrao_frente")]
@@ -1931,6 +2014,7 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "autoSelectedModel": auto_model,
         "warnings": warnings,
         "cliente_alteracao": cliente_alteracao,
+        "ultima_prova": ultima_prova,
         "prova_modo": get_modo(),
         "prova_pdf_modelos": _prova_pdf_modelos(modelos),
         # Variável → fonte (o front reaplica após enriquecer com a Câmara).

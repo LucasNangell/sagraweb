@@ -14,6 +14,7 @@ import {
   Printer,
   RefreshCw,
   Settings,
+  Share2,
   Wallet,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -27,6 +28,7 @@ import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
 import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
+import { PapelariaRedesSection } from "./PapelariaRedesSection";
 import { PapelariaVariaveisSection } from "./PapelariaVariaveisSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
@@ -42,6 +44,7 @@ type ConfigTab =
   | "cotas_graf"
   | "papelaria"
   | "variaveis"
+  | "redes_sociais"
   | "credenciais_depol"
   | "caixas"
   | "sistema"
@@ -95,6 +98,12 @@ const TAB_META: Record<
     description:
       "Variáveis dos textos do PDF dos modelos: rótulo do campo na página Papelaria e o que o sistema preenche automaticamente.",
     icon: <Braces className="size-3.5" aria-hidden />,
+    hideIntro: true,
+  },
+  redes_sociais: {
+    label: "Redes sociais",
+    description: "Catálogo de redes sociais (nome, logo e exemplo) usado no bloco de redes das provas da Papelaria.",
+    icon: <Share2 className="size-3.5" aria-hidden />,
     hideIntro: true,
   },
   credenciais_depol: {
@@ -252,6 +261,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             {activeTab === "variaveis" ? <PapelariaVariaveisSection /> : null}
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-redes_sociais"
+            aria-labelledby="config-tab-redes_sociais"
+            hidden={activeTab !== "redes_sociais"}
+            className="configuracoes-tab-panel"
+          >
+            {activeTab === "redes_sociais" ? <PapelariaRedesSection /> : null}
           </div>
           <div
             role="tabpanel"

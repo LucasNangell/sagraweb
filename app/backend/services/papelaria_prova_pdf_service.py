@@ -73,7 +73,10 @@ def tem_modelo_pdf(modelo_id: Optional[int]) -> bool:
         return False
     if not caminho_pdf(modelo_id).is_file():
         return False
-    return any(c.get("template") for c in carregar_config(modelo_id).get("campos") or [])
+    config = carregar_config(modelo_id)
+    if (config.get("redes") or {}).get("ativo"):
+        return True
+    return any(c.get("template") for c in config.get("campos") or [])
 
 
 def carregar_config(modelo_id: int) -> dict[str, Any]:
@@ -575,6 +578,7 @@ def obter_modelo_pdf(modelo_id: int) -> dict[str, Any]:
         "arquivo": config.get("arquivo_original") or pdf.name,
         "atualizado_em": config.get("atualizado_em"),
         "campos": config.get("campos") or [],
+        "redes": config.get("redes"),
         "analise": analisar_pdf(pdf),
     }
 
@@ -603,14 +607,15 @@ def salvar_pdf_modelo(modelo_id: int, *, filename: str, content: bytes) -> dict[
         )
         if c
     ]
-    _salvar_config(
-        modelo_id,
-        {
-            "arquivo_original": os.path.basename(filename or "modelo.pdf"),
-            "atualizado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "campos": campos,
-        },
-    )
+    novo: dict[str, Any] = {
+        "arquivo_original": os.path.basename(filename or "modelo.pdf"),
+        "atualizado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "campos": campos,
+    }
+    redes = anterior.get("redes")
+    if isinstance(redes, dict) and redes.get("fonte_marcador") in marcadores:
+        novo["redes"] = redes
+    _salvar_config(modelo_id, novo)
     return obter_modelo_pdf(modelo_id)
 
 
@@ -1123,10 +1128,40 @@ def renderizar(
         doc.close()
 
 
+def _aplicar_redes(
+    modelo_id: int,
+    conteudo: bytes,
+    selecao: Optional[list[dict[str, str]]],
+    avisos: Optional[list[str]],
+    *,
+    exemplo: bool = False,
+) -> bytes:
+    """Bloco de redes sociais do modelo (se configurado) com a escolha do usuário."""
+    bloco = carregar_config(int(modelo_id)).get("redes")
+    if not isinstance(bloco, dict) or not bloco.get("ativo"):
+        return conteudo
+    from services import papelaria_redes_service as redes_svc
+
+    if selecao is None and exemplo:
+        selecao = redes_svc.selecao_exemplo(bloco)
+    return redes_svc.aplicar_bloco(conteudo, bloco, selecao or [], avisos)
+
+
+def selecao_redes_dos_dados(dados: dict[str, Any]) -> Optional[list[dict[str, str]]]:
+    """Escolha de redes gravada nos dados (chave ``__redes``)."""
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        return redes_svc.normalizar_selecao((dados or {}).get(redes_svc.DADOS_KEY))
+    except redes_svc.RedesError:
+        return None
+
+
 def renderizar_composicao(
     composicao: dict[str, dict[str, int]],
     dados: dict[str, Any],
     avisos: Optional[list[str]] = None,
+    redes: Optional[list[dict[str, str]]] = None,
 ) -> bytes:
     """
     Frente e verso independentes: aplica os campos na página de frente de um
@@ -1153,6 +1188,7 @@ def renderizar_composicao(
                 if campos
                 else pdf.read_bytes()
             )
+            conteudo = _aplicar_redes(mid, conteudo, redes, avisos)
             src = fitz.open(stream=conteudo, filetype="pdf")
             try:
                 if pagina > src.page_count:
@@ -1174,6 +1210,7 @@ def previa_png(
     *,
     modelo: Optional[dict[str, Any]] = None,
     composicao: Optional[dict[str, dict[str, int]]] = None,
+    exemplo_redes: bool = False,
 ) -> dict[str, Any]:
     """
     Aplica os valores e devolve as páginas em PNG (data URL).
@@ -1188,23 +1225,29 @@ def previa_png(
 
     pdf = caminho_pdf(modelo_id)
     campos: list[dict[str, Any]] = []
+    redes = selecao_redes_dos_dados(dados)
+    tem_bloco = bool((carregar_config(modelo_id).get("redes") or {}).get("ativo"))
     if composicao is None:
         if not pdf.is_file():
             raise ProvaPdfError("Envie primeiro o PDF do modelo.")
         campos = [c for c in carregar_config(modelo_id).get("campos") or [] if c.get("template")]
-        if not campos:
+        if not campos and not tem_bloco:
             raise ProvaPdfError("Ligue ao menos um texto do PDF a um campo.")
 
     if modelo is None:
         modelo = models_svc.get_modelo_by_id(int(modelo_id)) or {}
     avisos: list[str] = []
     t0 = time.perf_counter()
-    dados_ok = preparar_dados(dados or {}, modelo)
-    saida = (
-        renderizar_composicao(composicao, dados_ok, avisos=avisos)
-        if composicao is not None
-        else renderizar(pdf, campos, dados_ok, avisos=avisos)
-    )
+    dados_ok = preparar_dados({k: v for k, v in (dados or {}).items() if not str(k).startswith("__")}, modelo)
+    if composicao is not None:
+        saida = renderizar_composicao(composicao, dados_ok, avisos=avisos, redes=redes)
+    else:
+        saida = (
+            renderizar(pdf, campos, dados_ok, avisos=avisos, exigir_campos=False)
+            if campos
+            else pdf.read_bytes()
+        )
+        saida = _aplicar_redes(modelo_id, saida, redes, avisos, exemplo=exemplo_redes)
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
@@ -1246,6 +1289,7 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
             modelo,
         )
         composicao = composicao_do_job(job)
+        redes_sel = selecao_redes_dos_dados(job.get("dados") or {})
         if composicao is not None:
             # Frente de um modelo + verso de outro (frente e verso independentes).
             campos = [
@@ -1254,10 +1298,14 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
                 for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
                 if c.get("template")
             ]
-            conteudo = renderizar_composicao(composicao, dados)
+            conteudo = renderizar_composicao(composicao, dados, redes=redes_sel)
         else:
             campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
-            conteudo = renderizar(caminho_pdf(int(job["modelo_id"])), campos, dados)
+            pdf_job = caminho_pdf(int(job["modelo_id"]))
+            conteudo = (
+                renderizar(pdf_job, campos, dados, exigir_campos=False) if campos else pdf_job.read_bytes()
+            )
+            conteudo = _aplicar_redes(int(job["modelo_id"]), conteudo, redes_sel, None)
 
         ano, nro = int(job["ano_protocolo"]), int(job["nro_protocolo"])
         sefoc = jobs_svc.resolve_os_papelaria_dir(ano, nro, create=True)
@@ -1315,3 +1363,48 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
     updated = jobs_svc.get_job(job_id) or job
     jobs_svc.broadcast_job_update(updated)
     return updated
+
+
+
+# ---------------------------------------------------------------------------
+# Bloco de redes sociais (admin)
+# ---------------------------------------------------------------------------
+
+
+def detectar_bloco_redes(modelo_id: int, pagina: int, marcadores: list[str]) -> dict[str, Any]:
+    from services import papelaria_redes_service as redes_svc
+
+    pdf = caminho_pdf(modelo_id)
+    if not pdf.is_file():
+        raise ProvaPdfError("Envie primeiro o PDF do modelo.")
+    return redes_svc.detectar_bloco(pdf, int(pagina), [str(m) for m in marcadores or []])
+
+
+def salvar_bloco_redes(modelo_id: int, raw: Any) -> dict[str, Any]:
+    """Grava (ou remove, com vazio) o bloco de redes sociais do modelo."""
+    from services import papelaria_redes_service as redes_svc
+
+    pdf = caminho_pdf(modelo_id)
+    if not pdf.is_file():
+        raise ProvaPdfError("Envie primeiro o PDF do modelo.")
+    bloco = redes_svc.normalizar_bloco(raw)
+    config = carregar_config(modelo_id)
+    if bloco is None:
+        config.pop("redes", None)
+    else:
+        marcadores = {t["marcador"] for t in analisar_pdf(pdf)["textos"]}
+        if bloco["fonte_marcador"] not in marcadores:
+            raise ProvaPdfError("A linha de referência de fonte não existe no PDF do modelo.")
+        config["redes"] = bloco
+        # As linhas de exemplo das redes deixam de ser campos de texto.
+        exemplo = set(bloco["marcadores"])
+        config["campos"] = [c for c in config.get("campos") or [] if c.get("marcador") not in exemplo]
+    config["atualizado_em"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _salvar_config(modelo_id, config)
+    try:
+        from services.papelaria_modelo_admin_service import sincronizar_campos_modelo_pdf
+
+        sincronizar_campos_modelo_pdf(modelo_id, config.get("campos") or [])
+    except Exception as exc:
+        logger.warning("Prova PDF: campos do modelo %s não atualizados: %s", modelo_id, exc)
+    return obter_modelo_pdf(modelo_id)

@@ -58,6 +58,20 @@ export interface PapelariaCorelModelDetail extends PapelariaCorelModelSummary {
   /** Mockup 3D do produto (só frente / frente e verso) — vale para todos os modelos. */
   mockup_produto?: { frente?: string | null; frente_verso?: string | null } | null;
   mockup_config_json_modelo?: string | null;
+  /** Bloco de redes sociais do PDF do modelo: redes que o usuário pode incluir. */
+  redes_bloco?: PapelariaRedesBloco | null;
+}
+
+export interface PapelariaRedeOpcao {
+  chave: string;
+  nome: string;
+  exemplo: string;
+  logo_url: string | null;
+}
+
+export interface PapelariaRedesBloco {
+  max: number;
+  redes: PapelariaRedeOpcao[];
 }
 
 export interface PapelariaOsContextOs {

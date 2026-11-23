@@ -1293,3 +1293,54 @@ export async function savePapelariaVariaveis(
     body: JSON.stringify({ variaveis }),
   });
 }
+
+// --- Redes sociais (catálogo universal) ---
+
+export interface PapelariaRedeSocial {
+  chave: string;
+  nome: string;
+  exemplo: string;
+  logo: string | null;
+  /** PNG do logo para exibição (relativo à API). */
+  logo_url: string | null;
+  ativo: boolean;
+}
+
+export async function fetchPapelariaRedes(): Promise<{ redes: PapelariaRedeSocial[] }> {
+  return apiFetch("/papelaria/admin/redes");
+}
+
+export async function savePapelariaRedes(
+  redes: Array<Pick<PapelariaRedeSocial, "chave" | "nome" | "exemplo" | "ativo">>,
+): Promise<{ redes: PapelariaRedeSocial[] }> {
+  return apiFetch("/papelaria/admin/redes", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ redes }),
+  });
+}
+
+export async function uploadPapelariaRedeLogo(
+  chave: string,
+  file: File,
+): Promise<{ redes: PapelariaRedeSocial[] }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(apiUrl(`/papelaria/admin/redes/${encodeURIComponent(chave)}/logo`), {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    let message = text || `Envio falhou (${res.status})`;
+    try {
+      const data = JSON.parse(text) as { detail?: unknown };
+      if (typeof data.detail === "string") message = data.detail;
+    } catch {
+      /* resposta não-JSON */
+    }
+    throw new Error(message);
+  }
+  return res.json() as Promise<{ redes: PapelariaRedeSocial[] }>;
+}

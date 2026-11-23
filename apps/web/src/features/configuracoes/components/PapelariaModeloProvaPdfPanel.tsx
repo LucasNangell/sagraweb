@@ -38,6 +38,7 @@ import {
   hidratarCampos,
   variaveisDosTemplates,
 } from "./provaPdfCampos";
+import { PapelariaBlocoRedesCard } from "./PapelariaBlocoRedesCard";
 import { EmptyState, Field, InlineMessage, PanelCard, StatusPill } from "./PapelariaWorkspaceUi";
 
 export { variaveisDosTemplates } from "./provaPdfCampos";
@@ -110,6 +111,12 @@ export function PapelariaModeloProvaPdfPanel({
 
   const textos = query.data?.analise?.textos ?? [];
   const textoKeys = useMemo(() => new Set(textos.map((t) => chaveTexto(t))), [textos]);
+  const blocoRedes = query.data?.redes ?? null;
+  /** Linhas de exemplo do bloco de redes (apagadas na prova; não viram campos). */
+  const exemploRedes = useMemo(
+    () => new Set((blocoRedes?.marcadores ?? []).map((m) => `${blocoRedes?.pagina ?? 1}|${m}`)),
+    [blocoRedes],
+  );
   const orfaosVisiveis = useMemo(
     () =>
       orfaosKeys
@@ -493,6 +500,19 @@ export function PapelariaModeloProvaPdfPanel({
                   {textos.map((t) => {
                     const c = campos[chaveTexto(t)] ?? campoVazio(t);
                     const ligado = Boolean(c.template.trim());
+                    if (exemploRedes.has(chaveTexto(t))) {
+                      return (
+                        <div key={chaveTexto(t)} role="row" className="pw-map-row">
+                          <div className="pw-map-row__cell pw-map-row__source">
+                            <p className="font-medium text-slate-500">{t.marcador}</p>
+                            <p className="text-[10px] text-slate-400">pág. {t.pagina}</p>
+                          </div>
+                          <div className="pw-map-row__cell">
+                            <StatusPill tone="info">Exemplo do bloco de redes sociais — apagado na prova</StatusPill>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={chaveTexto(t)} role="row" className={cn("pw-map-row", ligado && "is-linked")}>
                         <div className="pw-map-row__cell pw-map-row__source">
@@ -589,6 +609,17 @@ export function PapelariaModeloProvaPdfPanel({
                 </PanelCard>
               ) : null}
 
+              <PapelariaBlocoRedesCard
+                modeloId={modelo.id}
+                textos={textos}
+                bloco={blocoRedes}
+                ocupado={ocupado}
+                onSalvo={(data) => {
+                  aplicarResposta(data);
+                  setPrevia(null);
+                }}
+              />
+
               {variaveisModelo.length ? (
                 <div className="pw-vars">
                   <span className="text-[11px] font-medium text-slate-500">
@@ -636,9 +667,13 @@ export function PapelariaModeloProvaPdfPanel({
               <PanelCard
                 icon={<Eye className="size-3.5" aria-hidden />}
                 title="Prévia com valores de teste"
-                description={camposLigados.length ? "Salva os campos e gera a prova no servidor." : undefined}
+                description={
+                  camposLigados.length || blocoRedes?.ativo
+                    ? "Salva os campos e gera a prova no servidor (redes com os exemplos do cadastro)."
+                    : undefined
+                }
               >
-                {camposLigados.length ? (
+                {camposLigados.length || blocoRedes?.ativo ? (
                   <div className="space-y-2">
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                       {variaveisTeste.map((v) => (
@@ -655,7 +690,7 @@ export function PapelariaModeloProvaPdfPanel({
                     <button
                       type="button"
                       className="sagra-btn sagra-btn--previa sagra-btn--sm w-full justify-center"
-                      disabled={ocupado || !camposLigados.length}
+                      disabled={ocupado || (!camposLigados.length && !blocoRedes?.ativo)}
                       onClick={() =>
                         previaMutation.mutate({
                           lista: camposLigados,

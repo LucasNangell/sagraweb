@@ -294,6 +294,16 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if produto:
                 cleaned[key_stripped] = json.dumps(produto, ensure_ascii=False)
             continue
+        if key_stripped == "__redes":
+            from services.papelaria_redes_service import RedesError, normalizar_selecao
+
+            try:
+                sel = normalizar_selecao(value)
+            except RedesError as exc:
+                raise ValueError(str(exc)) from exc
+            if sel is not None:
+                cleaned[key_stripped] = json.dumps(sel, ensure_ascii=False)
+            continue
         if key_stripped == "__composicao":
             from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
 

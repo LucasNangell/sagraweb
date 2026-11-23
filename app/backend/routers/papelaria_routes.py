@@ -434,7 +434,9 @@ def previa_prova_pdf_modelo(
     from services import papelaria_prova_pdf_service as svc
 
     try:
-        return svc.previa_png(modelo_id, payload.dados)
+        return svc.previa_png(
+            modelo_id, payload.dados, exemplo_redes="__redes" not in (payload.dados or {})
+        )
     except svc.ProvaPdfError as e:
         raise HTTPException(400, str(e))
 
@@ -492,6 +494,113 @@ class PapelariaProdutoMockupPayload(BaseModel):
     produto: str
     variante: str
     mockup_config_json: Optional[Any] = None
+
+
+class PapelariaRedesPayload(BaseModel):
+    redes: list[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PapelariaBlocoRedesDetectarPayload(BaseModel):
+    pagina: int = 1
+    marcadores: list[str] = Field(default_factory=list)
+
+
+class PapelariaBlocoRedesPayload(BaseModel):
+    bloco: Optional[Dict[str, Any]] = None
+
+
+def _redes_publicas() -> list[Dict[str, Any]]:
+    from services import papelaria_redes_service as redes_svc
+
+    return [
+        {**r, "logo_url": f"/papelaria/redes/{r['chave']}/logo.png" if r.get("logo") else None}
+        for r in redes_svc.listar()
+    ]
+
+
+@router.get("/admin/redes")
+def listar_redes_sociais(_session: SessionData = Depends(_require_import_access)):
+    """Catálogo universal de redes sociais (nome, exemplo, logo, ativo)."""
+    return {"redes": _redes_publicas()}
+
+
+@router.put("/admin/redes")
+def salvar_redes_sociais(
+    payload: PapelariaRedesPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        redes_svc.salvar_lista(payload.redes)
+    except redes_svc.RedesError as e:
+        raise HTTPException(400, str(e))
+    return {"redes": _redes_publicas()}
+
+
+@router.post("/admin/redes/{chave}/logo")
+async def enviar_logo_rede(
+    chave: str,
+    file: UploadFile = File(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Logo da rede: SVG ou PDF (vetorial, recomendado) ou PNG."""
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        redes_svc.salvar_logo(chave, file.filename or "", await file.read())
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except redes_svc.RedesError as e:
+        raise HTTPException(400, str(e))
+    return {"redes": _redes_publicas()}
+
+
+@router.get("/redes/{chave}/logo.png")
+def logo_rede_png(
+    chave: str,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    from services import papelaria_redes_service as redes_svc
+
+    png = redes_svc.logo_png(chave)
+    if not png:
+        raise HTTPException(404, "Logo não encontrado.")
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
+
+
+@router.post("/admin/modelos/{modelo_id}/prova-pdf/redes/detectar")
+def detectar_bloco_redes_modelo(
+    modelo_id: int,
+    payload: PapelariaBlocoRedesDetectarPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Sugere área, ícone, espaçamentos e fonte a partir das linhas de exemplo."""
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        return svc.detectar_bloco_redes(modelo_id, payload.pagina, payload.marcadores)
+    except (svc.ProvaPdfError, redes_svc.RedesError) as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/admin/modelos/{modelo_id}/prova-pdf/redes")
+def salvar_bloco_redes_modelo(
+    modelo_id: int,
+    payload: PapelariaBlocoRedesPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Grava o bloco de redes sociais do modelo (bloco vazio remove)."""
+    _modelo_existe(modelo_id)
+    from services import papelaria_prova_pdf_service as svc
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        return svc.salvar_bloco_redes(modelo_id, payload.bloco)
+    except (svc.ProvaPdfError, redes_svc.RedesError) as e:
+        raise HTTPException(400, str(e))
 
 
 class PapelariaVariaveisPayload(BaseModel):
@@ -1030,8 +1139,11 @@ def previa_pdf_ao_vivo(
         raise HTTPException(404, "Modelo não encontrado.")
     from services.papelaria_faces_service import ComposicaoError, validar_composicao
 
+    # Chaves internas ficam de fora, menos a escolha de redes sociais.
     dados = {
-        k: v for k, v in (payload.dados or {}).items() if not str(k).startswith("__")
+        k: v
+        for k, v in (payload.dados or {}).items()
+        if not str(k).startswith("__") or k == "__redes"
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None

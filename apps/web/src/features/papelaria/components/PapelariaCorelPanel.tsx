@@ -46,6 +46,13 @@ import {
   usePapelariaComposicao,
 } from "./PapelariaFrenteVersoPicker";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
+import {
+  PapelariaRedesPicker,
+  REDES_DADOS_KEY,
+  redesIniciais,
+  redesParaDados,
+  type RedeEscolha,
+} from "./PapelariaRedesPicker";
 import type {
   ImposicaoVariante,
   ImposicaoVariantesResponse,
@@ -840,6 +847,29 @@ export function PapelariaCorelPanel({
 
   /** Campos exibidos: modelo (sem variáveis só dos objetos do produto) + campos do produto. */
   const extrasCamposKey = modelosExtrasQueries.map((q) => q.dataUpdatedAt).join("|");
+
+  // Redes sociais: bloco do modelo (ou do verso/frente da composição).
+  const redesBloco = useMemo(() => {
+    const detalhes = [modelDetailQuery.data, ...modelosExtrasQueries.map((q) => q.data)];
+    const ids = composicao ? new Set([composicao.frente.modelo_id, composicao.verso.modelo_id]) : null;
+    for (const d of detalhes) {
+      if (!d?.redes_bloco?.redes.length) continue;
+      if (ids && !ids.has(d.id)) continue;
+      return d.redes_bloco;
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDetailQuery.data, composicao, extrasCamposKey]);
+  const redesBlocoKey = redesBloco ? redesBloco.redes.map((r) => r.chave).join(",") : "";
+  const [redesEscolha, setRedesEscolha] = useState<RedeEscolha[]>([]);
+  useEffect(() => {
+    // Mantém o que já foi digitado quando o bloco muda (ex.: troca de verso).
+    setRedesEscolha((prev) => {
+      const antigos = new Map(prev.map((r) => [r.chave, r]));
+      return redesIniciais(redesBloco).map((r) => antigos.get(r.chave) ?? r);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [redesBlocoKey]);
   const camposFormulario = useMemo(() => {
     if (!modelDetailQuery.data) return undefined;
     const base = camposVisiveis(
@@ -927,8 +957,16 @@ export function PapelariaCorelPanel({
     if (composicao) {
       base[COMPOSICAO_DADOS_KEY] = JSON.stringify(composicao);
     }
+    if (redesBloco) {
+      base[REDES_DADOS_KEY] = redesParaDados(redesEscolha);
+    }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha]);
+
+  const valoresPrevia = useMemo(
+    () => (redesBloco ? { ...fieldValues, [REDES_DADOS_KEY]: redesParaDados(redesEscolha) } : fieldValues),
+    [fieldValues, redesBloco, redesEscolha],
+  );
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
@@ -1578,6 +1616,9 @@ export function PapelariaCorelPanel({
                             onRestaurar={restaurarCamposDoModelo}
                           />
                         ) : null}
+                        {redesBloco ? (
+                          <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} />
+                        ) : null}
                         <DynamicFields
                           fields={camposFormulario}
                           isLoading={modelDetailQuery.isLoading}
@@ -1710,6 +1751,9 @@ export function PapelariaCorelPanel({
                       onRestaurar={restaurarCamposDoModelo}
                     />
                   ) : null}
+                  {redesBloco ? (
+                    <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} />
+                  ) : null}
                   <DynamicFields
                     fields={camposFormulario}
                     isLoading={modelDetailQuery.isLoading}
@@ -1829,7 +1873,7 @@ export function PapelariaCorelPanel({
             previewConfigJson={previewConfigJsonEfetivo}
             temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao)}
             composicao={composicao}
-            livePreviewValues={fieldValues}
+            livePreviewValues={valoresPrevia}
             previa={previa}
             selectedModelId={selectedModelId}
             modelLoading={modelDetailQuery.isLoading}

@@ -40,11 +40,35 @@ export interface ProvaPdfCampo {
   reduzir_para_caber: boolean;
 }
 
+export type ProvaPdfRedesDisposicao = "vertical" | "horizontal" | "grade";
+
+/** Bloco de redes sociais do modelo (área do PDF + layout). */
+export interface ProvaPdfBlocoRedes {
+  ativo: boolean;
+  pagina: number;
+  /** Área em pontos do PDF: [x0, y0, x1, y1]. */
+  area: [number, number, number, number];
+  /** Linhas de exemplo das redes no PDF (apagadas na prova). */
+  marcadores: string[];
+  /** Linha que define fonte, tamanho e cor do texto das redes. */
+  fonte_marcador: string;
+  disposicao: ProvaPdfRedesDisposicao;
+  alinhamento_h: "esquerda" | "centro" | "direita";
+  alinhamento_v: "topo" | "meio" | "base";
+  icone_mm: number;
+  espaco_mm: number;
+  gap_mm: number;
+  max: number;
+  /** Redes aceitas (vazio = todas as ativas do catálogo). */
+  permitidas: string[];
+}
+
 export interface ProvaPdfModelo {
   tem_pdf: boolean;
   arquivo?: string;
   atualizado_em?: string | null;
   campos: ProvaPdfCampo[];
+  redes?: ProvaPdfBlocoRedes | null;
   analise: {
     paginas: Array<{ pagina: number; largura_mm: number; altura_mm: number }>;
     fontes: ProvaPdfFonte[];
@@ -133,5 +157,31 @@ export function previaPdfAoVivo(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(composicao ? { dados, composicao } : { dados }),
     signal,
+  });
+}
+
+
+/** Sugere o bloco de redes a partir das linhas de exemplo escolhidas. */
+export function detectarBlocoRedes(
+  modeloId: number,
+  pagina: number,
+  marcadores: string[],
+): Promise<ProvaPdfBlocoRedes> {
+  return apiFetch<ProvaPdfBlocoRedes>(`${base(modeloId)}/redes/detectar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina, marcadores }),
+  });
+}
+
+/** Grava (ou remove, com null) o bloco de redes sociais do modelo. */
+export function salvarBlocoRedes(
+  modeloId: number,
+  bloco: ProvaPdfBlocoRedes | null,
+): Promise<ProvaPdfModelo> {
+  return apiFetch<ProvaPdfModelo>(`${base(modeloId)}/redes`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bloco }),
   });
 }

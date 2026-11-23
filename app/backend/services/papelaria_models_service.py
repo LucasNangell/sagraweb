@@ -821,6 +821,7 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         out["campos"] = campos if isinstance(campos, dict) else {}
         from services.papelaria_variaveis_service import variaveis_do_pdf_do_modelo
 
+        out["redes_bloco"] = _redes_bloco_publico(int(row["ID"]))
         variaveis_pdf = variaveis_do_pdf_do_modelo(int(row["ID"]))
         if variaveis_pdf is not None:
             # Prova PDF: os campos do formulário são as variáveis dos textos ligados no PDF.
@@ -838,6 +839,34 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
     from services.papelaria_produto_mockup_service import aplicar_no_modelo
 
     return aplicar_no_modelo(out)
+
+
+def _redes_bloco_publico(modelo_id: int) -> Optional[dict[str, Any]]:
+    """Bloco de redes sociais do modelo (Prova PDF) para o formulário da Papelaria."""
+    try:
+        from services import papelaria_prova_pdf_service as pdf_svc
+        from services import papelaria_redes_service as redes_svc
+
+        if not pdf_svc.caminho_pdf(modelo_id).is_file():
+            return None
+        bloco = pdf_svc.carregar_config(modelo_id).get("redes")
+        if not isinstance(bloco, dict) or not bloco.get("ativo"):
+            return None
+        return {
+            "max": int(bloco.get("max") or 6),
+            "redes": [
+                {
+                    "chave": r["chave"],
+                    "nome": r["nome"],
+                    "exemplo": r["exemplo"],
+                    "logo_url": f"/papelaria/redes/{r['chave']}/logo.png" if r.get("logo") else None,
+                }
+                for r in redes_svc.redes_do_bloco(bloco)
+            ],
+        }
+    except Exception as exc:
+        logger.warning("Bloco de redes do modelo %s indisponível: %s", modelo_id, exc)
+        return None
 
 
 def _infer_campo_labels(

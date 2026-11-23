@@ -15,7 +15,7 @@ import { toast } from "@/components/ui/toastStore";
 import { InlineMessage, StatusPill } from "./PapelariaWorkspaceUi";
 
 const QUERY_KEY = ["admin", "papelaria-redes"] as const;
-const CHAVE_RE = /^[a-z][a-z0-9_]{1,39}$/;
+const CHAVE_RE = /^[a-z][a-z0-9_]{0,39}$/; // «x» (X/Twitter) tem 1 letra
 
 type Linha = Pick<PapelariaRedeSocial, "chave" | "nome" | "exemplo" | "ativo"> & {
   _id: string;
@@ -102,13 +102,42 @@ export function PapelariaRedesSection() {
       return next;
     });
 
-  const salvar = () => {
-    const invalida = linhas.find((l) => !CHAVE_RE.test(l.chave) || !l.nome.trim());
-    if (invalida) {
-      setErro(`Preencha o nome da rede${invalida.nome ? ` «${invalida.nome}»` : ""} (o identificador é gerado a partir dele).`);
-      return;
+  /** Valida a lista; devolve false (e mostra o motivo) se algo impede salvar. */
+  const validar = (): boolean => {
+    const semNome = linhas.find((l) => !l.nome.trim());
+    if (semNome) {
+      setErro("Preencha o nome de todas as redes (o identificador é gerado a partir dele).");
+      return false;
     }
-    saveMutation.mutate();
+    const invalida = linhas.find((l) => !CHAVE_RE.test(l.chave));
+    if (invalida) {
+      setErro(`O nome «${invalida.nome}» não gera um identificador válido — comece por uma letra.`);
+      return false;
+    }
+    const chaves = linhas.map((l) => l.chave);
+    const repetida = chaves.find((c, i) => chaves.indexOf(c) !== i);
+    if (repetida) {
+      setErro(`Duas redes geram o mesmo identificador «${repetida}». Use nomes diferentes.`);
+      return false;
+    }
+    return true;
+  };
+
+  const salvar = () => {
+    if (validar()) saveMutation.mutate();
+  };
+
+  /** Logo de rede ainda não salva: grava a lista antes de enviar o arquivo. */
+  const enviarLogo = async (chave: string, file: File) => {
+    if (dirty || linhas.some((l) => l._nova)) {
+      if (!validar()) return;
+      try {
+        await saveMutation.mutateAsync();
+      } catch {
+        return;
+      }
+    }
+    logoMutation.mutate({ chave, file });
   };
 
   return (
@@ -148,7 +177,7 @@ export function PapelariaRedesSection() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file && alvoLogo) logoMutation.mutate({ chave: alvoLogo, file });
+          if (file && alvoLogo) void enviarLogo(alvoLogo, file);
         }}
       />
 
@@ -175,9 +204,13 @@ export function PapelariaRedesSection() {
               <button
                 type="button"
                 className="pw-rede-logo"
-                title={l._nova ? "Salve a rede antes de enviar o logo" : "Enviar logo (SVG, PDF ou PNG)"}
+                title={
+                  l.chave
+                    ? "Enviar logo (SVG ou PDF vetorial; PNG também). Rede nova é salva antes."
+                    : "Preencha o nome da rede para enviar o logo"
+                }
                 aria-label={`Enviar logo de ${l.nome || "nova rede"}`}
-                disabled={l._nova || logoMutation.isPending}
+                disabled={!l.chave || logoMutation.isPending || saveMutation.isPending}
                 onClick={() => {
                   setAlvoLogo(l.chave);
                   inputRef.current?.click();
@@ -194,7 +227,7 @@ export function PapelariaRedesSection() {
               <div className="pw-var-row__cell" data-label="Nome">
                 <input
                   className="pw-input pw-input--sm"
-                  aria-label={`Nome da rede ${l.chave}`}
+                  aria-label={`Nome da rede ${l._nova ? "nova" : l.chave}`}
                   value={l.nome}
                   maxLength={60}
                   placeholder="Ex.: YouTube"

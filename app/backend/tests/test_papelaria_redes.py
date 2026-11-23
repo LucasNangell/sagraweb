@@ -170,3 +170,30 @@ def test_prova_pdf_com_bloco_de_redes(tmp_path, monkeypatch, catalogo):
     assert r["paginas"]
     pdf_svc.salvar_bloco_redes(31, None)
     assert "redes" not in pdf_svc.carregar_config(31)
+
+
+def test_identificador_de_uma_letra_e_valido():
+    """«x» (X/Twitter) tem 1 letra — antes era recusado e impedia salvar a lista."""
+    from services import papelaria_redes_service as svc
+
+    assert svc.CHAVE_RE.match("x")
+    assert svc.CHAVE_RE.match("youtube")
+    assert not svc.CHAVE_RE.match("1rede")
+
+
+def test_salvar_logo_svg_vira_pdf_vetorial(tmp_path, monkeypatch):
+    from services import papelaria_redes_service as svc
+
+    monkeypatch.setattr(svc, "PASTA_LOGOS", tmp_path)
+    monkeypatch.setattr(svc, "por_chave", lambda: {"youtube": {"chave": "youtube", "nome": "YouTube", "logo": "youtube.pdf"}})
+    monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: [])
+    monkeypatch.setattr(svc, "invalidar_cache", lambda: None)
+    svg = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        b'<rect width="24" height="24" rx="5" fill="#f00"/><path d="M9 7l8 5-8 5z" fill="#fff"/></svg>'
+    )
+    svc.salvar_logo("youtube", "YouTube.svg", svg)
+    salvo = tmp_path / "youtube.pdf"
+    assert salvo.is_file()
+    with fitz.open(salvo) as d:
+        assert d.page_count == 1 and d[0].get_drawings()

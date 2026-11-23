@@ -11,7 +11,7 @@ export const REDES_ESTILO_DADOS_KEY = "__redes_estilo";
 export function estiloInicial(bloco: PapelariaRedesBloco | null | undefined): PapelariaRedeEstilo {
   const disponiveis = bloco?.estilos?.map((e) => e.id) ?? [];
   const padrao = bloco?.estilo_padrao ?? "quadrado_policromia";
-  return disponiveis.length && !disponiveis.includes(padrao) ? disponiveis[0] : padrao;
+  return disponiveis.length && !disponiveis.includes(padrao) ? (disponiveis[0] ?? padrao) : padrao;
 }
 
 function temEstilo(bloco: PapelariaRedesBloco, chave: string, estilo: PapelariaRedeEstilo): boolean {
@@ -91,7 +91,11 @@ export function PapelariaRedesPicker({
     const j = i + d;
     if (j < 0 || j >= value.length) return;
     const next = [...value];
-    [next[i], next[j]] = [next[j], next[i]];
+    const a = next[i];
+    const b = next[j];
+    if (!a || !b) return;
+    next[i] = b;
+    next[j] = a;
     onChange(next);
   };
 

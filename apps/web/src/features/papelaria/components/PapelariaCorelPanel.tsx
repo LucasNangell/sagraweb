@@ -40,12 +40,12 @@ import {
   type PapelariaCorelDadosEstado,
 } from "./PapelariaCorelDadosModal";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
-import type { PapelariaRedeEstilo } from "@/features/papelaria/types";
+import type { PapelariaFaceFonte, PapelariaRedeEstilo } from "@/features/papelaria/types";
 import {
   COMPOSICAO_DADOS_KEY,
-  PapelariaFrenteVersoPicker,
   usePapelariaComposicao,
 } from "./PapelariaFrenteVersoPicker";
+import { PapelariaModelosLista, resumoListaModelos } from "./PapelariaModelosLista";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
   estiloInicial,
@@ -811,7 +811,22 @@ export function PapelariaCorelPanel({
     });
   }, [modelDetailQuery.data]);
 
-  const handleSelectModel = (model: PapelariaCorelModelSummary) => {
+  /** Frente escolhida na lista: troca o modelo (se for outro) e mantém o verso. */
+  const handleSelectFrente = (fonte: PapelariaFaceFonte) => {
+    const ref = { modelo_id: fonte.modelo_id, pagina: fonte.pagina };
+    if (fonte.modelo_id === selectedModelId) {
+      setComposicao((c) => (c ? { ...c, frente: ref } : c));
+      return;
+    }
+    handleSelectModel({ id: fonte.modelo_id });
+  };
+
+  const handleSelectVerso = (fonte: PapelariaFaceFonte) => {
+    const ref = { modelo_id: fonte.modelo_id, pagina: fonte.pagina };
+    setComposicao((c) => (c ? { ...c, verso: ref } : c));
+  };
+
+  const handleSelectModel = (model: Pick<PapelariaCorelModelSummary, "id">) => {
     marcarEscolhaManual();
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
@@ -1577,40 +1592,19 @@ export function PapelariaCorelPanel({
                       Modelos disponíveis
                     </h2>
                     <p className="text-[10px] text-neutral-500">
-                      {modelos.length === 0
-                        ? "Nenhum modelo para este produto"
-                        : `${modelos.length} opção(ões)`}
+                      {resumoListaModelos(modelos, facesComposicao, composicao)}
                     </p>
                   </div>
                   <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
-                    {modelos.length === 0 ? (
-                      <p className="p-4 text-center text-xs text-neutral-500">
-                        Importe a planilha de modelos ou verifique o produto da OS.
-                      </p>
-                    ) : (
-                      modelos.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          className={cn(
-                            "w-full rounded-lg border p-3 text-left text-xs transition-colors",
-                            selectedModelId === m.id
-                              ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
-                              : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
-                          )}
-                          onClick={() => handleSelectModel(m)}
-                        >
-                          <p className="font-semibold text-secondary-blue">
-                            {m.nome_exibicao}
-                          </p>
-                          <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
-                          <p className="text-neutral-500">{m.cores}</p>
-                          <p className="mt-1 font-mono text-[10px] text-neutral-400">
-                            {m.arquivo_modelo}
-                          </p>
-                        </button>
-                      ))
-                    )}
+                    <PapelariaModelosLista
+                      modelos={modelos}
+                      selectedModelId={selectedModelId}
+                      onSelectModel={handleSelectModel}
+                      faces={facesComposicao}
+                      composicao={composicao}
+                      onSelectFrente={handleSelectFrente}
+                      onSelectVerso={handleSelectVerso}
+                    />
                   </div>
                 </div>
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-sagra-border md:border-t-0">
@@ -1631,13 +1625,6 @@ export function PapelariaCorelPanel({
                       </p>
                     ) : (
                       <>
-                        {facesComposicao && composicao ? (
-                          <PapelariaFrenteVersoPicker
-                            faces={facesComposicao}
-                            value={composicao}
-                            onChange={setComposicao}
-                          />
-                        ) : null}
                         {camposProduto ? (
                           <CamposProdutoAviso
                             arquivo={camposProduto.arquivo}
@@ -1724,55 +1711,27 @@ export function PapelariaCorelPanel({
               Modelos disponíveis
             </h2>
             <p className="text-[10px] text-neutral-500">
-              {modelos.length === 0
-                ? "Nenhum modelo para este produto"
-                : `${modelos.length} opção(ões)`}
+              {resumoListaModelos(modelos, facesComposicao, composicao)}
             </p>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-              {modelos.length === 0 ? (
-                <p className="p-4 text-center text-xs text-neutral-500">
-                  Importe a planilha de modelos ou verifique o produto da OS.
-                </p>
-              ) : (
-                modelos.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={cn(
-                      "w-full rounded-lg border p-3 text-left text-xs transition-colors",
-                      selectedModelId === m.id
-                        ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
-                        : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
-                    )}
-                    onClick={() => handleSelectModel(m)}
-                  >
-                    <p className="font-semibold text-secondary-blue">
-                      {m.nome_exibicao}
-                    </p>
-                    <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
-                    <p className="text-neutral-500">{m.cores}</p>
-                    <p className="mt-1 font-mono text-[10px] text-neutral-400">
-                      {m.arquivo_modelo}
-                    </p>
-                  </button>
-                ))
-              )}
+              <PapelariaModelosLista
+                modelos={modelos}
+                selectedModelId={selectedModelId}
+                onSelectModel={handleSelectModel}
+                faces={facesComposicao}
+                composicao={composicao}
+                onSelectFrente={handleSelectFrente}
+                onSelectVerso={handleSelectVerso}
+              />
 
               {selectedModelId !== null ? (
                 <div className="border-t border-neutral-200 pt-2">
                   <h3 className="mb-2 text-xs font-bold text-neutral-700">
                     Informações do cliente
                   </h3>
-                  {facesComposicao && composicao ? (
-                    <PapelariaFrenteVersoPicker
-                      faces={facesComposicao}
-                      value={composicao}
-                      onChange={setComposicao}
-                    />
-                  ) : null}
                   {camposProduto ? (
                     <CamposProdutoAviso
                       arquivo={camposProduto.arquivo}

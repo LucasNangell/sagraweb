@@ -145,7 +145,7 @@ describe("PapelariaProdutosAdminSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Novo verso/ }));
     expect(screen.getByTestId("novo-modelo-form")).toHaveTextContent("Cartão de visita|verso");
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Novo produto/ })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Novo produto/ })[0]!);
     expect(screen.getByTestId("novo-modelo-form")).toHaveTextContent("novo-produto");
   });
 
@@ -175,7 +175,7 @@ describe("PapelariaProdutosAdminSection", () => {
     await screen.findByTestId("panel-dados");
     const versos = screen.getByTestId("pw-face-col-verso");
     fireEvent.click(within(versos).getByRole("button", { name: /Remover o verso Cartão de visita 2/ }));
-    expect(confirm.mock.calls[0][0]).toMatch(/a frente continua/);
+    expect(confirm.mock.calls[0]![0]).toMatch(/a frente continua/);
     await vi.waitFor(() => expect(api.removerPapelariaModeloFace).toHaveBeenCalledWith(2, "verso"));
     confirm.mockRestore();
   });

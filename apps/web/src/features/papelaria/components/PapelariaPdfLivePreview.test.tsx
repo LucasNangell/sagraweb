@@ -23,7 +23,7 @@ describe("PapelariaPdfLivePreview", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     api.previaPdfAoVivo.mockReset();
     api.previaPdfAoVivo.mockImplementation(async (_id: number, dados: Record<string, string>) => ({
-      paginas: [`data:image/png;base64,${dados.nome_deputado ?? ""}`],
+      paginas: [`data:image/png;base64,${dados["nome_deputado"] ?? ""}`],
       ms: 10,
     }));
   });
@@ -36,7 +36,7 @@ describe("PapelariaPdfLivePreview", () => {
       "data:image/png;base64,Ana",
     );
     expect(api.previaPdfAoVivo).toHaveBeenCalledTimes(1);
-    expect(api.previaPdfAoVivo.mock.calls[0][0]).toBe(7);
+    expect(api.previaPdfAoVivo.mock.calls[0]![0]).toBe(7);
 
     update({ nome_deputado: "Ana M" });
     update({ nome_deputado: "Ana Maria" });

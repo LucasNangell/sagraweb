@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
 import { Layers, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -54,6 +54,28 @@ export function composicaoInicial(
 }
 
 /**
+ * Composição ao (re)carregar as opções: a frente segue o modelo selecionado;
+ * o verso já escolhido é mantido enquanto continuar disponível.
+ */
+export function composicaoMantendoVerso(
+  faces: PapelariaFacesResponse,
+  modeloId: number,
+  origem: "auto" | "card",
+  anterior: PapelariaComposicao | null,
+): PapelariaComposicao | null {
+  const inicial = composicaoInicial(faces, modeloId, origem);
+  if (!inicial) return null;
+  const valida = (lista: PapelariaFaceFonte[], r: PapelariaFaceRef | null | undefined) =>
+    Boolean(r && lista.some((f) => f.tem_pdf && mesma(f, r)));
+  const frente =
+    anterior && anterior.frente.modelo_id === modeloId && valida(faces.frente, anterior.frente)
+      ? anterior.frente
+      : inicial.frente;
+  const verso = anterior && valida(faces.verso, anterior.verso) ? anterior.verso : inicial.verso;
+  return { frente, verso };
+}
+
+/**
  * Estado da composição frente/verso da página Papelaria. Só fica ativo em
  * produto frente e verso com modo Prova PDF e opções com PDF configurado.
  */
@@ -71,6 +93,8 @@ export function usePapelariaComposicao(
     queryFn: () => fetchPapelariaFaces(selectedModelId!),
     enabled: habilitado,
     staleTime: 60_000,
+    // Mesma lista (produto + cores) ao trocar a frente: sem piscar nem zerar.
+    placeholderData: keepPreviousData,
   });
   const [composicao, setComposicao] = useState<PapelariaComposicao | null>(null);
   const origemRef = useRef<"auto" | "card">("auto");
@@ -81,7 +105,7 @@ export function usePapelariaComposicao(
       setComposicao(null);
       return;
     }
-    setComposicao(composicaoInicial(faces, selectedModelId, origemRef.current));
+    setComposicao((anterior) => composicaoMantendoVerso(faces, selectedModelId, origemRef.current, anterior));
   }, [faces, selectedModelId]);
 
   /** Chamar ao escolher um card de modelo (frente e verso daquele modelo). */

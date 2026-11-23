@@ -66,7 +66,7 @@ describe("PapelariaRedesSection", () => {
     fireEvent.change(screen.getByTestId("pw-rede-logo-input"), { target: { files: [arquivo] } });
     await vi.waitFor(() => expect(api.uploadPapelariaRedeLogo).toHaveBeenCalledWith("youtube", arquivo, "pb"));
     expect(api.savePapelariaRedes).toHaveBeenCalledTimes(1);
-    expect(api.savePapelariaRedes.mock.calls[0][0].map((r: { chave: string }) => r.chave)).toEqual([
+    expect(api.savePapelariaRedes.mock.calls[0]![0].map((r: { chave: string }) => r.chave)).toEqual([
       "x",
       "instagram",
       "youtube",

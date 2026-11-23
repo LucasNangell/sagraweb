@@ -141,6 +141,7 @@ export function PapelariaProdutosAdminSection() {
       return;
     }
     const group = groups.find((g) => g.produto === selectedProduto) ?? groups[0];
+    if (!group) return;
     if (group.produto !== selectedProduto) {
       setSelectedProduto(group.produto);
     }

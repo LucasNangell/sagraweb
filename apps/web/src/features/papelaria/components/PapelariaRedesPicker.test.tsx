@@ -42,7 +42,7 @@ describe("PapelariaRedesPicker", () => {
     expect(screen.getByLabelText("Incluir X")).toBeDisabled();
     expect(screen.getByLabelText("Perfil no X")).toBeDisabled();
     fireEvent.click(screen.getByLabelText("Descer Instagram"));
-    expect(onChange.mock.calls[0][0].map((r: RedeEscolha) => r.chave)).toEqual(["whatsapp", "instagram", "x"]);
+    expect(onChange.mock.calls[0]![0].map((r: RedeEscolha) => r.chave)).toEqual(["whatsapp", "instagram", "x"]);
   });
 });
 
@@ -73,12 +73,12 @@ describe("PapelariaRedesPicker · estilo dos logos", () => {
     );
     fireEvent.click(screen.getByRole("radio", { name: "PB" }));
     expect(onEstiloChange).toHaveBeenCalledWith("pb");
-    expect(onChange.mock.calls[0][0]).toEqual([
+    expect(onChange.mock.calls[0]![0]).toEqual([
       { chave: "instagram", valor: "@a", ativo: true },
       { chave: "linkedin", valor: "in/a", ativo: false },
     ]);
     rerender(
-      <PapelariaRedesPicker bloco={comEstilos} value={onChange.mock.calls[0][0]} onChange={onChange} estilo="pb" onEstiloChange={onEstiloChange} />,
+      <PapelariaRedesPicker bloco={comEstilos} value={onChange.mock.calls[0]![0]} onChange={onChange} estilo="pb" onEstiloChange={onEstiloChange} />,
     );
     expect(screen.getByLabelText("Incluir LinkedIn")).toBeDisabled();
     expect(screen.getByLabelText("Perfil no LinkedIn")).toHaveAttribute("placeholder", "Sem logo neste estilo");

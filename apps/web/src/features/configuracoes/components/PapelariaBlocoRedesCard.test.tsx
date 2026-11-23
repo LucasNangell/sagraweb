@@ -76,7 +76,7 @@ describe("PapelariaBlocoRedesCard", () => {
     fireEvent.click(await screen.findByText("X"));
     fireEvent.click(screen.getByRole("button", { name: /Salvar bloco/ }));
     await vi.waitFor(() => expect(api.salvarBlocoRedes).toHaveBeenCalled());
-    const enviado = api.salvarBlocoRedes.mock.calls[0][1];
+    const enviado = api.salvarBlocoRedes.mock.calls[0]![1];
     expect(enviado.disposicao).toBe("grade");
     expect(enviado.permitidas).toEqual(["tiktok"]);
     await vi.waitFor(() => expect(onSalvo).toHaveBeenCalled());

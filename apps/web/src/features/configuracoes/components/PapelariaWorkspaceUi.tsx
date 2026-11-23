@@ -53,7 +53,9 @@ export function SegmentedControl<T extends string>({
     else if (e.key === "End") next = options.length - 1;
     if (next < 0) return;
     e.preventDefault();
-    onChange(options[next].id);
+    const opcao = options[next];
+    if (!opcao) return;
+    onChange(opcao.id);
     refs.current[next]?.focus();
   };
 

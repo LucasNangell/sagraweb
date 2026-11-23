@@ -53,7 +53,7 @@ describe("PapelariaVariaveisSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Salvar alterações/ }));
     await vi.waitFor(() => expect(api.savePapelariaVariaveis).toHaveBeenCalled());
-    expect(api.savePapelariaVariaveis.mock.calls[0][0][1]).toEqual({
+    expect(api.savePapelariaVariaveis.mock.calls[0]![0][1]).toEqual({
       chave: "nome_assessor",
       rotulo: "Assessor(a)",
       fonte: "gabinete_numero",

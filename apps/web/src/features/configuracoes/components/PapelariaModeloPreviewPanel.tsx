@@ -254,7 +254,9 @@ export function PapelariaModeloPreviewPanel({
       if (!face) return;
       const idx = face.elementos.findIndex((e) => e.id === elementId);
       if (idx < 0) return;
-      face.elementos[idx] = { ...face.elementos[idx], ...patch };
+      const atual = face.elementos[idx];
+      if (!atual) return;
+      face.elementos[idx] = { ...atual, ...patch };
       applyConfigDraft(next);
     },
     [applyConfigDraft, draftConfig],
@@ -266,7 +268,11 @@ export function PapelariaModeloPreviewPanel({
       const next: PapelariaPreviewConfig = structuredClone(draftConfig);
       const idx = (next.camposDinamicos ?? []).findIndex((t) => templateId(t) === tplId);
       if (idx < 0) return;
-      next.camposDinamicos![idx] = { ...next.camposDinamicos![idx], ...patch };
+      const lista = next.camposDinamicos ?? [];
+      const atual = lista[idx];
+      if (!atual) return;
+      lista[idx] = { ...atual, ...patch };
+      next.camposDinamicos = lista;
       applyConfigDraft(next);
     },
     [applyConfigDraft, draftConfig],

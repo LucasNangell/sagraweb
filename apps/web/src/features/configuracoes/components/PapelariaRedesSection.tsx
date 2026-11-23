@@ -125,7 +125,11 @@ export function PapelariaRedesSection() {
       const j = i + d;
       if (i < 0 || j < 0 || j >= prev.length) return prev;
       const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
+      const a = next[i];
+      const b = next[j];
+      if (!a || !b) return prev;
+      next[i] = b;
+      next[j] = a;
       return next;
     });
 

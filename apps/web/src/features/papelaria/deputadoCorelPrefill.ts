@@ -111,27 +111,27 @@ export function applyCamaraCorelEnrichment(
  * (espelha ``calcular_fontes`` do backend para as fontes do deputado).
  */
 export function fontesDoEnriquecimento(e: Record<string, string>): Record<string, string> {
-  const genero = (e.genero || "").trim();
+  const genero = (e["genero"] || "").trim();
   const base = genero ? (/deputada/i.test(genero) ? "Deputada" : "Deputado") : "";
-  const partido = (e.partido || "").trim();
-  const uf = (e.uf || "").trim().toUpperCase();
-  const anexo = (e.anexo || "").trim();
-  const gabinete = (e.gabinete || "").trim();
+  const partido = (e["partido"] || "").trim();
+  const uf = (e["uf"] || "").trim().toUpperCase();
+  const anexo = (e["anexo"] || "").trim();
+  const gabinete = (e["gabinete"] || "").trim();
   const endereco = [anexo ? `Anexo ${anexo}` : "", gabinete ? `Gabinete ${gabinete}` : ""]
     .filter(Boolean)
     .join(", ");
   const out: Record<string, string> = {
-    deputado_nome: (e.nome_deputado || "").trim(),
+    deputado_nome: (e["nome_deputado"] || "").trim(),
     deputado_genero: base,
     deputado_genero_federal: base ? `${base} Federal` : "",
     deputado_partido: partido,
     deputado_uf: uf,
     deputado_partido_uf: partido && uf ? `${partido}/${uf}` : partido || uf,
-    deputado_email: (e.email || "").trim(),
+    deputado_email: (e["email"] || "").trim(),
     gabinete_numero: gabinete,
     gabinete_anexo: anexo,
     gabinete_endereco: endereco,
-    gabinete_telefone: (e.contato_assessor || "").trim(),
+    gabinete_telefone: (e["contato_assessor"] || "").trim(),
   };
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v));
 }

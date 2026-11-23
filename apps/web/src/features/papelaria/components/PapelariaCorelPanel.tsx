@@ -49,10 +49,11 @@ import {
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
   estiloInicial,
+  lembrarRedes,
   PapelariaRedesPicker,
   REDES_DADOS_KEY,
   REDES_ESTILO_DADOS_KEY,
-  redesIniciais,
+  redesParaBloco,
   redesParaDados,
   type RedeEscolha,
 } from "./PapelariaRedesPicker";
@@ -866,15 +867,29 @@ export function PapelariaCorelPanel({
   const redesBlocoKey = redesBloco ? redesBloco.redes.map((r) => r.chave).join(",") : "";
   const [redesEscolha, setRedesEscolha] = useState<RedeEscolha[]>([]);
   const [redesEstilo, setRedesEstilo] = useState<PapelariaRedeEstilo>("quadrado_policromia");
+  // Memória da escolha de redes: sobrevive à troca de modelo (o detalhe do
+  // novo modelo ainda carregando não apaga o que o usuário já preencheu).
+  const redesMemoriaRef = useRef<RedeEscolha[]>([]);
+  const redesEstiloEscolhidoRef = useRef<PapelariaRedeEstilo | null>(null);
   useEffect(() => {
-    // Mantém o que já foi digitado quando o bloco muda (ex.: troca de verso).
-    setRedesEscolha((prev) => {
-      const antigos = new Map(prev.map((r) => [r.chave, r]));
-      return redesIniciais(redesBloco).map((r) => antigos.get(r.chave) ?? r);
-    });
-    setRedesEstilo(estiloInicial(redesBloco));
+    if (redesEscolha.length) {
+      redesMemoriaRef.current = lembrarRedes(redesMemoriaRef.current, redesEscolha);
+    }
+  }, [redesEscolha]);
+  useEffect(() => {
+    if (!redesBloco) return; // carregando ou modelo sem bloco: mantém a memória
+    setRedesEscolha(redesParaBloco(redesBloco, redesMemoriaRef.current));
+    const escolhido = redesEstiloEscolhidoRef.current;
+    const disponiveis = redesBloco.estilos?.map((e) => e.id);
+    setRedesEstilo(
+      escolhido && (!disponiveis || disponiveis.includes(escolhido)) ? escolhido : estiloInicial(redesBloco),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redesBlocoKey]);
+  const escolherEstiloRedes = useCallback((estilo: PapelariaRedeEstilo) => {
+    redesEstiloEscolhidoRef.current = estilo;
+    setRedesEstilo(estilo);
+  }, []);
   const camposFormulario = useMemo(() => {
     if (!modelDetailQuery.data) return undefined;
     const base = camposVisiveis(
@@ -1630,7 +1645,7 @@ export function PapelariaCorelPanel({
                           />
                         ) : null}
                         {redesBloco ? (
-                          <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={setRedesEstilo} />
+                          <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={escolherEstiloRedes} />
                         ) : null}
                         <DynamicFields
                           fields={camposFormulario}
@@ -1765,7 +1780,7 @@ export function PapelariaCorelPanel({
                     />
                   ) : null}
                   {redesBloco ? (
-                    <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={setRedesEstilo} />
+                    <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={escolherEstiloRedes} />
                   ) : null}
                   <DynamicFields
                     fields={camposFormulario}

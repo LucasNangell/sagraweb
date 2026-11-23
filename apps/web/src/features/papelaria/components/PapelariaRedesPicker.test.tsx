@@ -1,7 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { PapelariaRedesPicker, redesIniciais, redesParaDados, type RedeEscolha } from "./PapelariaRedesPicker";
+import {
+  lembrarRedes,
+  PapelariaRedesPicker,
+  redesIniciais,
+  redesParaBloco,
+  redesParaDados,
+  type RedeEscolha,
+} from "./PapelariaRedesPicker";
 
 const bloco = {
   max: 2,
@@ -75,5 +82,49 @@ describe("PapelariaRedesPicker · estilo dos logos", () => {
     );
     expect(screen.getByLabelText("Incluir LinkedIn")).toBeDisabled();
     expect(screen.getByLabelText("Perfil no LinkedIn")).toHaveAttribute("placeholder", "Sem logo neste estilo");
+  });
+});
+
+
+describe("redes preenchidas ao trocar de modelo", () => {
+  const blocoA = {
+    max: 3,
+    redes: [
+      { chave: "instagram", nome: "Instagram", exemplo: "", logo_url: null },
+      { chave: "whatsapp", nome: "WhatsApp", exemplo: "", logo_url: null },
+      { chave: "x", nome: "X", exemplo: "", logo_url: null },
+    ],
+  };
+  const blocoB = {
+    max: 3,
+    redes: [
+      { chave: "x", nome: "X", exemplo: "", logo_url: null },
+      { chave: "instagram", nome: "Instagram", exemplo: "", logo_url: null },
+      { chave: "youtube", nome: "YouTube", exemplo: "", logo_url: null },
+    ],
+  };
+
+  it("mantém perfis, marcações e ordem; redes novas entram desmarcadas", () => {
+    const escolhaA: RedeEscolha[] = [
+      { chave: "whatsapp", valor: "+55 61 9", ativo: true },
+      { chave: "instagram", valor: "@ana", ativo: true },
+      { chave: "x", valor: "", ativo: false },
+    ];
+    const memoria = lembrarRedes([], escolhaA);
+    expect(redesParaBloco(blocoB, memoria)).toEqual([
+      { chave: "instagram", valor: "@ana", ativo: true },
+      { chave: "x", valor: "", ativo: false },
+      { chave: "youtube", valor: "", ativo: false },
+    ]);
+  });
+
+  it("guarda redes que o novo modelo não aceita para quando voltar", () => {
+    const escolhaA: RedeEscolha[] = [{ chave: "whatsapp", valor: "+55", ativo: true }, ...redesIniciais(blocoA).slice(0, 1)];
+    let memoria = lembrarRedes([], escolhaA);
+    const escolhaB = redesParaBloco(blocoB, memoria).map((r) => (r.chave === "youtube" ? { ...r, valor: "yt/ana", ativo: true } : r));
+    memoria = lembrarRedes(memoria, escolhaB);
+    const deVoltaA = redesParaBloco(blocoA, memoria);
+    expect(deVoltaA.find((r) => r.chave === "whatsapp")).toEqual({ chave: "whatsapp", valor: "+55", ativo: true });
+    expect(redesParaBloco(blocoB, memoria).find((r) => r.chave === "youtube")?.valor).toBe("yt/ana");
   });
 });

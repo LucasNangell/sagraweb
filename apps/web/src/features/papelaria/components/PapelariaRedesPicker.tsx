@@ -27,6 +27,27 @@ export function redesIniciais(bloco: PapelariaRedesBloco | null | undefined): Re
   return (bloco?.redes ?? []).map((r) => ({ chave: r.chave, valor: "", ativo: false }));
 }
 
+/**
+ * Escolha para um bloco novo (ex.: troca de modelo) a partir da última
+ * escolha conhecida: mantém perfis digitados, marcações e ordem das redes que
+ * o novo bloco também aceita; as demais entram desmarcadas, no fim.
+ */
+export function redesParaBloco(
+  bloco: PapelariaRedesBloco | null | undefined,
+  memoria: RedeEscolha[],
+): RedeEscolha[] {
+  const aceitas = new Set((bloco?.redes ?? []).map((r) => r.chave));
+  const lembradas = memoria.filter((r) => aceitas.has(r.chave));
+  const vistas = new Set(lembradas.map((r) => r.chave));
+  return [...lembradas, ...redesIniciais(bloco).filter((r) => !vistas.has(r.chave))];
+}
+
+/** Junta a escolha atual à memória (a atual manda; redes de outros blocos ficam guardadas). */
+export function lembrarRedes(memoria: RedeEscolha[], atual: RedeEscolha[]): RedeEscolha[] {
+  const atuais = new Set(atual.map((r) => r.chave));
+  return [...atual, ...memoria.filter((r) => !atuais.has(r.chave))];
+}
+
 /** JSON gravado nos dados da prova: só as redes marcadas e preenchidas, na ordem escolhida. */
 export function redesParaDados(escolhas: RedeEscolha[]): string {
   return JSON.stringify(

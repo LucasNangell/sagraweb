@@ -1735,6 +1735,7 @@ export function PapelariaCorelPanel({
             arquivoModelo={arquivoModeloAtivo}
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
             previewConfigJson={previewConfigJsonEfetivo}
+            temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf)}
             livePreviewValues={fieldValues}
             previa={previa}
             selectedModelId={selectedModelId}

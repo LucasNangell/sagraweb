@@ -51,6 +51,8 @@ export interface PapelariaCorelModelDetail extends PapelariaCorelModelSummary {
   preview_config_json?: string | null;
   tem_preview_config?: boolean;
   preview_faces?: PapelariaPreviewFaceMeta[];
+  /** Modelo com PDF + textos ligados: a prévia ao vivo é o próprio PDF renderizado. */
+  tem_prova_pdf?: boolean;
 }
 
 export interface PapelariaOsContextOs {

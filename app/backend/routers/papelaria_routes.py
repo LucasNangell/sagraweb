@@ -239,7 +239,12 @@ def listar_modelos_admin(
     try:
         from services import papelaria_models_service as models_svc
 
-        return models_svc.list_modelos_admin()
+        from services import papelaria_prova_pdf_service as prova_pdf_svc
+
+        modelos = models_svc.list_modelos_admin()
+        for m in modelos:
+            m["tem_prova_pdf"] = prova_pdf_svc.tem_modelo_pdf(m.get("id"))
+        return modelos
     except Exception as e:
         logger.exception("Erro ao listar modelos admin papelaria: %s", e)
         raise HTTPException(500, "Erro ao listar modelos de papelaria.")
@@ -835,12 +840,44 @@ def obter_modelo_corel(
         modelo = models_svc.get_modelo_with_preview(modelo_id)
         if not modelo:
             raise HTTPException(404, "Modelo não encontrado.")
+        from services import papelaria_prova_pdf_service as prova_pdf_svc
+
+        # Com PDF do modelo configurado, a prévia ao vivo usa o próprio PDF.
+        modelo["tem_prova_pdf"] = prova_pdf_svc.tem_modelo_pdf(modelo_id)
         return modelo
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Erro ao obter modelo %s: %s", modelo_id, e)
         raise HTTPException(500, "Erro ao carregar modelo.")
+
+
+@router.post("/modelos/{modelo_id}/previa-pdf")
+def previa_pdf_ao_vivo(
+    modelo_id: int,
+    payload: PapelariaProvaPdfPreviaPayload,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """
+    Prévia ao vivo da página Papelaria: o PDF do modelo com os valores do
+    formulário, renderizado exatamente como a prova final (sem salvar nada).
+    """
+    from services import papelaria_models_service as models_svc
+    from services import papelaria_prova_pdf_service as svc
+
+    modelo = models_svc.get_modelo_by_id(int(modelo_id))
+    if not modelo:
+        raise HTTPException(404, "Modelo não encontrado.")
+    dados = {
+        k: v for k, v in (payload.dados or {}).items() if not str(k).startswith("__")
+    }
+    try:
+        return svc.previa_png(modelo_id, dados, dpi=110, modelo=modelo)
+    except svc.ProvaPdfError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro na prévia PDF do modelo %s: %s", modelo_id, e)
+        raise HTTPException(500, "Erro ao gerar a prévia do modelo.")
 
 
 @router.post("/preview")

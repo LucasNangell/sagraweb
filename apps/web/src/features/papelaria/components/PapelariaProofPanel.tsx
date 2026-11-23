@@ -52,6 +52,7 @@ import {
 } from "../preview";
 import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
+import { PapelariaPdfLivePreview } from "./PapelariaPdfLivePreview";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
 import { PapelariaProofMockup3D } from "./PapelariaProofMockup3D";
 import { PapelariaViewModeToggle } from "./PapelariaViewModeToggle";
@@ -65,6 +66,8 @@ type Props = {
   arquivoModelo?: string;
   mockupConfigJson?: string | null;
   previewConfigJson?: string | null;
+  /** Modelo com PDF configurado: a prévia ao vivo é o próprio PDF renderizado no servidor. */
+  temProvaPdf?: boolean;
   livePreviewValues?: Record<string, string>;
   previa: Record<string, string> | null;
   selectedModelId: number | null;
@@ -105,6 +108,7 @@ export function PapelariaProofPanel({
   arquivoModelo,
   mockupConfigJson,
   previewConfigJson,
+  temProvaPdf = false,
   livePreviewValues,
   previa,
   selectedModelId,
@@ -336,6 +340,13 @@ export function PapelariaProofPanel({
 
   const activeFaceId =
     previewFaceId || runtimePreviewConfig?.faces[0]?.id || "frente";
+
+  // Campos dinâmicos (arrastar para posições) só existem na prévia por imagem.
+  const usaCamposDinamicos = Boolean(
+    basePreviewConfig?.habilitarCamposDinamicos && basePreviewConfig.camposDinamicos?.length,
+  );
+  const hasPdfLivePreview =
+    temProvaPdf && !usaCamposDinamicos && selectedModelId !== null && Boolean(livePreviewValues);
 
   const hasLivePreview =
     runtimePreviewConfig !== null &&
@@ -788,6 +799,8 @@ export function PapelariaProofPanel({
               <Loader2 className="size-4 animate-spin" aria-hidden />
               Carregando modelo...
             </div>
+          ) : hasPdfLivePreview && selectedModelId !== null ? (
+            <PapelariaPdfLivePreview modeloId={selectedModelId} values={livePreviewValues ?? {}} />
           ) : hasLivePreview && runtimePreviewConfig ? (
             <article className="flex min-h-[min(45vh,400px)] flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
               <header className="border-b border-sagra-border px-3 py-2">
@@ -845,7 +858,7 @@ export function PapelariaProofPanel({
             </article>
           ) : previewConfigJson?.trim() ? (
             <p className="flex flex-1 items-center justify-center p-6 text-center text-xs text-amber-700">
-              Configuração de prévia inválida. Verifique o PreviewConfigJson no admin.
+              Configuração de prévia inválida. Revise a aba Textos e prévia do modelo no admin.
             </p>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">

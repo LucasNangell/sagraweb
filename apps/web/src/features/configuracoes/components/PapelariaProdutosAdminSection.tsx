@@ -3,7 +3,6 @@ import { cn } from "@sagra/ui";
 import {
   Box,
   ChevronDown,
-  Eye,
   FileText,
   Layers,
   LayoutGrid,
@@ -27,8 +26,7 @@ import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
-import { PapelariaModeloPreviewPanel } from "./PapelariaModeloPreviewPanel";
-import { PapelariaModeloProvaPdfPanel } from "./PapelariaModeloProvaPdfPanel";
+import { PapelariaModeloTextosPanel } from "./PapelariaModeloTextosPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
 import {
   EmptyState,
@@ -38,7 +36,7 @@ import {
 } from "./PapelariaWorkspaceUi";
 import { PerfilImposicaoPanel } from "./PerfilImposicaoPanel";
 
-type ModeloTab = "dados" | "mockup" | "preview" | "prova-pdf";
+type ModeloTab = "dados" | "mockup" | "textos";
 type Scope = "modelos" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
 
@@ -49,13 +47,24 @@ type ImposicaoStatus = Partial<
 const MODELO_TABS: { id: ModeloTab; label: string; icon: typeof Tag; hint: string }[] = [
   { id: "dados", label: "Dados gerais", icon: Tag, hint: "Nome, pasta de imposição e PDF de prova por e-mail" },
   { id: "mockup", label: "Mockup 3D", icon: Box, hint: "Dobras, formato e visualização 3D da prova" },
-  { id: "preview", label: "Prévia ao vivo", icon: Eye, hint: "Imagem base e campos da prévia em tempo real" },
-  { id: "prova-pdf", label: "Prova PDF", icon: FileText, hint: "PDF do modelo e ligação dos textos aos campos" },
+  {
+    id: "textos",
+    label: "Textos e prévia",
+    icon: FileText,
+    hint: "PDF do modelo: textos ligados aos campos, Prova PDF e prévia ao vivo da Papelaria",
+  },
 ];
+
+/** Abas antigas (sessão salva) → aba unificada. */
+function normalizarTab(tab: string | undefined): ModeloTab {
+  if (tab === "dados" || tab === "mockup" || tab === "textos") return tab;
+  if (tab === "preview" || tab === "prova-pdf") return "textos";
+  return "dados";
+}
 
 const STORAGE_KEY = "sagra:config:papelaria-produtos";
 
-type StoredSelection = { produto?: string; modeloId?: number; tab?: ModeloTab; scope?: Scope };
+type StoredSelection = { produto?: string; modeloId?: number; tab?: string; scope?: Scope };
 
 function readStored(): StoredSelection {
   try {
@@ -94,7 +103,7 @@ export function PapelariaProdutosAdminSection() {
   const [stored] = useState(readStored);
   const [selectedProduto, setSelectedProduto] = useState<string | null>(stored.produto ?? null);
   const [selectedModeloId, setSelectedModeloId] = useState<number | null>(stored.modeloId ?? null);
-  const [modeloTab, setModeloTab] = useState<ModeloTab>(stored.tab ?? "dados");
+  const [modeloTab, setModeloTab] = useState<ModeloTab>(() => normalizarTab(stored.tab));
   const [scope, setScope] = useState<Scope>(stored.scope ?? "modelos");
   const [mode, setMode] = useState<WorkspaceMode>("browse");
   const [busca, setBusca] = useState("");
@@ -404,11 +413,8 @@ export function PapelariaProdutosAdminSection() {
                         {modeloTab === "mockup" ? (
                           <PapelariaModeloMockupPanel key={selectedModelo.id} modelo={selectedModelo} />
                         ) : null}
-                        {modeloTab === "preview" ? (
-                          <PapelariaModeloPreviewPanel key={selectedModelo.id} modelo={selectedModelo} />
-                        ) : null}
-                        {modeloTab === "prova-pdf" ? (
-                          <PapelariaModeloProvaPdfPanel key={selectedModelo.id} modelo={selectedModelo} />
+                        {modeloTab === "textos" ? (
+                          <PapelariaModeloTextosPanel key={selectedModelo.id} modelo={selectedModelo} />
                         ) : null}
                       </div>
                     </>
@@ -452,7 +458,7 @@ function ProdutoNavItem({
       </span>
       <span className="pw-nav-item__meta">
         <Coverage icon={<Box className="size-3" aria-hidden />} n={group.comMockup} total={total} label="mockup custom" />
-        <Coverage icon={<Eye className="size-3" aria-hidden />} n={group.comPreview} total={total} label="prévia configurada" />
+        <Coverage icon={<FileText className="size-3" aria-hidden />} n={group.comProvaPdf} total={total} label="PDF do modelo" />
         <ImposicaoBadges status={status} />
       </span>
     </button>
@@ -519,7 +525,7 @@ function ProdutoHeader({
           <span aria-hidden>·</span>
           <span>{group.comMockup} com mockup custom</span>
           <span aria-hidden>·</span>
-          <span>{group.comPreview} com prévia</span>
+          <span>{group.comProvaPdf} com PDF do modelo</span>
           <ImposicaoBadges status={status} detailed />
         </div>
       </div>
@@ -580,7 +586,7 @@ function ModeloStrip({
                 <span className="pw-modelo-card__file">{fileName(m.arquivo_modelo)}</span>
                 <span className="pw-modelo-card__flags">
                   <Flag on={Boolean(m.tem_mockup_config)} label="Mockup" />
-                  <Flag on={Boolean(m.tem_preview_config)} label="Prévia" />
+                  <Flag on={Boolean(m.tem_prova_pdf)} label="PDF" />
                   {m.tem_imposicao_config ? <Flag on label="Imp. antiga" tone="violet" /> : null}
                 </span>
               </button>
@@ -621,9 +627,10 @@ function ModeloTabs({
         <span className="pw-tab__dot" title="Preset automático" />
       );
     }
-    if (id === "preview") {
+    if (id === "textos") {
+      if (modelo.tem_prova_pdf) return <span className="pw-tab__dot is-on" title="PDF do modelo em uso" />;
       return modelo.tem_preview_config ? (
-        <span className="pw-tab__dot is-on" title="Prévia configurada" />
+        <span className="pw-tab__dot" title="Prévia por imagem (legado) — envie o PDF do modelo" />
       ) : (
         <span className="pw-tab__dot is-warn" title="Sem prévia configurada" />
       );

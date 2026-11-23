@@ -1250,6 +1250,18 @@ textarea.pw-input {
   font-size: 0.625rem;
 }
 
+.pw-fonte-bar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0.625rem 1rem;
+}
+
 .pw-editor-toolbar {
   flex-shrink: 0;
 }

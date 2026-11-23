@@ -23,11 +23,10 @@ vi.mock("./PapelariaModeloMockupPanel", () => ({
     <div data-testid="panel-mockup">mockup:{modelo.id}</div>
   ),
 }));
-vi.mock("./PapelariaModeloPreviewPanel", () => ({
-  PapelariaModeloPreviewPanel: () => <div data-testid="panel-preview" />,
-}));
-vi.mock("./PapelariaModeloProvaPdfPanel", () => ({
-  PapelariaModeloProvaPdfPanel: () => <div data-testid="panel-prova-pdf" />,
+vi.mock("./PapelariaModeloTextosPanel", () => ({
+  PapelariaModeloTextosPanel: ({ modelo }: { modelo: PapelariaAdminModelRecord }) => (
+    <div data-testid="panel-textos">textos:{modelo.id}</div>
+  ),
 }));
 vi.mock("./PerfilImposicaoPanel", () => ({
   PerfilImposicaoPanel: ({ produto }: { produto: string }) => (
@@ -104,9 +103,23 @@ describe("PapelariaProdutosAdminSection", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Mockup 3D/ }));
     expect(screen.getByTestId("panel-mockup")).toHaveTextContent("mockup:2");
 
+    // Prévia ao vivo + Prova PDF agora são uma aba só.
+    expect(screen.queryByRole("tab", { name: /Prova PDF/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Textos e prévia/ }));
+    expect(screen.getByTestId("panel-textos")).toHaveTextContent("textos:2");
+
     fireEvent.click(screen.getByRole("radio", { name: /Imposição/ }));
     expect(screen.getByTestId("panel-imposicao")).toHaveTextContent("imposicao:Cartão de visita");
     expect(screen.queryByRole("tab", { name: /Mockup 3D/ })).not.toBeInTheDocument();
+  });
+
+  it("leva a aba antiga salva na sessão (Prova PDF) para Textos e prévia", async () => {
+    window.sessionStorage.setItem(
+      "sagra:config:papelaria-produtos",
+      JSON.stringify({ produto: "Envelope", modeloId: 3, tab: "prova-pdf", scope: "modelos" }),
+    );
+    renderSection();
+    expect(await screen.findByTestId("panel-textos")).toHaveTextContent("textos:3");
   });
 
   it("abre os formulários de novo produto e novo modelo", async () => {

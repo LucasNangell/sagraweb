@@ -15,11 +15,13 @@ Arquivos por modelo: ``Modelos/papelaria/prova_pdf/{modelo_id}/modelo.pdf`` e
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import re
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -240,12 +242,39 @@ _TOKENS_CONTEUDO = re.compile(
 )
 
 
+_CACHE_CORES: "OrderedDict[tuple[Any, ...], dict[str, str]]" = OrderedDict()
+_CACHE_CORES_MAX = 32
+
+
 def cores_originais_por_texto(doc: Any, page: Any) -> dict[str, str]:
     """
     Cor de preenchimento ORIGINAL (CMYK, RGB, cinza ou cor especial) de cada
     bloco de texto, lida do fluxo de conteúdo — a cor que a biblioteca devolve
     nos spans já vem convertida para RGB.
+
+    Ler o fluxo é a parte cara da prévia (centenas de ms em PDFs do Corel);
+    o resultado fica em cache pelo conteúdo da página + fontes.
     """
+    try:
+        conteudo = page.read_contents()
+        chave = (
+            hashlib.sha1(conteudo).hexdigest(),
+            tuple((f[0], f[3], f[4]) for f in page.get_fonts(full=True)),
+        )
+    except Exception:
+        chave = None
+    if chave is not None and chave in _CACHE_CORES:
+        _CACHE_CORES.move_to_end(chave)
+        return dict(_CACHE_CORES[chave])
+    out = _cores_originais_por_texto(doc, page)
+    if chave is not None:
+        _CACHE_CORES[chave] = dict(out)
+        while len(_CACHE_CORES) > _CACHE_CORES_MAX:
+            _CACHE_CORES.popitem(last=False)
+    return out
+
+
+def _cores_originais_por_texto(doc: Any, page: Any) -> dict[str, str]:
     fontes: dict[str, Optional[FonteEmbutida]] = {}
     for f in page.get_fonts(full=True):
         fontes[f[4]] = ler_fonte_embutida(doc, f[0])
@@ -1083,8 +1112,19 @@ def renderizar(
         doc.close()
 
 
-def previa_png(modelo_id: int, dados: dict[str, Any], dpi: int = 150) -> dict[str, Any]:
-    """Admin: aplica valores de teste e devolve as páginas em PNG (data URL)."""
+def previa_png(
+    modelo_id: int,
+    dados: dict[str, Any],
+    dpi: int = 150,
+    *,
+    modelo: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """
+    Aplica os valores e devolve as páginas em PNG (data URL).
+
+    Usada no admin (valores de teste) e na prévia ao vivo da página Papelaria
+    (valores do formulário) — a mesma renderização da prova final.
+    """
     import fitz
 
     pdf = caminho_pdf(modelo_id)
@@ -1096,7 +1136,8 @@ def previa_png(modelo_id: int, dados: dict[str, Any], dpi: int = 150) -> dict[st
     from services.papelaria_corel_dados_service import preparar_dados
     from services import papelaria_models_service as models_svc
 
-    modelo = models_svc.get_modelo_by_id(int(modelo_id)) or {}
+    if modelo is None:
+        modelo = models_svc.get_modelo_by_id(int(modelo_id)) or {}
     avisos: list[str] = []
     t0 = time.perf_counter()
     saida = renderizar(pdf, campos, preparar_dados(dados or {}, modelo), avisos=avisos)

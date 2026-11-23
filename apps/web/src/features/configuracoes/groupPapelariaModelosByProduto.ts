@@ -6,6 +6,7 @@ export type PapelariaProdutoGroup = {
   comMockup: number;
   comPreview: number;
   comImposicao: number;
+  comProvaPdf: number;
 };
 
 export function groupPapelariaModelosByProduto(
@@ -28,6 +29,7 @@ export function groupPapelariaModelosByProduto(
       comMockup: list.filter((m) => m.tem_mockup_config).length,
       comPreview: list.filter((m) => m.tem_preview_config).length,
       comImposicao: list.filter((m) => m.tem_imposicao_config).length,
+      comProvaPdf: list.filter((m) => m.tem_prova_pdf).length,
     });
   }
 

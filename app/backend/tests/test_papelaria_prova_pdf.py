@@ -419,3 +419,28 @@ def test_renderizar_campo_legado_de_trecho_isolado_continua_funcionando():
     assert "Ana" in texto
     assert "Gabinete do Deputado" in texto
     assert "PARTIDO/UF" in texto
+
+
+def test_previa_png_aceita_modelo_e_usa_cache_de_cores(tmp_path, monkeypatch):
+    """Prévia ao vivo: não consulta o banco quando recebe o modelo e reaproveita a leitura de cores."""
+    from services import papelaria_prova_pdf_service as svc
+    from services import papelaria_models_service as models_svc
+
+    monkeypatch.setattr(svc, "RAIZ_MODELOS_PDF", tmp_path)
+    svc.salvar_pdf_modelo(9, filename="modelo.pdf", content=_pdf_modelo())
+    svc.salvar_campos(9, [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_deputado}"}])
+
+    def _sem_banco(*_a, **_k):
+        raise AssertionError("não deveria consultar o banco")
+
+    monkeypatch.setattr(models_svc, "get_modelo_by_id", _sem_banco)
+    chamadas: list[int] = []
+    original = svc._cores_originais_por_texto
+    monkeypatch.setattr(
+        svc, "_cores_originais_por_texto", lambda doc, page: chamadas.append(1) or original(doc, page)
+    )
+    svc._CACHE_CORES.clear()
+    r1 = svc.previa_png(9, {"nome_deputado": "Ana"}, dpi=50, modelo={})
+    r2 = svc.previa_png(9, {"nome_deputado": "Bia"}, dpi=50, modelo={})
+    assert r1["paginas"] and r2["paginas"] and r1["paginas"] != r2["paginas"]
+    assert len(chamadas) == 1

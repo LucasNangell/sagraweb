@@ -34,7 +34,7 @@ const MODOS: Array<SegmentedOption<PapelariaProvaModo> & { resumo: string }> = [
     icon: <FileText className="size-3.5 shrink-0" aria-hidden />,
     resumo: "Gerada no servidor a partir do PDF do modelo; modelos sem PDF seguem pela Prova WEB.",
     title:
-      "Gera a prova no servidor a partir do PDF do modelo (Produtos → Prova PDF), sem CorelDRAW. Entrega igual à Prova WEB. Modelos sem PDF configurado continuam pelo worker (Prova WEB).",
+      "Gera a prova no servidor a partir do PDF do modelo (Produtos → Textos e prévia), sem CorelDRAW. Entrega igual à Prova WEB. Modelos sem PDF configurado continuam pelo worker (Prova WEB).",
   },
 ];
 

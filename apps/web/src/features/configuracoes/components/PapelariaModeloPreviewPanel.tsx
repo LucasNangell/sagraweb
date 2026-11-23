@@ -144,7 +144,7 @@ export function PapelariaModeloPreviewPanel({
   const [baseImageVersion, setBaseImageVersion] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [validateMsg, setValidateMsg] = useState<{ tone: "ok" | "error" | "info"; text: string } | null>(null);
-  const [editorTab, setEditorTab] = useState<EditorTab>(() => (initialPretty.trim() ? "elementos" : "json"));
+  const [editorTab, setEditorTab] = useState<EditorTab>("elementos");
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
 
   const faces = draftConfig?.faces ?? [];
@@ -341,37 +341,53 @@ export function PapelariaModeloPreviewPanel({
           <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={() => void applyExample()}>
             <Sparkles className="size-3.5" aria-hidden /> Aplicar exemplo
           </button>
-          <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={() => setEditorTab("json")}>
-            <Braces className="size-3.5" aria-hidden /> Editar JSON
-          </button>
         </>
       }
     >
       {jsonText.trim()
-        ? "Corrija o JSON na aba avançada para voltar a editar visualmente."
-        : "Comece por um exemplo ou cole um PreviewConfigJson."}
+        ? "A configuração salva está com erro. Corrija pelo JSON (avançado) ou aplique o exemplo."
+        : "Comece pelo exemplo e ajuste os elementos. Para modelos novos, prefira o PDF do modelo."}
     </EmptyState>
   );
 
   return (
     <div className="pw-split pw-split--preview">
       <div className="pw-split__editor">
-        <div className="pw-editor-toolbar">
-          <SegmentedControl<EditorTab>
-            ariaLabel="Modo de edição da prévia"
-            size="sm"
-            value={editorTab}
-            onChange={setEditorTab}
-            options={[
-              { id: "elementos", label: "Elementos", icon: <Type className="size-3.5 shrink-0" aria-hidden /> },
-              {
-                id: "dinamicos",
-                label: "Campos dinâmicos",
-                icon: <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden />,
-              },
-              { id: "json", label: "JSON", icon: <Braces className="size-3.5 shrink-0" aria-hidden /> },
-            ]}
-          />
+        <div className="pw-editor-toolbar flex flex-wrap items-center justify-between gap-2">
+          {editorTab === "json" ? (
+            <button
+              type="button"
+              className="sagra-btn sagra-btn--outline sagra-btn--xs"
+              onClick={() => setEditorTab("elementos")}
+            >
+              Voltar ao editor visual
+            </button>
+          ) : (
+            <SegmentedControl<Exclude<EditorTab, "json">>
+              ariaLabel="Modo de edição da prévia"
+              size="sm"
+              value={editorTab}
+              onChange={setEditorTab}
+              options={[
+                { id: "elementos", label: "Elementos", icon: <Type className="size-3.5 shrink-0" aria-hidden /> },
+                {
+                  id: "dinamicos",
+                  label: "Campos dinâmicos",
+                  icon: <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden />,
+                },
+              ]}
+            />
+          )}
+          {editorTab !== "json" ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-slate-700"
+              title="Edição direta do PreviewConfigJson — só para correções pontuais"
+              onClick={() => setEditorTab("json")}
+            >
+              <Braces className="size-3" aria-hidden /> JSON (avançado)
+            </button>
+          ) : null}
         </div>
 
         <div className="pw-editor-body pw-scroll">

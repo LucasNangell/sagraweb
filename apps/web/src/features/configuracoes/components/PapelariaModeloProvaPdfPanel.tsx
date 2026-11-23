@@ -91,6 +91,9 @@ export function PapelariaModeloProvaPdfPanel({
     setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
     suppressHydrateRef.current = true;
     qc.setQueryData(queryKey, data);
+    // tem_prova_pdf da lista de modelos (abas, cards e prévia da Papelaria).
+    void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+    void qc.invalidateQueries({ queryKey: ["papelaria", "corelModelo", modelo.id] });
   };
 
   useEffect(() => {
@@ -322,8 +325,8 @@ export function PapelariaModeloProvaPdfPanel({
           title="PDF do modelo"
           description={
             <>
-              Usado no modo de geração <strong>Prova PDF</strong>. Ligue cada texto variável a um template de
-              campo; os demais ficam fixos.
+              Fonte única do modelo: gera a <strong>Prova PDF</strong> e a <strong>prévia ao vivo</strong> da
+              página Papelaria. Ligue cada texto variável a um template de campo; os demais ficam fixos.
             </>
           }
           actions={

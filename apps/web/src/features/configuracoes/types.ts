@@ -93,6 +93,8 @@ export interface PapelariaAdminModelRecord {
   tem_preview_config?: boolean;
   imposicao_config_json?: string | null;
   tem_imposicao_config?: boolean;
+  /** PDF do modelo enviado e com ao menos um texto ligado (fonte da prévia). */
+  tem_prova_pdf?: boolean;
   preview_faces?: Array<{
     id: string;
     nome?: string;

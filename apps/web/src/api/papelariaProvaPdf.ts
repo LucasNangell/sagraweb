@@ -117,3 +117,20 @@ export function previaProvaPdf(
 export function deleteProvaPdfModelo(modeloId: number): Promise<ProvaPdfModelo> {
   return apiFetch<ProvaPdfModelo>(base(modeloId), { method: "DELETE" });
 }
+
+/**
+ * Prévia ao vivo da página Papelaria: o PDF do modelo com os valores do
+ * formulário, renderizado como a prova final (nada é salvo).
+ */
+export function previaPdfAoVivo(
+  modeloId: number,
+  dados: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<ProvaPdfPrevia> {
+  return apiFetch<ProvaPdfPrevia>(`/papelaria/modelos/${modeloId}/previa-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dados }),
+    signal,
+  });
+}

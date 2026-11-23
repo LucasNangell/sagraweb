@@ -349,3 +349,73 @@ def test_create_outros_modos_inalterados(monkeypatch, modo):
     assert not any("WorkerID" in s for s in r["sql"])
     assert not any("Prova PDF" in m for m in r["logs"])
     assert json.loads(r["inserted"]["dados"])["nome_deputado"] == "Fulano"
+
+
+# --------------------------------------------------------------------------
+# Linha com estilos mistos (ex.: nome em negrito no meio do cabeçalho) vira
+# UM texto do PDF — antes cada troca de fonte virava um campo independente.
+# --------------------------------------------------------------------------
+
+
+def _pdf_linha_mista() -> bytes:
+    if not os.path.isfile(_FONTE) or not os.path.isfile(_FONTE_BOLD):
+        pytest.skip("fontes Arial/Arial Bold indisponíveis")
+    reg, bold = fitz.Font(fontfile=_FONTE), fitz.Font(fontfile=_FONTE_BOLD)
+    doc = fitz.open()
+    page = doc.new_page(width=420, height=141.7)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    page.insert_font(fontname="F2", fontfile=_FONTE_BOLD)
+    x, y, tam = 20.0, 40.0, 10.0
+    for trecho, nome, fonte in (
+        ("Gabinete do Deputado ", "F1", reg),
+        ("Nome Deputado", "F2", bold),
+        (", PARTIDO/UF", "F1", reg),
+    ):
+        page.insert_text((x, y), trecho, fontname=nome, fontsize=tam)
+        x += fonte.text_length(trecho, fontsize=tam)
+    page.insert_text((300, 40), "LED", fontname="F1", fontsize=tam)  # longe: texto à parte
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_analisar_pdf_junta_linha_com_estilos_mistos():
+    from services import papelaria_prova_pdf_service as svc
+
+    textos = svc.analisar_pdf(_pdf_linha_mista())["textos"]
+    marcadores = [t["marcador"] for t in textos]
+    assert "Gabinete do Deputado Nome Deputado, PARTIDO/UF" in marcadores
+    assert "Nome Deputado" not in marcadores
+    assert "LED" in marcadores
+    linha = next(t for t in textos if t["marcador"].startswith("Gabinete"))
+    assert len(linha["fontes"]) == 2
+    assert [tr["negrito"] for tr in linha["trechos"]] == [False, True, False]
+
+
+def test_renderizar_linha_mista_substitui_a_linha_inteira():
+    from services import papelaria_prova_pdf_service as svc
+
+    campos = [
+        {
+            "marcador": "Gabinete do Deputado Nome Deputado, PARTIDO/UF",
+            "pagina": 1,
+            "template": "Gabinete do {genero} **{nome_deputado}**, {partido}/{uf}",
+        }
+    ]
+    dados = {"genero": "Deputada", "nome_deputado": "Maria Silva", "partido": "PT", "uf": "DF"}
+    texto = _textos(svc.renderizar(_pdf_linha_mista(), campos, dados))
+    assert "Maria Silva" in texto
+    assert "PT/DF" in texto
+    assert "PARTIDO/UF" not in texto
+    assert "Nome Deputado" not in texto
+    assert "LED" in texto
+
+
+def test_renderizar_campo_legado_de_trecho_isolado_continua_funcionando():
+    from services import papelaria_prova_pdf_service as svc
+
+    campos = [{"marcador": "Nome Deputado", "pagina": 1, "template": "{nome_deputado}"}]
+    texto = _textos(svc.renderizar(_pdf_linha_mista(), campos, {"nome_deputado": "Ana"}))
+    assert "Ana" in texto
+    assert "Gabinete do Deputado" in texto
+    assert "PARTIDO/UF" in texto

@@ -340,6 +340,84 @@ def ancora_sugerida(y0: float, y1: float, altura_pagina: float) -> str:
     return "base" if (y0 + y1) / 2.0 > altura_pagina * 0.6 else "topo"
 
 
+# ---------------------------------------------------------------------------
+# Linhas de texto: uma linha visual do PDF pode vir partida em vários spans
+# (o CorelDRAW abre um span novo a cada troca de fonte/estilo — ex.: o nome do
+# deputado em Semibold no meio de «Gabinete do Deputado Nome - PARTIDO/UF»).
+# Spans encostados da mesma linha formam UM texto do PDF.
+# ---------------------------------------------------------------------------
+
+
+def _texto_span(span: dict[str, Any]) -> str:
+    """Texto de um span de ``get_text("dict")`` ou ``get_text("rawdict")``."""
+    if "text" in span:
+        bruto = span["text"]
+    else:
+        bruto = "".join(c["c"] for c in span.get("chars") or [])
+    return bruto.replace("\u00a0", " ")
+
+
+def agrupar_spans_da_linha(spans: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """
+    Junta spans encostados de uma mesma linha. Um espaço grande entre dois
+    spans (textos distantes na mesma altura) separa os grupos.
+    """
+    grupos: list[list[dict[str, Any]]] = []
+    atual: list[dict[str, Any]] = []
+    fim: Optional[float] = None
+    for span in spans:
+        if not _texto_span(span).strip():
+            if atual:
+                atual.append(span)  # espaço entre estilos faz parte do texto
+            continue
+        x0 = float(span["bbox"][0])
+        limite = max(float(span.get("size") or 0.0), 1.0) * 1.2
+        if atual and fim is not None and x0 - fim > limite:
+            grupos.append(atual)
+            atual = []
+        atual.append(span)
+        fim = float(span["bbox"][2])
+    if atual:
+        grupos.append(atual)
+    return grupos
+
+
+def _texto_do_grupo(grupo: list[dict[str, Any]]) -> str:
+    return "".join(_texto_span(s) for s in grupo).strip()
+
+
+def _spans_com_texto(grupo: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [s for s in grupo if _texto_span(s).strip()]
+
+
+def _span_base(grupo: list[dict[str, Any]]) -> dict[str, Any]:
+    """Span cuja fonte representa o texto: o primeiro em estilo não negrito."""
+    com_texto = _spans_com_texto(grupo) or grupo
+    for span in com_texto:
+        if not _eh_fonte_negrito(_nome_sem_subconjunto(span["font"])):
+            return span
+    return com_texto[0]
+
+
+def _bbox_do_grupo(grupo: list[dict[str, Any]]) -> tuple[float, float, float, float]:
+    caixas = [s["bbox"] for s in (_spans_com_texto(grupo) or grupo)]
+    return (
+        min(float(b[0]) for b in caixas),
+        min(float(b[1]) for b in caixas),
+        max(float(b[2]) for b in caixas),
+        max(float(b[3]) for b in caixas),
+    )
+
+
+def _fontes_do_grupo(grupo: list[dict[str, Any]]) -> list[str]:
+    vistas: list[str] = []
+    for span in _spans_com_texto(grupo):
+        nome = _nome_sem_subconjunto(span["font"])
+        if nome not in vistas:
+            vistas.append(nome)
+    return vistas
+
+
 def _abrir(content_or_path: Any) -> Any:
     import fitz
 
@@ -376,24 +454,39 @@ def analisar_pdf(content_or_path: Any) -> dict[str, Any]:
             originais = cores_originais_por_texto(doc, page)
             for bloco in page.get_text("dict")["blocks"]:
                 for linha in bloco.get("lines", []):
-                    for span in linha["spans"]:
-                        texto = span["text"].replace(" ", " ").strip()
+                    for grupo in agrupar_spans_da_linha(linha["spans"]):
+                        texto = _texto_do_grupo(grupo)
                         if not texto:
                             continue
-                        x0, y0, x1, y1 = span["bbox"]
-                        textos.append(
-                            {
-                                "marcador": texto,
-                                "pagina": pidx + 1,
-                                "fonte": _nome_sem_subconjunto(span["font"]),
-                                "tamanho": round(float(span["size"]), 2),
-                                "cor": originais.get(texto) or _cor_do_span(cores, span["bbox"]),
-                                "x_mm": round(x0 * 25.4 / 72, 2),
-                                "y_mm": round(y0 * 25.4 / 72, 2),
-                                "alinhamento_sugerido": alinhamento_sugerido(x0, x1, w),
-                                "ancora_sugerida": ancora_sugerida(y0, y1, h),
-                            }
-                        )
+                        base = _span_base(grupo)
+                        x0, y0, x1, y1 = _bbox_do_grupo(grupo)
+                        fontes_linha = _fontes_do_grupo(grupo)
+                        item: dict[str, Any] = {
+                            "marcador": texto,
+                            "pagina": pidx + 1,
+                            "fonte": _nome_sem_subconjunto(base["font"]),
+                            "tamanho": round(float(base["size"]), 2),
+                            "cor": originais.get(texto)
+                            or originais.get(_texto_span(base).strip())
+                            or _cor_do_span(cores, base["bbox"]),
+                            "x_mm": round(x0 * 25.4 / 72, 2),
+                            "y_mm": round(y0 * 25.4 / 72, 2),
+                            "alinhamento_sugerido": alinhamento_sugerido(x0, x1, w),
+                            "ancora_sugerida": ancora_sugerida(y0, y1, h),
+                        }
+                        if len(fontes_linha) > 1:
+                            # Linha com estilos mistos (ex.: nome em negrito).
+                            item["fontes"] = fontes_linha
+                            item["trechos"] = [
+                                {
+                                    "texto": _texto_span(sp),
+                                    "fonte": _nome_sem_subconjunto(sp["font"]),
+                                    "negrito": _eh_fonte_negrito(_nome_sem_subconjunto(sp["font"])),
+                                }
+                                for sp in grupo
+                                if _texto_span(sp)
+                            ]
+                        textos.append(item)
         return {"paginas": paginas, "fontes": list(fontes.values()), "textos": textos}
     finally:
         doc.close()
@@ -767,33 +860,65 @@ def renderizar(
             }
             cores = _cores_por_trecho(page)
             originais = cores_originais_por_texto(doc, page)
+            def _campos_do_texto(texto: str, pagina: int = pidx + 1) -> list[dict[str, Any]]:
+                return [
+                    c
+                    for c in campos
+                    if c["marcador"] == texto
+                    and not (c.get("pagina") and int(c["pagina"]) != pagina)
+                ]
+
+            def _alvo(
+                grupo: list[dict[str, Any]],
+                texto: str,
+                fontes_pg: dict[str, tuple[int, str]] = fontes_pg,
+                cores: list[tuple[Any, str]] = cores,
+                originais: dict[str, str] = originais,
+            ) -> dict[str, Any]:
+                base = _span_base(grupo)
+                achada = _fonte_do_span(fontes_pg, base["font"])
+                if achada is None:
+                    raise ProvaPdfError(f"Fonte do campo «{texto}» não encontrada no PDF.")
+                xref, recurso = achada
+                primeiro = (_spans_com_texto(grupo) or grupo)[0]
+                return {
+                    "bbox": fitz.Rect(_bbox_do_grupo(grupo)),
+                    # x do início da linha; linha de base do trecho principal.
+                    "origem": fitz.Point(float(primeiro["origin"][0]), float(base["origin"][1])),
+                    "tamanho": float(base["size"]),
+                    "chars": [c for c in base["chars"] if c["c"].strip()],
+                    "xref": xref,
+                    "recurso": recurso,
+                    "cor": originais.get(texto)
+                    or originais.get(_texto_span(base).strip())
+                    or _cor_do_span(cores, base["bbox"]),
+                }
+
             for bloco in page.get_text("rawdict")["blocks"]:
                 for linha in bloco.get("lines", []):
-                    for span in linha["spans"]:
-                        texto = "".join(c["c"] for c in span["chars"]).replace(" ", " ").strip()
-                        for campo in campos:
-                            if campo["marcador"] != texto:
+                    for grupo in agrupar_spans_da_linha(linha["spans"]):
+                        texto = _texto_do_grupo(grupo)
+                        if not texto:
+                            continue
+                        ligados = _campos_do_texto(texto)
+                        if ligados:
+                            alvo = _alvo(grupo, texto)
+                            for campo in ligados:
+                                por_pagina.setdefault(pidx, []).append((campo, alvo))
+                            continue
+                        # Compatibilidade: campos salvos antes do agrupamento
+                        # apontam para um span isolado da linha.
+                        com_texto = _spans_com_texto(grupo)
+                        if len(com_texto) < 2:
+                            continue
+                        for span in com_texto:
+                            texto_span = _texto_span(span).strip()
+                            ligados_span = _campos_do_texto(texto_span)
+                            if not ligados_span:
                                 continue
-                            if campo.get("pagina") and int(campo["pagina"]) != pidx + 1:
-                                continue
-                            achada = _fonte_do_span(fontes_pg, span["font"])
-                            if achada is None:
-                                raise ProvaPdfError(f"Fonte do campo «{texto}» não encontrada no PDF.")
-                            xref, recurso = achada
-                            por_pagina.setdefault(pidx, []).append(
-                                (
-                                    campo,
-                                    {
-                                        "bbox": fitz.Rect(span["bbox"]),
-                                        "origem": fitz.Point(span["origin"]),
-                                        "tamanho": float(span["size"]),
-                                        "chars": [c for c in span["chars"] if c["c"].strip()],
-                                        "xref": xref,
-                                        "recurso": recurso,
-                                        "cor": originais.get(texto) or _cor_do_span(cores, span["bbox"]),
-                                    },
-                                )
-                            )
+                            alvo = _alvo([span], texto_span)
+                            for campo in ligados_span:
+                                por_pagina.setdefault(pidx, []).append((campo, alvo))
         if not por_pagina:
             raise ProvaPdfError("Nenhum campo configurado foi encontrado no PDF do modelo.")
 

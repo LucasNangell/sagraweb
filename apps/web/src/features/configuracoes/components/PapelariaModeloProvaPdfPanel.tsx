@@ -186,6 +186,33 @@ export function PapelariaModeloProvaPdfPanel({
     setOrfaosKeys((prev) => prev.filter((k) => k !== chave));
   };
 
+  /** Linha (estilos mistos) que contém o trecho salvo por um vínculo antigo. */
+  const linhaDoTrecho = (c: ProvaPdfCampo): ProvaPdfTexto | null =>
+    textos.find(
+      (t) =>
+        (!c.pagina || t.pagina === c.pagina) &&
+        (t.trechos ?? []).some((tr) => tr.texto.trim() === c.marcador.trim()),
+    ) ?? null;
+
+  const moverParaLinha = (c: ProvaPdfCampo, t: ProvaPdfTexto) => {
+    const destino = chaveTexto(t);
+    if (
+      campos[destino]?.template.trim() &&
+      !window.confirm(`A linha «${t.marcador}» já tem template. Substituir pelo deste vínculo?`)
+    ) {
+      return;
+    }
+    const origem = chaveTexto(c);
+    setCampos((prev) => {
+      const next = { ...prev };
+      delete next[origem];
+      next[destino] = { ...c, marcador: t.marcador, pagina: t.pagina };
+      return next;
+    });
+    setOrfaosKeys((prev) => prev.filter((k) => k !== origem));
+    setMsg({ texto: "Template movido para a linha inteira — salve os campos para gravar.", erro: false });
+  };
+
   const ocupado =
     uploadMutation.isPending || saveMutation.isPending || previaMutation.isPending || deleteMutation.isPending;
 
@@ -424,32 +451,6 @@ export function PapelariaModeloProvaPdfPanel({
                 </ul>
               </PanelCard>
 
-              {camposLigados.length ? (
-                <div className="pw-prova__ligados" data-testid="papelaria-prova-pdf-campos-fixos">
-                  <p className="text-xs font-semibold text-emerald-900">
-                    Campos configurados ({camposLigados.length}) — permanecem editáveis após salvar/prévia
-                  </p>
-                  <ul className="pw-prova__ligados-list pw-scroll">
-                    {camposLigados.map((c) => (
-                      <li key={chaveTexto(c)} className="rounded border border-emerald-100 bg-white px-2 py-1.5">
-                        <p className="text-[10px] font-medium text-slate-600">
-                          {c.marcador}
-                          <span className="ml-1 font-normal text-slate-400">· pág. {c.pagina}</span>
-                        </p>
-                        <textarea
-                          className="pw-input pw-input--sm mt-1 font-mono"
-                          rows={Math.max(1, Math.min(4, c.template.split("\n").length))}
-                          aria-label={`Template de ${c.marcador}`}
-                          value={c.template}
-                          onChange={(e) => atualizar(c, { template: e.target.value })}
-                          data-testid={`papelaria-prova-pdf-fixos-${c.marcador}`}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
               {/* Mapeamento texto → campo */}
               <PanelCard
                 icon={<Link2 className="size-3.5" aria-hidden />}
@@ -475,10 +476,27 @@ export function PapelariaModeloProvaPdfPanel({
                     return (
                       <div key={chaveTexto(t)} role="row" className={cn("pw-map-row", ligado && "is-linked")}>
                         <div className="pw-map-row__cell pw-map-row__source">
-                          <p className="font-medium text-slate-800">{t.marcador}</p>
-                          <p className="text-[10px] text-slate-500">
-                            {t.fonte} · {t.tamanho} pt · pág. {t.pagina}
+                          <p className="font-medium text-slate-800">
+                            {t.trechos?.length
+                              ? t.trechos.map((tr, i) => (
+                                  <span key={i} className={tr.negrito ? "font-extrabold" : undefined}>
+                                    {tr.texto}
+                                  </span>
+                                ))
+                              : t.marcador}
                           </p>
+                          <p className="text-[10px] text-slate-500">
+                            {(t.fontes?.length ? t.fontes.join(" + ") : t.fonte)} · {t.tamanho} pt · pág. {t.pagina}
+                          </p>
+                          {t.fontes && t.fontes.length > 1 ? (
+                            <StatusPill
+                              tone="info"
+                              className="mt-1"
+                              title="Linha com mais de um estilo: o template substitui a linha inteira. Marque com **…** o trecho que deve sair em negrito."
+                            >
+                              Estilos mistos · use **negrito**
+                            </StatusPill>
+                          ) : null}
                         </div>
                         {renderCampoControls(c, {
                           alinhamentoSugerido: t.alinhamento_sugerido,
@@ -514,6 +532,7 @@ export function PapelariaModeloProvaPdfPanel({
                     {orfaosVisiveis.map((c) => {
                       const chave = chaveTexto(c);
                       if (textoKeys.has(chave)) return null;
+                      const linhaInteira = linhaDoTrecho(c);
                       return (
                         <div key={chave} role="row" className="pw-map-row">
                           <div className="pw-map-row__cell pw-map-row__source">
@@ -524,7 +543,17 @@ export function PapelariaModeloProvaPdfPanel({
                             onChange: (patch) => atualizar(c, patch),
                             testId: `papelaria-prova-pdf-orfao-${c.marcador}`,
                           })}
-                          <div className="pw-map-row__cell">
+                          <div className="pw-map-row__cell flex flex-col gap-1.5">
+                            {linhaInteira ? (
+                              <button
+                                type="button"
+                                className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                                title={`Este vínculo apontava só para um trecho da linha «${linhaInteira.marcador}». Move o template para a linha inteira.`}
+                                onClick={() => moverParaLinha(c, linhaInteira)}
+                              >
+                                Usar na linha inteira
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className="sagra-btn sagra-btn--delete-outline sagra-btn--xs"

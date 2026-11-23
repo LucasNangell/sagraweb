@@ -11,6 +11,10 @@ export interface ProvaPdfTexto {
   y_mm: number;
   alinhamento_sugerido: "esquerda" | "centro" | "direita";
   ancora_sugerida: "topo" | "base";
+  /** Linha com estilos mistos (ex.: nome em negrito): fontes usadas, na ordem. */
+  fontes?: string[];
+  /** Trechos da linha por estilo (só quando há mais de uma fonte). */
+  trechos?: Array<{ texto: string; fonte: string; negrito: boolean }>;
 }
 
 export interface ProvaPdfFonte {

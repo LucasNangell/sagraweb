@@ -693,6 +693,29 @@
   color: #d97706;
 }
 
+.pw-face-card__remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid #f1f5f9;
+  padding: 0 0.55rem;
+  color: #cbd5e1;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.pw-face-card__remove:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.pw-face-card__remove:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: -2px;
+}
+
 .pw-face-card__star-label {
   font-size: 0.5625rem;
   font-weight: 800;

@@ -490,6 +490,14 @@ export async function savePapelariaAdminModeloPadrao(
   });
 }
 
+/** Remove a frente ou o verso (exclui o modelo quando não sobra outra face). */
+export async function removerPapelariaModeloFace(
+  modeloId: number,
+  face: "frente" | "verso",
+): Promise<{ excluido: boolean; modelo_id: number }> {
+  return apiFetch(`/papelaria/admin/modelos/${modeloId}/faces/${face}`, { method: "DELETE" });
+}
+
 export async function savePapelariaAdminPastaImposicao(
   modeloId: number,
   pastaImposicao: string | null,

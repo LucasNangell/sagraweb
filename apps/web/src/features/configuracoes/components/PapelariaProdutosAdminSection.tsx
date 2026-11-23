@@ -388,6 +388,7 @@ export function PapelariaProdutosAdminSection() {
                       setNovaFace(face);
                       setMode("new-model");
                     }}
+                    onModeloExcluido={handleDeleted}
                   />
 
                   {!selectedModelo ? (

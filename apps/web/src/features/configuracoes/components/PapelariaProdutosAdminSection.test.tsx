@@ -8,11 +8,13 @@ const api = vi.hoisted(() => ({
   fetchPapelariaAdminModelos: vi.fn(),
   fetchImposicaoStatus: vi.fn(),
   savePapelariaAdminModeloPadrao: vi.fn(),
+  removerPapelariaModeloFace: vi.fn(),
 }));
 
 vi.mock("@/api/adminSystem", () => ({
   fetchPapelariaAdminModelos: api.fetchPapelariaAdminModelos,
   savePapelariaAdminModeloPadrao: api.savePapelariaAdminModeloPadrao,
+  removerPapelariaModeloFace: api.removerPapelariaModeloFace,
 }));
 vi.mock("@/api/imposicaoPerfil", () => ({ fetchImposicaoStatus: api.fetchImposicaoStatus }));
 
@@ -161,6 +163,28 @@ describe("PapelariaProdutosAdminSection", () => {
     expect(within(versos).getByText(/Nenhum verso em Policromia/)).toBeInTheDocument();
     expect(within(versos).getByText("Cartão de visita 5")).toBeInTheDocument();
     expect(screen.queryByText("Combinado")).not.toBeInTheDocument();
+  });
+
+  it("remove só o verso de um modelo de 2 páginas e esconde a face removida", async () => {
+    api.removerPapelariaModeloFace.mockResolvedValue({ excluido: false, modelo_id: 2 });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderSection();
+    await screen.findByTestId("panel-dados");
+    const versos = screen.getByTestId("pw-face-col-verso");
+    fireEvent.click(within(versos).getByRole("button", { name: /Remover o verso Cartão de visita 2/ }));
+    expect(confirm.mock.calls[0][0]).toMatch(/a frente continua/);
+    await vi.waitFor(() => expect(api.removerPapelariaModeloFace).toHaveBeenCalledWith(2, "verso"));
+    confirm.mockRestore();
+  });
+
+  it("não lista a face já removida", async () => {
+    api.fetchPapelariaAdminModelos.mockResolvedValue([
+      modelo(2, "Cartão de visita", { frente_versao: "Frente e Verso", ocultar_verso: true }),
+    ]);
+    renderSection();
+    await screen.findByTestId("panel-dados");
+    expect(within(screen.getByTestId("pw-face-col-verso")).queryByText("Cartão de visita 2")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("pw-face-col-frente")).getByText("Cartão de visita 2")).toBeInTheDocument();
   });
 
   it("define a frente padrão pela estrela do card", async () => {

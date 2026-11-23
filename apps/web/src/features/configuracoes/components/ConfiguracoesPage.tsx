@@ -26,7 +26,6 @@ import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
 import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
-import { PapelariaProvaModoSection } from "./PapelariaProvaModoSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
 import { SetorPainelDefaultsPanel } from "./SetorPainelDefaultsSection";
@@ -84,7 +83,7 @@ const TAB_META: Record<
   papelaria: {
     label: "Papelaria",
     description:
-      "Modo de geração de provas, produtos e modelos Corel, mockup 3D, prévia, Prova PDF, imposição e fila do worker.",
+      "Produtos, frentes e versos, mockup 3D, textos e prévia (Prova PDF), imposição e fila do worker.",
     icon: <Printer className="size-3.5" aria-hidden />,
     hideIntro: true,
   },
@@ -232,7 +231,6 @@ export function ConfiguracoesPage() {
             hidden={activeTab !== "papelaria"}
             className="configuracoes-tab-panel"
           >
-            <PapelariaProvaModoSection />
             <PapelariaProdutosAdminSection />
             <PapelariaWorkerQueueSection />
           </div>

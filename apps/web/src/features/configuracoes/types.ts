@@ -98,6 +98,9 @@ export interface PapelariaAdminModelRecord {
   /** Frente/verso padrão do produto + cores (pré-selecionado ao criar a prova). */
   padrao_frente?: boolean;
   padrao_verso?: boolean;
+  /** Face removida de um modelo antigo de 2 páginas. */
+  ocultar_frente?: boolean;
+  ocultar_verso?: boolean;
   preview_faces?: Array<{
     id: string;
     nome?: string;

@@ -30,6 +30,11 @@ def _skip_ensure_tables(monkeypatch):
     monkeypatch.setattr(svc, "ensure_papelaria_jobs_tables", lambda: None)
     monkeypatch.setattr(svc, "_backfill_prova_revisao_pending", lambda: None)
     monkeypatch.setattr(svc, "_tables_ready", True)
+    # Prova PDF é o modo do sistema: sem isto, um PDF de modelo salvo na máquina
+    # (Modelos/papelaria/prova_pdf/<id>) desviaria os testes do worker.
+    monkeypatch.setattr(
+        "services.papelaria_prova_pdf_service.tem_modelo_pdf", lambda modelo_id: False
+    )
 
 
 class TestSanitizeDados:

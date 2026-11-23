@@ -20,15 +20,19 @@ def test_resolve_aliases_e_modelos_sem_csp():
     assert resolve_arquivo_email("PastaCBolsoLogo.cdr") is None
 
 
-def test_modo_padrao_e_persistencia(tmp_path, monkeypatch):
+def test_prova_pdf_e_o_unico_modo(tmp_path, monkeypatch):
     from services import papelaria_prova_modo as modo
 
-    monkeypatch.setattr(modo, "_SETTINGS_PATH", tmp_path / "papelaria_settings.json")
-    assert modo.get_modo() == modo.MODO_PROVA_WEB
-    modo.set_modo(modo.MODO_PROVA_EMAIL)
-    assert modo.get_public_settings() == {"modo": modo.MODO_PROVA_EMAIL}
-    with pytest.raises(ValueError, match="inválido"):
-        modo.set_modo("outro")
+    settings = tmp_path / "papelaria_settings.json"
+    monkeypatch.setattr(modo, "_SETTINGS_PATH", settings)
+    assert modo.get_modo() == modo.MODO_PROVA_PDF
+    # Configuração antiga gravada como WEB/e-mail é ignorada.
+    settings.write_text('{"modo": "prova_email"}', encoding="utf-8")
+    assert modo.get_public_settings() == {"modo": modo.MODO_PROVA_PDF}
+    modo.set_modo(modo.MODO_PROVA_PDF)
+    for antigo in (modo.MODO_PROVA_WEB, modo.MODO_PROVA_EMAIL, "outro"):
+        with pytest.raises(ValueError, match="único modo"):
+            modo.set_modo(antigo)
 
 
 def test_filtro_email_nao_oculta_modelos(monkeypatch):

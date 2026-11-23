@@ -35,6 +35,8 @@ class PapelariaCreateJobPayload(BaseModel):
     lancar_andamento: bool = False
     # Corel já na pasta da SP: True = manter os textos dele (não aplicar campos).
     manter_dados_corel: bool = False
+    # Exceção: gerar o arquivo CorelDRAW pelo worker (em vez da Prova PDF).
+    gerar_corel: bool = False
 
 
 class PapelariaCompararCorelPayload(BaseModel):
@@ -893,6 +895,23 @@ def definir_modelo_padrao(
         raise HTTPException(400, str(e))
 
 
+@router.delete("/admin/modelos/{modelo_id}/faces/{face}")
+def remover_face_modelo(
+    modelo_id: int,
+    face: str,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Remove a frente ou o verso (exclui o modelo quando não sobra outra face)."""
+    from services import papelaria_faces_service as faces_svc
+
+    try:
+        return faces_svc.remover_face(modelo_id, face)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except faces_svc.ComposicaoError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/modelos/{modelo_id}/previa-pdf")
 def previa_pdf_ao_vivo(
     modelo_id: int,
@@ -970,6 +989,7 @@ def criar_job_papelaria(
                 dados=payload.dados,
                 solicitado_por=str(session.ponto),
                 manter_dados_corel=payload.manter_dados_corel,
+                gerar_corel=payload.gerar_corel,
             )
     except LookupError as e:
         raise HTTPException(404, str(e))

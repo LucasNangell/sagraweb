@@ -18,7 +18,9 @@ MODO_PROVA_EMAIL = "prova_email"
 # Prova gerada no servidor a partir do PDF do modelo (sem CorelDRAW). Entrega
 # igual à Prova WEB; modelos sem PDF configurado continuam pelo worker.
 MODO_PROVA_PDF = "prova_pdf"
-MODOS = (MODO_PROVA_WEB, MODO_PROVA_EMAIL, MODO_PROVA_PDF)
+# Prova PDF é o modo do sistema. O arquivo CorelDRAW (worker) virou exceção,
+# pedida na página Papelaria; os modos WEB/e-mail não são mais selecionáveis.
+MODOS = (MODO_PROVA_PDF,)
 
 # Nome cadastrado (pasta CSP\WEB) → arquivo na pasta CSP.
 EMAIL_MODEL_ALIASES: dict[str, str] = {
@@ -66,18 +68,16 @@ def get_modo() -> str:
 
 
 def get_public_settings() -> dict[str, str]:
-    with _lock:
-        raw = _load_raw()
-    modo = raw.get("modo")
-    if isinstance(modo, str) and modo.strip() in MODOS:
-        return {"modo": modo.strip()}
-    return {"modo": MODO_PROVA_WEB}
+    # Configuração antiga (prova_web/prova_email) é ignorada: Prova PDF sempre.
+    return {"modo": MODO_PROVA_PDF}
 
 
 def set_modo(modo: str) -> None:
     valor = (modo or "").strip()
     if valor not in MODOS:
-        raise ValueError("Modo de prova inválido. Use prova_web, prova_email ou prova_pdf.")
+        raise ValueError(
+            "Prova PDF é o único modo de geração. O arquivo CorelDRAW é pedido na página Papelaria."
+        )
     with _lock:
         raw = _load_raw()
         raw["modo"] = valor

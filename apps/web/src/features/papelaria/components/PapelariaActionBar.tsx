@@ -22,6 +22,8 @@ export type PapelariaActionBarProps = {
   canImposicao: boolean;
   onAbrirPasta: () => void;
   onGerarArquivo: () => void;
+  /** Exceção: gerar o arquivo CorelDRAW pelo worker. */
+  onGerarCorel?: () => void;
   onTimbradoA4Digital: () => void;
   onAbrirCorel: () => void;
   onFinalizarCorel: () => void;
@@ -88,6 +90,7 @@ export function PapelariaActionBar({
   canImposicao,
   onAbrirPasta,
   onGerarArquivo,
+  onGerarCorel,
   onTimbradoA4Digital,
   onAbrirCorel,
   onFinalizarCorel,
@@ -132,7 +135,7 @@ export function PapelariaActionBar({
         title={
           corelDaPasta
             ? `Criar prova a partir do Corel da pasta (${corelDaPasta}), aplicando os campos do formulário`
-            : "Criar prova a partir do modelo"
+            : "Criar a prova (Prova PDF, gerada no servidor a partir do PDF do modelo)"
         }
         disabled={
           baseDisabled ||
@@ -155,6 +158,27 @@ export function PapelariaActionBar({
           onClick={onTimbradoA4Digital}
         />
       ) : null}
+      <p
+        className="mt-1 border-t border-dashed border-sagra-border pt-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-neutral-400 max-md:hidden"
+        title="Use só quando a prova precisar de ajuste manual no CorelDRAW"
+      >
+        Exceção · Corel
+      </p>
+      {onGerarCorel ? (
+        <ActionButton
+          label="Gerar Corel"
+          pending={false}
+          title="Exceção: gerar o arquivo CorelDRAW (.cdr) desta OS pelo worker, em vez da Prova PDF"
+          disabled={
+            baseDisabled ||
+            createJobPending ||
+            createDigitalPending ||
+            imposicaoPending ||
+            abrirCorelPending
+          }
+          onClick={onGerarCorel}
+        />
+      ) : null}
       <ActionButton
         label="Abrir Corel"
         pending={abrirCorelPending}
@@ -173,7 +197,7 @@ export function PapelariaActionBar({
           tone="success"
           pending={finalizeCorelPending}
           disabled={finalizeCorelPending}
-          title="Finalizar edição no Corel e montar a prova"
+          title="Gerar a prova a partir do Corel editado (exceção)"
           onClick={onFinalizarCorel}
         />
       ) : null}

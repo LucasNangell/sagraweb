@@ -248,7 +248,9 @@ export function PapelariaModeloDadosPanel({
           }
         >
           <div className="flex flex-col gap-2 sm:flex-row">
-            {facesDoModelo(modelo.frente_versao).map((face) => {
+            {facesDoModelo(modelo.frente_versao)
+              .filter((face) => !(face === "frente" ? modelo.ocultar_frente : modelo.ocultar_verso))
+              .map((face) => {
               const ativo = Boolean(face === "frente" ? modelo.padrao_frente : modelo.padrao_verso);
               const pagina = face === "verso" && facesDoModelo(modelo.frente_versao).length === 2 ? 2 : 1;
               return (

@@ -195,3 +195,58 @@ def test_os_frente_e_verso_com_combinado_mantem_so_combinados():
     )
     assert [m["id"] for m in lista] == [4]
     assert auto == 4
+
+
+def test_remover_face(monkeypatch):
+    from services import papelaria_faces_service as svc
+    from services import papelaria_models_service as models_svc
+
+    estado = {
+        1: _modelo(1, "Frente e Verso"),
+        2: _modelo(2, "Verso"),
+        3: _modelo(3, "Frente e Verso", ocultar_verso=True),
+    }
+    sqls: list[tuple[str, dict]] = []
+    excluidos: list[int] = []
+    monkeypatch.setattr(models_svc, "ensure_papelaria_modelos_table", lambda: None)
+    monkeypatch.setattr(models_svc, "get_modelo_by_id", lambda mid: estado.get(int(mid)))
+    monkeypatch.setattr(models_svc, "delete_modelo_admin", lambda mid: excluidos.append(int(mid)))
+    monkeypatch.setattr(svc.db, "execute_query", lambda sql, params=None: sqls.append((sql, params)))
+
+    # Modelo de 2 páginas: remover o verso só oculta o verso (e tira o padrão).
+    r = svc.remover_face(1, "verso")
+    assert r["excluido"] is False
+    assert "OcultarVerso = 1" in sqls[-1][0] and "PadraoVerso = 0" in sqls[-1][0]
+    # Modelo só de verso: remover o verso exclui o modelo.
+    assert svc.remover_face(2, "verso")["excluido"] is True
+    # Modelo de 2 páginas com o verso já removido: remover a frente exclui o modelo.
+    assert svc.remover_face(3, "frente")["excluido"] is True
+    assert excluidos == [2, 3]
+    with pytest.raises(svc.ComposicaoError):
+        svc.remover_face(2, "frente")
+
+
+def test_face_oculta_some_das_opcoes(modelos_ct_visita):
+    from services import papelaria_faces_service as svc
+
+    modelos = [dict(m) for m in modelos_ct_visita]
+    modelos[0]["ocultar_verso"] = True  # modelo 1 perde o verso
+    r = svc.listar_fontes("Ct Visita", "Policromia", modelos=modelos)
+    assert (1, 2) not in {(f["modelo_id"], f["pagina"]) for f in r["verso"]}
+    assert (1, 1) in {(f["modelo_id"], f["pagina"]) for f in r["frente"]}
+
+
+def test_create_job_gerar_corel_vai_para_o_worker(monkeypatch):
+    """Exceção «Gerar Corel»: mesmo com PDF do modelo, o job fica para o worker."""
+    from tests.test_papelaria_prova_pdf import _run_create
+
+    monkeypatch.setattr("services.papelaria_prova_modo.get_modo", lambda: "prova_pdf")
+    from services import papelaria_jobs_service as jobs
+
+    original = jobs.create_job
+    monkeypatch.setattr(
+        jobs, "create_job", lambda **kw: original(**{**kw, "gerar_corel": True})
+    )
+    r = _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)
+    assert r["inserted"]["status"] == jobs.STATUS_PENDING
+    assert r["gerados"] == []

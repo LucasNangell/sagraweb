@@ -198,6 +198,8 @@ export function PapelariaCorelPanel({
   );
   /** Escolha do usuário: manter os textos do Corel da pasta. */
   const manterDadosCorelRef = useRef(false);
+  /** Exceção «Gerar Corel»: o próximo «gerar» vai para o worker CorelDRAW. */
+  const gerarCorelRef = useRef(false);
   /** Campos do produto real (Corel da pasta): um campo por ocorrência de objeto. */
   const [camposProduto, setCamposProduto] = useState<PapelariaCamposProduto | null>(
     null,
@@ -923,14 +925,18 @@ export function PapelariaCorelPanel({
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
+    const gerarCorel = gerarCorelRef.current;
+    const dados = { ...dadosForJob };
+    if (gerarCorel) delete dados[COMPOSICAO_DADOS_KEY];
     createJobMutation.mutate({
       ano: anoNum,
       nro: nroNum,
-      // Na composição, a prova pertence ao modelo da frente.
-      modelo_id: composicao?.frente.modelo_id ?? selectedModelId,
-      dados: dadosForJob,
+      // Na composição (Prova PDF), a prova pertence ao modelo da frente.
+      modelo_id: gerarCorel ? selectedModelId : (composicao?.frente.modelo_id ?? selectedModelId),
+      dados,
       lancar_andamento: lancarAndamento,
       manter_dados_corel: manterDadosCorelRef.current,
+      ...(gerarCorel ? { gerar_corel: true } : {}),
     });
     setCorelEditMode(false);
   };
@@ -1049,7 +1055,30 @@ export function PapelariaCorelPanel({
   const handleGerarArquivo = () => {
     if (!validateFormForAction()) return;
     manterDadosCorelRef.current = false;
+    gerarCorelRef.current = false;
     if (!provaPdfServidor && usableCdrFiles(cdrPathQuery.data).length > 0) {
+      void verificarDadosCorelThenGerar();
+      return;
+    }
+    void ensureOsFolderThen("gerar");
+  };
+
+  /** Exceção: gerar o arquivo CorelDRAW (worker) mesmo com Prova PDF disponível. */
+  const handleGerarCorel = () => {
+    if (!validateFormForAction()) return;
+    if (
+      composicao &&
+      (composicao.frente.modelo_id !== composicao.verso.modelo_id) &&
+      !window.confirm(
+        "O arquivo Corel é gerado a partir do .cdr do modelo selecionado (frente e verso do mesmo arquivo). " +
+          "A combinação de frente e verso escolhida vale só para a Prova PDF. Continuar?",
+      )
+    ) {
+      return;
+    }
+    manterDadosCorelRef.current = false;
+    gerarCorelRef.current = true;
+    if (usableCdrFiles(cdrPathQuery.data).length > 0) {
       void verificarDadosCorelThenGerar();
       return;
     }
@@ -1773,6 +1802,7 @@ export function PapelariaCorelPanel({
           )}
           onAbrirPasta={handleAbrirPasta}
           onGerarArquivo={handleGerarArquivo}
+          onGerarCorel={handleGerarCorel}
           onTimbradoA4Digital={handleTimbradoA4Digital}
           onAbrirCorel={handleAbrirCorel}
           onFinalizarCorel={handleFinalizarCorel}

@@ -432,7 +432,12 @@ def create_job(
     tipo_job: str = "create",
     job_pai_id: Optional[int] = None,
     manter_dados_corel: bool = False,
+    gerar_corel: bool = False,
 ) -> dict[str, Any]:
+    """
+    ``gerar_corel``: exceção pedida na página Papelaria — gera o arquivo
+    CorelDRAW pelo worker mesmo com PDF do modelo configurado.
+    """
     ensure_papelaria_jobs_tables()
     from services import papelaria_models_service as models_svc
 
@@ -470,6 +475,11 @@ def create_job(
             from services import papelaria_prova_pdf_service as prova_pdf_svc
 
             prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
+
+    if gerar_corel:
+        # O worker usa o .cdr do modelo inteiro: a composição frente/verso não se aplica.
+        prova_pdf_servidor = False
+        dados_clean.pop("__composicao", None)
 
     # Frente e verso independentes (frente de um modelo + verso de outro).
     if "__composicao" in dados_clean:

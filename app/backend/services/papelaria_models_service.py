@@ -396,6 +396,9 @@ def ensure_papelaria_modelos_table() -> None:
         # Frente/verso independentes: modelo padrão de cada face por produto + cores.
         ("PadraoFrente", "TINYINT(1) NOT NULL DEFAULT 0"),
         ("PadraoVerso", "TINYINT(1) NOT NULL DEFAULT 0"),
+        # Face removida de um modelo antigo de 2 páginas (o outro lado continua).
+        ("OcultarFrente", "TINYINT(1) NOT NULL DEFAULT 0"),
+        ("OcultarVerso", "TINYINT(1) NOT NULL DEFAULT 0"),
         ("AtualizadoEm", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
     ]
     for col, definition in legacy_migrations:
@@ -699,7 +702,7 @@ def _models_select_columns() -> str:
         cols.append("ProvaEmailTemplatePdf")
     if _table_has_column("ImposicaoConfigJson"):
         cols.append("ImposicaoConfigJson")
-    for col in ("PadraoFrente", "PadraoVerso"):
+    for col in ("PadraoFrente", "PadraoVerso", "OcultarFrente", "OcultarVerso"):
         if _table_has_column(col):
             cols.append(col)
     return ", ".join(cols)
@@ -807,6 +810,8 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "imposicao_config_json": imposicao_json,
         "padrao_frente": bool(row.get("PadraoFrente")),
         "padrao_verso": bool(row.get("PadraoVerso")),
+        "ocultar_frente": bool(row.get("OcultarFrente")),
+        "ocultar_verso": bool(row.get("OcultarVerso")),
         "tem_imposicao_config": _tem_imposicao_disponivel(
             produto=produto,
             modelo_imposicao_config_json=imposicao_json,
@@ -1442,6 +1447,8 @@ def match_modelos_para_os(
         warnings.append("Nenhum modelo Corel cadastrado. Importe a planilha de modelos.")
         return [], warnings, None
 
+    # Frente removida (modelo antigo de 2 páginas): não é mais opção de card.
+    todos = [m for m in todos if not m.get("ocultar_frente")]
     prod_norm = normalizar_texto_produto(produto_os)
     if not prod_norm:
         warnings.append("Produto da OS não identificado.")

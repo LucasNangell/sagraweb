@@ -96,6 +96,8 @@ export interface PapelariaCreateJobPayload {
   lancar_andamento?: boolean;
   /** Corel já na pasta: true mantém os textos dele (não aplica o formulário). */
   manter_dados_corel?: boolean;
+  /** Exceção: gerar o arquivo CorelDRAW pelo worker em vez da Prova PDF. */
+  gerar_corel?: boolean;
 }
 
 /** Ocorrência de um objeto no Corel da pasta (face + centro em mm no arquivo final). */

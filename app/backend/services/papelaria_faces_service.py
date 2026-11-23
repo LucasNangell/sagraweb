@@ -59,6 +59,15 @@ def pagina_da_face(frente_versao: Optional[str], face: str) -> Optional[int]:
     return None
 
 
+def face_do_modelo(modelo: dict[str, Any], face: str) -> Optional[int]:
+    """Página da face no modelo, respeitando faces removidas (ou None)."""
+    if face == FACE_FRENTE and modelo.get("ocultar_frente"):
+        return None
+    if face == FACE_VERSO and modelo.get("ocultar_verso"):
+        return None
+    return pagina_da_face(modelo.get("frente_versao"), face)
+
+
 def _mesmo_recorte(modelo: dict[str, Any], produto: str, cores: str) -> bool:
     from services.papelaria_models_service import _normalizar_cores_os, normalizar_texto_produto
 
@@ -108,7 +117,7 @@ def listar_fontes(produto: str, cores: str, modelos: Optional[list[dict[str, Any
         if not mid:
             continue
         for face in FACES:
-            pagina = pagina_da_face(m.get("frente_versao"), face)
+            pagina = face_do_modelo(m, face)
             if pagina is None:
                 continue
             if mid not in paginas_cache:
@@ -175,7 +184,7 @@ def definir_padrao(modelo_id: int, face: str, padrao: bool) -> dict[str, Any]:
     modelo = models_svc.get_modelo_by_id(int(modelo_id))
     if not modelo:
         raise LookupError("Modelo não encontrado.")
-    if pagina_da_face(modelo.get("frente_versao"), face) is None:
+    if face_do_modelo(modelo, face) is None:
         raise ComposicaoError(
             f"Este modelo ({modelo.get('frente_versao') or 'sem frente/verso'}) não tem {face}."
         )
@@ -199,6 +208,35 @@ def definir_padrao(modelo_id: int, face: str, padrao: bool) -> dict[str, Any]:
         {"v": 1 if padrao else 0, "id": int(modelo_id)},
     )
     return models_svc.get_modelo_by_id(int(modelo_id)) or {}
+
+
+def remover_face(modelo_id: int, face: str) -> dict[str, Any]:
+    """
+    Remove a frente ou o verso. Modelo de uma face só é excluído (desativado);
+    modelo antigo de 2 páginas perde só aquela face — se a outra já tiver sido
+    removida, o modelo inteiro é excluído.
+    """
+    from services import papelaria_models_service as models_svc
+
+    if face not in FACES:
+        raise ComposicaoError("Face inválida (use frente ou verso).")
+    models_svc.ensure_papelaria_modelos_table()
+    modelo = models_svc.get_modelo_by_id(int(modelo_id))
+    if not modelo:
+        raise LookupError("Modelo não encontrado.")
+    if face_do_modelo(modelo, face) is None:
+        raise ComposicaoError(f"Este modelo não tem {face}.")
+    outra = FACE_VERSO if face == FACE_FRENTE else FACE_FRENTE
+    if face_do_modelo(modelo, outra) is None:
+        models_svc.delete_modelo_admin(int(modelo_id))
+        return {"excluido": True, "modelo_id": int(modelo_id)}
+    ocultar = "OcultarFrente" if face == FACE_FRENTE else "OcultarVerso"
+    padrao = "PadraoFrente" if face == FACE_FRENTE else "PadraoVerso"
+    db.execute_query(
+        f"UPDATE tabPapelariaModelos SET {ocultar} = 1, {padrao} = 0 WHERE ID = %(id)s",
+        {"id": int(modelo_id)},
+    )
+    return {"excluido": False, "modelo_id": int(modelo_id), "modelo": models_svc.get_modelo_by_id(int(modelo_id))}
 
 
 def normalizar_composicao(raw: Any) -> Optional[dict[str, dict[str, int]]]:

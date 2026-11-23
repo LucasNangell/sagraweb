@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Loader2, Plus, Star } from "lucide-react";
+import { Loader2, Plus, Star, Trash2 } from "lucide-react";
 
-import { savePapelariaAdminModeloPadrao } from "@/api/adminSystem";
+import { removerPapelariaModeloFace, savePapelariaAdminModeloPadrao } from "@/api/adminSystem";
 import { toast } from "@/components/ui/toastStore";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
@@ -32,9 +32,16 @@ export function ehModeloCombinado(frenteVersao: string | null | undefined): bool
 type Item = { modelo: PapelariaAdminModelRecord; face: Face; pagina: number };
 
 
+/** Faces ativas do modelo (sem as removidas). */
+export function facesAtivasDoModelo(m: PapelariaAdminModelRecord): Array<{ face: Face; pagina: number }> {
+  return facesDoModelo(m.frente_versao).filter(
+    (f) => !(f.face === "frente" ? m.ocultar_frente : m.ocultar_verso),
+  );
+}
+
 function itensDaFace(modelos: PapelariaAdminModelRecord[], face: Face): Item[] {
   return modelos.flatMap((m) =>
-    facesDoModelo(m.frente_versao)
+    facesAtivasDoModelo(m)
       .filter((f) => f.face === face)
       .map((f) => ({ modelo: m, face, pagina: f.pagina })),
   );
@@ -58,13 +65,43 @@ export function PapelariaModelosPorFace({
   selectedId,
   onSelect,
   onNovo,
+  onModeloExcluido,
 }: {
   modelos: PapelariaAdminModelRecord[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   onNovo: (face: Face) => void;
+  /** Modelo inteiro excluído (não sobrou nenhuma face). */
+  onModeloExcluido?: (modeloId: number) => void;
 }) {
   const qc = useQueryClient();
+  const removerMutation = useMutation({
+    mutationFn: (p: { modelo: PapelariaAdminModelRecord; face: Face }) =>
+      removerPapelariaModeloFace(p.modelo.id, p.face),
+    onSuccess: (r, p) => {
+      toast.success(
+        r.excluido
+          ? `${rotulo(p.modelo)} excluído.`
+          : `${p.face === "frente" ? "Frente" : "Verso"} de ${rotulo(p.modelo)} removido.`,
+      );
+      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+      void qc.invalidateQueries({ queryKey: ["papelaria", "faces"] });
+      if (r.excluido) onModeloExcluido?.(p.modelo.id);
+    },
+    onError: (err: Error) => toast.error(err.message || "Não foi possível remover."),
+  });
+  const remover = (m: PapelariaAdminModelRecord, face: Face) => {
+    const nome = rotulo(m);
+    const exclui = facesAtivasDoModelo(m).length <= 1;
+    const msg = exclui
+      ? `Remover ${face === "frente" ? "a frente" : "o verso"} "${nome}"?
+
+O modelo será excluído e deixará de aparecer na Papelaria. Provas já geradas não são afetadas.`
+      : `Remover ${face === "frente" ? "a frente" : "o verso"} de "${nome}"?
+
+Este arquivo tem frente e verso: só ${face === "frente" ? "a frente" : "o verso"} deixa de ser opção; ${face === "frente" ? "o verso" : "a frente"} continua.`;
+    if (window.confirm(msg)) removerMutation.mutate({ modelo: m, face });
+  };
   const padraoMutation = useMutation({
     mutationFn: (p: { modelo: PapelariaAdminModelRecord; face: Face; padrao: boolean }) =>
       savePapelariaAdminModeloPadrao(p.modelo.id, p.face, p.padrao),
@@ -181,6 +218,22 @@ export function PapelariaModelosPorFace({
                       <Star className="size-3.5" aria-hidden fill={padrao ? "currentColor" : "none"} />
                     )}
                     {padrao ? <span className="pw-face-card__star-label">Padrão</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="pw-face-card__remove"
+                    aria-label={`Remover ${face === "frente" ? "a frente" : "o verso"} ${rotulo(m)}`}
+                    title={`Remover ${face === "frente" ? "esta frente" : "este verso"}`}
+                    disabled={removerMutation.isPending}
+                    onClick={() => remover(m, face)}
+                  >
+                    {removerMutation.isPending &&
+                    removerMutation.variables?.modelo.id === m.id &&
+                    removerMutation.variables?.face === face ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 className="size-3.5" aria-hidden />
+                    )}
                   </button>
                 </li>
               );

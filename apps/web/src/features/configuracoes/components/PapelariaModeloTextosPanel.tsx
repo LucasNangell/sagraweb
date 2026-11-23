@@ -67,7 +67,7 @@ export function PapelariaModeloTextosPanel({ modelo }: { modelo: PapelariaAdminM
           <p className="mt-0.5 text-[11px] text-slate-500">
             {fonte === "pdf"
               ? "Um só cadastro: os textos ligados geram a Prova PDF e a prévia ao vivo da página Papelaria."
-              : "Legado: imagem base + posições dos textos. Os templates dos elementos também são aplicados aos objetos do CorelDRAW (Prova WEB/e-mail)."}
+              : "Legado: imagem base + posições dos textos. Os templates dos elementos também valem para o arquivo CorelDRAW (gerado só por exceção)."}
           </p>
         </div>
         <SegmentedControl<Fonte>

@@ -23,6 +23,18 @@ class TestPapelariaUtilitarios:
         assert normalizar_gabinete("Anexo IV, Gabinete 45") == "045"
         assert normalizar_gabinete("1234") == "234"
 
+    def test_anexar_tem_prova_pdf(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            "services.papelaria_prova_pdf_service.tem_modelo_pdf",
+            lambda mid: mid == 20,
+        )
+        out = svc._anexar_tem_prova_pdf({"id": 20, "produto": "Timbrado A4"})
+        assert out["tem_prova_pdf"] is True
+        out_sem = svc._anexar_tem_prova_pdf({"id": 99})
+        assert out_sem["tem_prova_pdf"] is False
+
     def test_is_relevo_seco_cores(self):
         from services.papelaria_models_service import is_relevo_seco_cores
 

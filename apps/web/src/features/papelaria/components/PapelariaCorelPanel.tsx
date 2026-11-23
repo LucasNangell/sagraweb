@@ -729,10 +729,14 @@ export function PapelariaCorelPanel({
     const autoId =
       contextQuery.data.autoSelectedModelId ?? embedded?.id ?? null;
     if (embedded && autoId) {
-      queryClient.setQueryData(
-        queryKeys.papelaria.corelModelo(autoId),
-        embedded,
-      );
+      const pdfIds = contextQuery.data.prova_pdf_modelos ?? [];
+      // Seed precisa de tem_prova_pdf: o detalhe embutido / cache de 30s
+      // sem a flag fazia só Ct Visita FV (via composição) usar a prévia PDF.
+      queryClient.setQueryData(queryKeys.papelaria.corelModelo(autoId), {
+        ...embedded,
+        tem_prova_pdf:
+          Boolean(embedded.tem_prova_pdf) || pdfIds.includes(autoId),
+      });
     }
     if (autoId) {
       setSelectedModelId(autoId);
@@ -1027,8 +1031,11 @@ export function PapelariaCorelPanel({
     };
   }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados]);
 
-  /** «Gerar Corel» parte do PDF final quando o modelo (ou a composição) tem Prova PDF. */
-  const temProvaPdfModelo = Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao);
+  /** Prova PDF: detalhe do modelo, lista do contexto ou composição frente/verso. */
+  const temProvaPdfModelo =
+    Boolean(modelDetailQuery.data?.tem_prova_pdf) ||
+    provaPdfServidor ||
+    Boolean(composicao);
 
   const camposEditaveisPrevia = useMemo(
     () => new Set((camposFormulario ?? []).map((f) => f.key)),
@@ -1957,7 +1964,7 @@ export function PapelariaCorelPanel({
             mockupConfigJson={modelDetailQuery.data?.mockup_config_json}
             modeloMockup={modelDetailQuery.data ?? null}
             previewConfigJson={previewConfigJsonEfetivo}
-            temProvaPdf={Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao)}
+            temProvaPdf={temProvaPdfModelo}
             composicao={composicao}
             livePreviewValues={valoresPrevia}
             previa={previa}

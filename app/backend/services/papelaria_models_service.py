@@ -982,6 +982,24 @@ def list_modelos(
     return [_row_to_modelo(r) for r in rows]
 
 
+def _anexar_tem_prova_pdf(modelo: dict[str, Any]) -> dict[str, Any]:
+    """Flag da prévia PDF ao vivo (mesmo critério de ``tem_modelo_pdf``)."""
+    try:
+        mid = int(modelo.get("id") or 0)
+    except (TypeError, ValueError):
+        mid = 0
+    if not mid:
+        modelo["tem_prova_pdf"] = False
+        return modelo
+    try:
+        from services.papelaria_prova_pdf_service import tem_modelo_pdf
+
+        modelo["tem_prova_pdf"] = bool(tem_modelo_pdf(mid))
+    except Exception:
+        modelo["tem_prova_pdf"] = False
+    return modelo
+
+
 def get_modelo_by_id(modelo_id: int) -> Optional[dict[str, Any]]:
     ensure_papelaria_modelos_table()
     rows = db.execute_query(
@@ -995,7 +1013,9 @@ def get_modelo_by_id(modelo_id: int) -> Optional[dict[str, Any]]:
     )
     if not rows:
         return None
-    return _attach_preview_faces(_row_to_modelo(rows[0], include_campos=True))
+    return _anexar_tem_prova_pdf(
+        _attach_preview_faces(_row_to_modelo(rows[0], include_campos=True))
+    )
 
 
 def list_modelos_admin() -> list[dict[str, Any]]:

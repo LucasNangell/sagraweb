@@ -61,6 +61,8 @@ export interface ProvaPdfBlocoRedes {
   max: number;
   /** Redes aceitas (vazio = todas as ativas do catálogo). */
   permitidas: string[];
+  /** Estilo de logo que já vem selecionado na página Papelaria. */
+  estilo_padrao?: "quadrado_policromia" | "quadrado_pb" | "policromia" | "pb";
 }
 
 export interface ProvaPdfModelo {

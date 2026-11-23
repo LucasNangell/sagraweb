@@ -62,15 +62,23 @@ export interface PapelariaCorelModelDetail extends PapelariaCorelModelSummary {
   redes_bloco?: PapelariaRedesBloco | null;
 }
 
+export type PapelariaRedeEstilo = "quadrado_policromia" | "quadrado_pb" | "policromia" | "pb";
+
 export interface PapelariaRedeOpcao {
   chave: string;
   nome: string;
   exemplo: string;
   logo_url: string | null;
+  /** PNG do logo em cada estilo disponível para a rede. */
+  logos_url?: Partial<Record<PapelariaRedeEstilo, string>>;
 }
 
 export interface PapelariaRedesBloco {
   max: number;
+  /** Estilo de logo pré-selecionado (definido no bloco do modelo). */
+  estilo_padrao?: PapelariaRedeEstilo;
+  /** Estilos com logo em pelo menos uma das redes do bloco. */
+  estilos?: Array<{ id: PapelariaRedeEstilo; rotulo: string }>;
   redes: PapelariaRedeOpcao[];
 }
 

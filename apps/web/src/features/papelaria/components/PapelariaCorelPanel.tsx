@@ -40,6 +40,7 @@ import {
   type PapelariaCorelDadosEstado,
 } from "./PapelariaCorelDadosModal";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
+import type { PapelariaRedeEstilo } from "@/features/papelaria/types";
 import {
   COMPOSICAO_DADOS_KEY,
   PapelariaFrenteVersoPicker,
@@ -47,8 +48,10 @@ import {
 } from "./PapelariaFrenteVersoPicker";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
+  estiloInicial,
   PapelariaRedesPicker,
   REDES_DADOS_KEY,
+  REDES_ESTILO_DADOS_KEY,
   redesIniciais,
   redesParaDados,
   type RedeEscolha,
@@ -862,12 +865,14 @@ export function PapelariaCorelPanel({
   }, [modelDetailQuery.data, composicao, extrasCamposKey]);
   const redesBlocoKey = redesBloco ? redesBloco.redes.map((r) => r.chave).join(",") : "";
   const [redesEscolha, setRedesEscolha] = useState<RedeEscolha[]>([]);
+  const [redesEstilo, setRedesEstilo] = useState<PapelariaRedeEstilo>("quadrado_policromia");
   useEffect(() => {
     // Mantém o que já foi digitado quando o bloco muda (ex.: troca de verso).
     setRedesEscolha((prev) => {
       const antigos = new Map(prev.map((r) => [r.chave, r]));
       return redesIniciais(redesBloco).map((r) => antigos.get(r.chave) ?? r);
     });
+    setRedesEstilo(estiloInicial(redesBloco));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redesBlocoKey]);
   const camposFormulario = useMemo(() => {
@@ -959,13 +964,21 @@ export function PapelariaCorelPanel({
     }
     if (redesBloco) {
       base[REDES_DADOS_KEY] = redesParaDados(redesEscolha);
+      base[REDES_ESTILO_DADOS_KEY] = redesEstilo;
     }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo]);
 
   const valoresPrevia = useMemo(
-    () => (redesBloco ? { ...fieldValues, [REDES_DADOS_KEY]: redesParaDados(redesEscolha) } : fieldValues),
-    [fieldValues, redesBloco, redesEscolha],
+    () =>
+      redesBloco
+        ? {
+            ...fieldValues,
+            [REDES_DADOS_KEY]: redesParaDados(redesEscolha),
+            [REDES_ESTILO_DADOS_KEY]: redesEstilo,
+          }
+        : fieldValues,
+    [fieldValues, redesBloco, redesEscolha, redesEstilo],
   );
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
@@ -1617,7 +1630,7 @@ export function PapelariaCorelPanel({
                           />
                         ) : null}
                         {redesBloco ? (
-                          <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} />
+                          <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={setRedesEstilo} />
                         ) : null}
                         <DynamicFields
                           fields={camposFormulario}
@@ -1752,7 +1765,7 @@ export function PapelariaCorelPanel({
                     />
                   ) : null}
                   {redesBloco ? (
-                    <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} />
+                    <PapelariaRedesPicker bloco={redesBloco} value={redesEscolha} onChange={setRedesEscolha} estilo={redesEstilo} onEstiloChange={setRedesEstilo} />
                   ) : null}
                   <DynamicFields
                     fields={camposFormulario}

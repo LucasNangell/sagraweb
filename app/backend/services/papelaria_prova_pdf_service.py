@@ -1135,6 +1135,7 @@ def _aplicar_redes(
     avisos: Optional[list[str]],
     *,
     exemplo: bool = False,
+    estilo: Optional[str] = None,
 ) -> bytes:
     """Bloco de redes sociais do modelo (se configurado) com a escolha do usuário."""
     bloco = carregar_config(int(modelo_id)).get("redes")
@@ -1144,7 +1145,17 @@ def _aplicar_redes(
 
     if selecao is None and exemplo:
         selecao = redes_svc.selecao_exemplo(bloco)
-    return redes_svc.aplicar_bloco(conteudo, bloco, selecao or [], avisos)
+    return redes_svc.aplicar_bloco(conteudo, bloco, selecao or [], avisos, estilo=estilo)
+
+
+def estilo_redes_dos_dados(dados: dict[str, Any]) -> Optional[str]:
+    """Estilo de logo escolhido pelo usuário (chave ``__redes_estilo``)."""
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        return redes_svc.normalizar_estilo_selecao((dados or {}).get(redes_svc.ESTILO_DADOS_KEY))
+    except redes_svc.RedesError:
+        return None
 
 
 def selecao_redes_dos_dados(dados: dict[str, Any]) -> Optional[list[dict[str, str]]]:
@@ -1162,6 +1173,7 @@ def renderizar_composicao(
     dados: dict[str, Any],
     avisos: Optional[list[str]] = None,
     redes: Optional[list[dict[str, str]]] = None,
+    estilo_redes: Optional[str] = None,
 ) -> bytes:
     """
     Frente e verso independentes: aplica os campos na página de frente de um
@@ -1188,7 +1200,7 @@ def renderizar_composicao(
                 if campos
                 else pdf.read_bytes()
             )
-            conteudo = _aplicar_redes(mid, conteudo, redes, avisos)
+            conteudo = _aplicar_redes(mid, conteudo, redes, avisos, estilo=estilo_redes)
             src = fitz.open(stream=conteudo, filetype="pdf")
             try:
                 if pagina > src.page_count:
@@ -1226,6 +1238,7 @@ def previa_png(
     pdf = caminho_pdf(modelo_id)
     campos: list[dict[str, Any]] = []
     redes = selecao_redes_dos_dados(dados)
+    estilo_redes = estilo_redes_dos_dados(dados)
     tem_bloco = bool((carregar_config(modelo_id).get("redes") or {}).get("ativo"))
     if composicao is None:
         if not pdf.is_file():
@@ -1240,14 +1253,14 @@ def previa_png(
     t0 = time.perf_counter()
     dados_ok = preparar_dados({k: v for k, v in (dados or {}).items() if not str(k).startswith("__")}, modelo)
     if composicao is not None:
-        saida = renderizar_composicao(composicao, dados_ok, avisos=avisos, redes=redes)
+        saida = renderizar_composicao(composicao, dados_ok, avisos=avisos, redes=redes, estilo_redes=estilo_redes)
     else:
         saida = (
             renderizar(pdf, campos, dados_ok, avisos=avisos, exigir_campos=False)
             if campos
             else pdf.read_bytes()
         )
-        saida = _aplicar_redes(modelo_id, saida, redes, avisos, exemplo=exemplo_redes)
+        saida = _aplicar_redes(modelo_id, saida, redes, avisos, exemplo=exemplo_redes, estilo=estilo_redes)
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
@@ -1290,6 +1303,7 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
         )
         composicao = composicao_do_job(job)
         redes_sel = selecao_redes_dos_dados(job.get("dados") or {})
+        estilo_sel = estilo_redes_dos_dados(job.get("dados") or {})
         if composicao is not None:
             # Frente de um modelo + verso de outro (frente e verso independentes).
             campos = [
@@ -1298,14 +1312,14 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
                 for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
                 if c.get("template")
             ]
-            conteudo = renderizar_composicao(composicao, dados, redes=redes_sel)
+            conteudo = renderizar_composicao(composicao, dados, redes=redes_sel, estilo_redes=estilo_sel)
         else:
             campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
             pdf_job = caminho_pdf(int(job["modelo_id"]))
             conteudo = (
                 renderizar(pdf_job, campos, dados, exigir_campos=False) if campos else pdf_job.read_bytes()
             )
-            conteudo = _aplicar_redes(int(job["modelo_id"]), conteudo, redes_sel, None)
+            conteudo = _aplicar_redes(int(job["modelo_id"]), conteudo, redes_sel, None, estilo=estilo_sel)
 
         ano, nro = int(job["ano_protocolo"]), int(job["nro_protocolo"])
         sefoc = jobs_svc.resolve_os_papelaria_dir(ano, nro, create=True)

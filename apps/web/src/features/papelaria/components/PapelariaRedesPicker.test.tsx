@@ -38,3 +38,42 @@ describe("PapelariaRedesPicker", () => {
     expect(onChange.mock.calls[0][0].map((r: RedeEscolha) => r.chave)).toEqual(["whatsapp", "instagram", "x"]);
   });
 });
+
+
+describe("PapelariaRedesPicker · estilo dos logos", () => {
+  const comEstilos = {
+    max: 3,
+    estilo_padrao: "quadrado_policromia" as const,
+    estilos: [
+      { id: "quadrado_policromia" as const, rotulo: "Quadrado policromia" },
+      { id: "pb" as const, rotulo: "PB" },
+    ],
+    redes: [
+      { chave: "instagram", nome: "Instagram", exemplo: "@u", logo_url: null, logos_url: { quadrado_policromia: "/a.png", pb: "/b.png" } },
+      { chave: "linkedin", nome: "LinkedIn", exemplo: "@u", logo_url: null, logos_url: { quadrado_policromia: "/c.png" } },
+    ],
+  };
+
+  it("troca o estilo de todas as redes e tira a que não tem logo nele", () => {
+    const onChange = vi.fn();
+    const onEstiloChange = vi.fn();
+    const value: RedeEscolha[] = [
+      { chave: "instagram", valor: "@a", ativo: true },
+      { chave: "linkedin", valor: "in/a", ativo: true },
+    ];
+    const { rerender } = render(
+      <PapelariaRedesPicker bloco={comEstilos} value={value} onChange={onChange} estilo="quadrado_policromia" onEstiloChange={onEstiloChange} />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "PB" }));
+    expect(onEstiloChange).toHaveBeenCalledWith("pb");
+    expect(onChange.mock.calls[0][0]).toEqual([
+      { chave: "instagram", valor: "@a", ativo: true },
+      { chave: "linkedin", valor: "in/a", ativo: false },
+    ]);
+    rerender(
+      <PapelariaRedesPicker bloco={comEstilos} value={onChange.mock.calls[0][0]} onChange={onChange} estilo="pb" onEstiloChange={onEstiloChange} />,
+    );
+    expect(screen.getByLabelText("Incluir LinkedIn")).toBeDisabled();
+    expect(screen.getByLabelText("Perfil no LinkedIn")).toHaveAttribute("placeholder", "Sem logo neste estilo");
+  });
+});

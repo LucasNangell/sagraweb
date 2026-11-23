@@ -1,15 +1,15 @@
 """
 Redes sociais na Prova PDF.
 
-* **Catálogo** (universal): redes com nome, exemplo do campo e logo (SVG/PDF
-  vetorial ou PNG). Tabela ``tabPapelariaRedesSociais``; logos em
-  ``Modelos/papelaria/redes``.
+* **Catálogo** (universal): redes com nome, exemplo do campo e até 4 logos —
+  um por **estilo** (Quadrado policromia, Quadrado PB, Policromia, PB). Nem
+  toda rede precisa ter os 4. Tabela ``tabPapelariaRedesSociais`` (coluna
+  ``LogosJson``); arquivos em ``Modelos/papelaria/redes``.
 * **Bloco no modelo**: área do PDF onde ficam as redes, calculada a partir das
-  linhas de exemplo, com disposição (vertical, horizontal, grade),
-  alinhamento, tamanho do ícone e espaçamentos. Fica em ``config.json`` do
-  Prova PDF do modelo (chave ``redes``).
+  linhas de exemplo, com disposição, alinhamento, tamanhos e estilo padrão.
+  Fica em ``config.json`` do Prova PDF do modelo (chave ``redes``).
 * **Renderização**: na prova, apaga o exemplo da área e desenha só as redes que
-  o usuário escolheu, com o logo e o texto na fonte do PDF.
+  o usuário escolheu, todas no mesmo estilo de logo.
 """
 from __future__ import annotations
 
@@ -33,19 +33,42 @@ PASTA_LOGOS = PROJECT_ROOT / "Modelos" / "papelaria" / "redes"
 ASSETS_LOGOS = Path(__file__).resolve().parents[1] / "assets" / "papelaria_redes"
 MAX_LOGO_BYTES = 2 * 1024 * 1024
 DADOS_KEY = "__redes"
+ESTILO_DADOS_KEY = "__redes_estilo"
 CHAVE_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")  # «x» (X/Twitter) tem 1 letra
 DISPOSICOES = ("vertical", "horizontal", "grade")
 ALINH_H = ("esquerda", "centro", "direita")
 ALINH_V = ("topo", "meio", "base")
 
-_PADRAO = [
-    {"chave": "tiktok", "nome": "TikTok", "exemplo": "@usuario"},
-    {"chave": "x", "nome": "X (Twitter)", "exemplo": "@usuario"},
-    {"chave": "kwai", "nome": "Kwai", "exemplo": "@usuario"},
-    {"chave": "instagram", "nome": "Instagram", "exemplo": "@usuario"},
-    {"chave": "facebook", "nome": "Facebook", "exemplo": "facebook.com/usuario"},
-    {"chave": "whatsapp", "nome": "WhatsApp", "exemplo": "+55 61 99999-9999"},
+# Estilos de logo (perfil de cores). Todas as redes de uma prova usam o mesmo.
+ESTILOS: list[dict[str, str]] = [
+    {"id": "quadrado_policromia", "rotulo": "Quadrado policromia"},
+    {"id": "quadrado_pb", "rotulo": "Quadrado PB"},
+    {"id": "policromia", "rotulo": "Policromia"},
+    {"id": "pb", "rotulo": "PB"},
 ]
+ESTILOS_IDS = tuple(e["id"] for e in ESTILOS)
+ESTILO_PADRAO = "quadrado_policromia"
+
+# Nome/exemplo das redes que vêm com logos em assets/papelaria_redes.
+_PADRAO: dict[str, dict[str, str]] = {
+    "tiktok": {"nome": "TikTok", "exemplo": "@usuario"},
+    "x": {"nome": "X (Twitter)", "exemplo": "@usuario"},
+    "kwai": {"nome": "Kwai", "exemplo": "@usuario"},
+    "instagram": {"nome": "Instagram", "exemplo": "@usuario"},
+    "facebook": {"nome": "Facebook", "exemplo": "facebook.com/usuario"},
+    "whatsapp": {"nome": "WhatsApp", "exemplo": "+55 61 99999-9999"},
+    "youtube": {"nome": "YouTube", "exemplo": "youtube.com/@canal"},
+    "telegram": {"nome": "Telegram", "exemplo": "t.me/usuario"},
+    "linktree": {"nome": "Linktree", "exemplo": "linktr.ee/usuario"},
+    "threads": {"nome": "Threads", "exemplo": "@usuario"},
+    "linkedin": {"nome": "LinkedIn", "exemplo": "linkedin.com/in/usuario"},
+    "snapchat": {"nome": "Snapchat", "exemplo": "@usuario"},
+    "flickr": {"nome": "Flickr", "exemplo": "flickr.com/usuario"},
+    "twitter": {"nome": "Twitter (pássaro)", "exemplo": "@usuario"},
+}
+_ORDEM_PADRAO = list(_PADRAO)
+_ARQUIVO_ASSET_RE = re.compile(r"^([a-z][a-z0-9_]*)__(" + "|".join(ESTILOS_IDS) + r")\.(pdf|png)$")
+_MARCA_IMPORTADOS = ".assets_importados.json"
 
 _SQL = """
 CREATE TABLE IF NOT EXISTS tabPapelariaRedesSociais (
@@ -53,6 +76,7 @@ CREATE TABLE IF NOT EXISTS tabPapelariaRedesSociais (
     Nome VARCHAR(60) NOT NULL,
     Exemplo VARCHAR(120) NULL,
     LogoArquivo VARCHAR(120) NULL,
+    LogosJson JSON NULL,
     Ativo TINYINT(1) NOT NULL DEFAULT 1,
     Ordem INT NOT NULL DEFAULT 0,
     AtualizadoEm TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -73,28 +97,45 @@ class RedesError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+def _tem_coluna(coluna: str) -> bool:
+    rows = db.execute_query(
+        """
+        SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tabPapelariaRedesSociais'
+          AND COLUMN_NAME = %(c)s
+        """,
+        {"c": coluna},
+    ) or [{"n": 0}]
+    return bool(int(rows[0].get("n") or 0))
+
+
 def ensure_tabela() -> None:
     global _tabela_ok
     if _tabela_ok:
         return
     db.execute_query(_SQL)
-    rows = db.execute_query("SELECT COUNT(*) AS n FROM tabPapelariaRedesSociais") or [{"n": 0}]
-    if not int(rows[0].get("n") or 0):
-        PASTA_LOGOS.mkdir(parents=True, exist_ok=True)
-        for ordem, r in enumerate(_PADRAO):
-            logo = None
-            origem = ASSETS_LOGOS / f"{r['chave']}.pdf"
-            if origem.is_file():
-                logo = f"{r['chave']}.pdf"
-                shutil.copyfile(origem, PASTA_LOGOS / logo)
-            db.execute_query(
-                """
-                INSERT INTO tabPapelariaRedesSociais (Chave, Nome, Exemplo, LogoArquivo, Ativo, Ordem)
-                VALUES (%(c)s, %(n)s, %(e)s, %(l)s, 1, %(o)s)
-                """,
-                {"c": r["chave"], "n": r["nome"], "e": r["exemplo"], "l": logo, "o": (ordem + 1) * 10},
-            )
+    if not _tem_coluna("LogosJson"):
+        db.execute_query("ALTER TABLE tabPapelariaRedesSociais ADD COLUMN LogosJson JSON NULL AFTER LogoArquivo")
     _tabela_ok = True
+    try:
+        importar_logos_dos_assets()
+    except Exception as exc:  # catálogo continua utilizável sem a importação
+        logger.warning("Redes sociais: importação dos logos padrão falhou: %s", exc)
+
+
+def _logos_da_linha(r: dict[str, Any]) -> dict[str, str]:
+    bruto = r.get("LogosJson")
+    if isinstance(bruto, (bytes, bytearray)):
+        bruto = bruto.decode("utf-8")
+    try:
+        logos = json.loads(bruto) if isinstance(bruto, str) and bruto.strip() else (bruto or {})
+    except json.JSONDecodeError:
+        logos = {}
+    out = {str(k): str(v) for k, v in (logos or {}).items() if str(k) in ESTILOS_IDS and v}
+    # Logo único antigo (antes dos estilos) vale como «Quadrado policromia».
+    if r.get("LogoArquivo") and ESTILO_PADRAO not in out:
+        out[ESTILO_PADRAO] = str(r["LogoArquivo"])
+    return out
 
 
 def invalidar_cache() -> None:
@@ -105,29 +146,97 @@ def invalidar_cache() -> None:
 def listar() -> list[dict[str, Any]]:
     with _lock:
         if _cache["dados"] is not None and time.monotonic() - _cache["em"] < 15.0:
-            return [dict(r) for r in _cache["dados"]]
+            return [dict(r, logos=dict(r["logos"])) for r in _cache["dados"]]
     ensure_tabela()
     rows = db.execute_query(
-        "SELECT Chave, Nome, Exemplo, LogoArquivo, Ativo, Ordem FROM tabPapelariaRedesSociais ORDER BY Ordem, Chave"
+        "SELECT Chave, Nome, Exemplo, LogoArquivo, LogosJson, Ativo, Ordem FROM tabPapelariaRedesSociais ORDER BY Ordem, Chave"
     ) or []
-    dados = [
-        {
-            "chave": str(r["Chave"]),
-            "nome": str(r.get("Nome") or r["Chave"]),
-            "exemplo": str(r.get("Exemplo") or ""),
-            "logo": str(r["LogoArquivo"]) if r.get("LogoArquivo") else None,
-            "ativo": bool(r.get("Ativo")),
-        }
-        for r in rows
-    ]
+    dados = []
+    for r in rows:
+        logos = _logos_da_linha(r)
+        dados.append(
+            {
+                "chave": str(r["Chave"]),
+                "nome": str(r.get("Nome") or r["Chave"]),
+                "exemplo": str(r.get("Exemplo") or ""),
+                "logos": logos,
+                # Compatibilidade: primeiro logo disponível.
+                "logo": next((logos[e] for e in ESTILOS_IDS if e in logos), None),
+                "ativo": bool(r.get("Ativo")),
+            }
+        )
     with _lock:
         _cache["dados"] = dados
         _cache["em"] = time.monotonic()
-    return [dict(r) for r in dados]
+    return [dict(r, logos=dict(r["logos"])) for r in dados]
 
 
 def por_chave() -> dict[str, dict[str, Any]]:
     return {r["chave"]: r for r in listar()}
+
+
+def _gravar_logos(chave: str, logos: dict[str, str]) -> None:
+    db.execute_query(
+        "UPDATE tabPapelariaRedesSociais SET LogosJson = %(j)s, LogoArquivo = NULL WHERE Chave = %(c)s",
+        {"j": json.dumps(logos, ensure_ascii=False), "c": chave},
+    )
+
+
+def importar_logos_dos_assets() -> dict[str, int]:
+    """
+    Importa os logos padrão (``assets/papelaria_redes/<rede>__<estilo>.pdf``):
+    cria a rede se faltar e preenche só os estilos vazios. Cada par
+    rede+estilo é importado uma única vez (rede excluída não volta; logo
+    enviado pelo admin não é sobrescrito).
+    """
+    if not ASSETS_LOGOS.is_dir():
+        return {"redes": 0, "logos": 0}
+    PASTA_LOGOS.mkdir(parents=True, exist_ok=True)
+    marca = PASTA_LOGOS / _MARCA_IMPORTADOS
+    try:
+        importados = set(json.loads(marca.read_text(encoding="utf-8"))) if marca.is_file() else set()
+    except (OSError, json.JSONDecodeError):
+        importados = set()
+    pendentes: dict[str, dict[str, Path]] = {}
+    for arq in sorted(ASSETS_LOGOS.iterdir()):
+        m = _ARQUIVO_ASSET_RE.match(arq.name)
+        if m and f"{m.group(1)}__{m.group(2)}" not in importados:
+            pendentes.setdefault(m.group(1), {})[m.group(2)] = arq
+    if not pendentes:
+        return {"redes": 0, "logos": 0}
+    rows = db.execute_query(
+        "SELECT Chave, LogoArquivo, LogosJson, Ordem FROM tabPapelariaRedesSociais"
+    ) or []
+    existentes = {str(r["Chave"]): _logos_da_linha(r) for r in rows}
+    ordem_max = max([int(r.get("Ordem") or 0) for r in rows] or [0])
+    novas = logos_n = 0
+    for chave in sorted(pendentes, key=lambda c: _ORDEM_PADRAO.index(c) if c in _ORDEM_PADRAO else 999):
+        estilos = pendentes[chave]
+        if chave not in existentes:
+            info = _PADRAO.get(chave, {"nome": chave.capitalize(), "exemplo": "@usuario"})
+            ordem_max += 10
+            db.execute_query(
+                """
+                INSERT INTO tabPapelariaRedesSociais (Chave, Nome, Exemplo, LogosJson, Ativo, Ordem)
+                VALUES (%(c)s, %(n)s, %(e)s, '{}', 1, %(o)s)
+                """,
+                {"c": chave, "n": info["nome"], "e": info["exemplo"], "o": ordem_max},
+            )
+            existentes[chave] = {}
+            novas += 1
+        logos = dict(existentes[chave])
+        for estilo, arq in estilos.items():
+            if estilo not in logos:
+                destino = f"{chave}__{estilo}{arq.suffix.lower()}"
+                shutil.copyfile(arq, PASTA_LOGOS / destino)
+                logos[estilo] = destino
+                logos_n += 1
+            importados.add(f"{chave}__{estilo}")
+        _gravar_logos(chave, logos)
+    marca.write_text(json.dumps(sorted(importados)), encoding="utf-8")
+    invalidar_cache()
+    logger.info("Redes sociais: %s rede(s) e %s logo(s) importados dos assets.", novas, logos_n)
+    return {"redes": novas, "logos": logos_n}
 
 
 def salvar_lista(raw: Any) -> list[dict[str, Any]]:
@@ -154,7 +263,7 @@ def salvar_lista(raw: Any) -> list[dict[str, Any]]:
                 "chave": chave,
                 "nome": nome[:60],
                 "exemplo": str(item.get("exemplo") or "").strip()[:120],
-                "logo": (atuais.get(chave) or {}).get("logo"),
+                "logos": (atuais.get(chave) or {}).get("logos") or {},
                 "ativo": bool(item.get("ativo", True)),
             }
         )
@@ -164,10 +273,17 @@ def salvar_lista(raw: Any) -> list[dict[str, Any]]:
         ops.append(
             (
                 """
-                INSERT INTO tabPapelariaRedesSociais (Chave, Nome, Exemplo, LogoArquivo, Ativo, Ordem)
-                VALUES (%(c)s, %(n)s, %(e)s, %(l)s, %(a)s, %(o)s)
+                INSERT INTO tabPapelariaRedesSociais (Chave, Nome, Exemplo, LogoArquivo, LogosJson, Ativo, Ordem)
+                VALUES (%(c)s, %(n)s, %(e)s, NULL, %(l)s, %(a)s, %(o)s)
                 """,
-                {"c": r["chave"], "n": r["nome"], "e": r["exemplo"], "l": r["logo"], "a": 1 if r["ativo"] else 0, "o": (ordem + 1) * 10},
+                {
+                    "c": r["chave"],
+                    "n": r["nome"],
+                    "e": r["exemplo"],
+                    "l": json.dumps(r["logos"], ensure_ascii=False),
+                    "a": 1 if r["ativo"] else 0,
+                    "o": (ordem + 1) * 10,
+                },
             )
         )
     db.execute_transaction(ops)
@@ -175,10 +291,18 @@ def salvar_lista(raw: Any) -> list[dict[str, Any]]:
     return listar()
 
 
-def salvar_logo(chave: str, filename: str, content: bytes) -> dict[str, Any]:
-    """Logo da rede: SVG e PDF viram PDF vetorial (1ª página); PNG fica PNG."""
+def _estilo_valido(estilo: Optional[str]) -> str:
+    e = (estilo or "").strip() or ESTILO_PADRAO
+    if e not in ESTILOS_IDS:
+        raise RedesError("Estilo de logo inválido.")
+    return e
+
+
+def salvar_logo(chave: str, filename: str, content: bytes, estilo: Optional[str] = None) -> dict[str, Any]:
+    """Logo da rede num estilo: SVG e PDF viram PDF vetorial (1ª página); PNG fica PNG."""
     import fitz
 
+    estilo = _estilo_valido(estilo)
     rede = por_chave().get(chave)
     if not rede:
         raise LookupError("Rede não encontrada.")
@@ -189,7 +313,7 @@ def salvar_logo(chave: str, filename: str, content: bytes) -> dict[str, Any]:
     try:
         if nome.endswith(".png"):
             fitz.Pixmap(content)  # valida
-            destino, dados = f"{chave}.png", content
+            sufixo, dados = ".png", content
         elif nome.endswith(".svg") or nome.endswith(".pdf"):
             with fitz.open(stream=content, filetype="svg" if nome.endswith(".svg") else "pdf") as src:
                 pdf = fitz.open("pdf", src.convert_to_pdf(0, 0)) if nome.endswith(".svg") else fitz.open("pdf", content)
@@ -198,37 +322,63 @@ def salvar_logo(chave: str, filename: str, content: bytes) -> dict[str, Any]:
                     um.insert_pdf(pdf, from_page=0, to_page=0)
                     dados = um.tobytes(garbage=4, deflate=True)
                     um.close()
-            destino = f"{chave}.pdf"
+            sufixo = ".pdf"
         else:
             raise RedesError("Formato do logo: SVG, PDF ou PNG.")
     except RedesError:
         raise
     except Exception as exc:
         raise RedesError(f"Não foi possível ler o logo: {exc}") from exc
-    for antigo in PASTA_LOGOS.glob(f"{chave}.*"):
+    for antigo in PASTA_LOGOS.glob(f"{chave}__{estilo}.*"):
         antigo.unlink(missing_ok=True)
+    destino = f"{chave}__{estilo}{sufixo}"
     (PASTA_LOGOS / destino).write_bytes(dados)
-    db.execute_query(
-        "UPDATE tabPapelariaRedesSociais SET LogoArquivo = %(l)s WHERE Chave = %(c)s",
-        {"l": destino, "c": chave},
-    )
+    logos = dict(rede.get("logos") or {})
+    logos[estilo] = destino
+    _gravar_logos(chave, logos)
     invalidar_cache()
     return por_chave()[chave]
 
 
-def caminho_logo(rede: dict[str, Any]) -> Optional[Path]:
-    if not rede.get("logo"):
+def remover_logo(chave: str, estilo: str) -> dict[str, Any]:
+    estilo = _estilo_valido(estilo)
+    rede = por_chave().get(chave)
+    if not rede:
+        raise LookupError("Rede não encontrada.")
+    logos = dict(rede.get("logos") or {})
+    logos.pop(estilo, None)
+    _gravar_logos(chave, logos)
+    invalidar_cache()
+    return por_chave()[chave]
+
+
+def _arquivo(nome: Optional[str]) -> Optional[Path]:
+    if not nome:
         return None
-    p = PASTA_LOGOS / str(rede["logo"])
+    p = PASTA_LOGOS / str(nome)
     return p if p.is_file() else None
 
 
-def logo_png(chave: str, tamanho_px: int = 96) -> Optional[bytes]:
+def caminho_logo(rede: dict[str, Any], estilo: Optional[str] = None, *, permitir_outro: bool = True) -> Optional[Path]:
+    """Logo da rede no estilo pedido (ou, se faltar e permitido, no primeiro disponível)."""
+    logos = rede.get("logos") or {}
+    if estilo:
+        p = _arquivo(logos.get(estilo))
+        if p or not permitir_outro:
+            return p
+    for e in ESTILOS_IDS:
+        p = _arquivo(logos.get(e))
+        if p:
+            return p
+    return _arquivo(rede.get("logo"))
+
+
+def logo_png(chave: str, estilo: Optional[str] = None, tamanho_px: int = 96) -> Optional[bytes]:
     """PNG do logo para exibir no admin/Papelaria."""
     import fitz
 
     rede = por_chave().get(chave)
-    p = caminho_logo(rede) if rede else None
+    p = caminho_logo(rede, estilo, permitir_outro=not estilo) if rede else None
     if not p:
         return None
     if p.suffix.lower() == ".png":
@@ -237,6 +387,15 @@ def logo_png(chave: str, tamanho_px: int = 96) -> Optional[bytes]:
         pg = d[0]
         zoom = tamanho_px / max(pg.rect.width, pg.rect.height, 1)
         return pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=True).tobytes("png")
+
+
+def normalizar_estilo_selecao(raw: Any) -> Optional[str]:
+    e = str(raw or "").strip()
+    if not e:
+        return None
+    if e not in ESTILOS_IDS:
+        raise RedesError("Estilo de logo inválido.")
+    return e
 
 
 def normalizar_selecao(raw: Any) -> Optional[list[dict[str, str]]]:
@@ -345,6 +504,7 @@ def detectar_bloco(pdf: Any, pagina: int, marcadores: list[str]) -> dict[str, An
             "gap_mm": gap_mm,
             "max": len(linhas),
             "permitidas": [],
+            "estilo_padrao": ESTILO_PADRAO,
         }
     finally:
         doc.close()
@@ -389,6 +549,7 @@ def normalizar_bloco(raw: Any) -> Optional[dict[str, Any]]:
         "gap_mm": num("gap_mm", 0.8, 0.0, 20.0),
         "max": int(num("max", 6, 1, 20)),
         "permitidas": [str(c) for c in raw.get("permitidas") or [] if str(c).strip()],
+        "estilo_padrao": raw.get("estilo_padrao") if raw.get("estilo_padrao") in ESTILOS_IDS else ESTILO_PADRAO,
     }
 
 
@@ -461,6 +622,7 @@ def aplicar_bloco(
     bloco: Optional[dict[str, Any]],
     selecao: Optional[list[dict[str, str]]],
     avisos: Optional[list[str]] = None,
+    estilo: Optional[str] = None,
 ) -> bytes:
     """Apaga o exemplo da área do bloco e desenha as redes escolhidas."""
     import fitz
@@ -540,6 +702,7 @@ def aplicar_bloco(
         itens = itens[: int(bloco.get("max") or 6)]
         if not itens:
             return doc.tobytes(garbage=3, deflate=True)
+        estilo_logo = estilo if estilo in ESTILOS_IDS else bloco.get("estilo_padrao") or ESTILO_PADRAO
 
         for _rede, valor in itens:
             faltam = fonte.faltando(valor)
@@ -612,7 +775,12 @@ def aplicar_bloco(
         for (rede, valor), (x, y) in zip(itens, posicoes):
             centro = y + m["h"] / 2
             caixa = fitz.Rect(x, centro - m["s"] / 2, x + m["s"], centro + m["s"] / 2)
-            logo = caminho_logo(rede)
+            logo = caminho_logo(rede, estilo_logo, permitir_outro=False)
+            if logo is None:
+                logo = caminho_logo(rede)
+                if logo is not None and avisos is not None:
+                    rot = next((e["rotulo"] for e in ESTILOS if e["id"] == estilo_logo), estilo_logo)
+                    avisos.append(f"A rede {rede['nome']} não tem logo «{rot}» — usado outro estilo.")
             if logo is not None:
                 try:
                     if logo.suffix.lower() == ".png":

@@ -2,9 +2,23 @@ import { cn } from "@sagra/ui";
 import { ArrowDown, ArrowUp, Share2 } from "lucide-react";
 
 import { apiUrl } from "@/api/client";
-import type { PapelariaRedesBloco } from "@/features/papelaria/types";
+import type { PapelariaRedeEstilo, PapelariaRedesBloco } from "@/features/papelaria/types";
 
 export const REDES_DADOS_KEY = "__redes";
+export const REDES_ESTILO_DADOS_KEY = "__redes_estilo";
+
+/** Estilo inicial: o padrão do modelo, se alguma rede tiver logo nele; senão o primeiro disponível. */
+export function estiloInicial(bloco: PapelariaRedesBloco | null | undefined): PapelariaRedeEstilo {
+  const disponiveis = bloco?.estilos?.map((e) => e.id) ?? [];
+  const padrao = bloco?.estilo_padrao ?? "quadrado_policromia";
+  return disponiveis.length && !disponiveis.includes(padrao) ? disponiveis[0] : padrao;
+}
+
+function temEstilo(bloco: PapelariaRedesBloco, chave: string, estilo: PapelariaRedeEstilo): boolean {
+  const rede = bloco.redes.find((r) => r.chave === chave);
+  // Sem a lista de estilos (resposta antiga), não bloqueia.
+  return !rede?.logos_url || Boolean(rede.logos_url[estilo]);
+}
 
 export type RedeEscolha = { chave: string; valor: string; ativo: boolean };
 
@@ -28,11 +42,24 @@ export function PapelariaRedesPicker({
   bloco,
   value,
   onChange,
+  estilo,
+  onEstiloChange,
 }: {
   bloco: PapelariaRedesBloco;
   value: RedeEscolha[];
   onChange: (next: RedeEscolha[]) => void;
+  /** Estilo de logo da prova (todas as redes seguem o mesmo). */
+  estilo?: PapelariaRedeEstilo;
+  onEstiloChange?: (next: PapelariaRedeEstilo) => void;
 }) {
+  const estiloAtual = estilo ?? estiloInicial(bloco);
+  const trocarEstilo = (next: PapelariaRedeEstilo) => {
+    onEstiloChange?.(next);
+    // Rede sem logo no novo estilo sai da prova (o perfil digitado é mantido).
+    if (value.some((r) => r.ativo && !temEstilo(bloco, r.chave, next))) {
+      onChange(value.map((r) => (r.ativo && !temEstilo(bloco, r.chave, next) ? { ...r, ativo: false } : r)));
+    }
+  };
   const porChave = new Map(bloco.redes.map((r) => [r.chave, r]));
   const marcadas = value.filter((r) => r.ativo).length;
   const cheio = marcadas >= bloco.max;
@@ -57,11 +84,34 @@ export function PapelariaRedesPicker({
           {marcadas} de até {bloco.max}
         </span>
       </div>
+      {bloco.estilos && bloco.estilos.length > 1 ? (
+        <div className="mb-2 flex flex-wrap gap-1" role="radiogroup" aria-label="Estilo dos logos">
+          {bloco.estilos.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              role="radio"
+              aria-checked={estiloAtual === e.id}
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-semibold transition",
+                estiloAtual === e.id
+                  ? "border-secondary-blue bg-secondary-blue text-white"
+                  : "border-sagra-border text-neutral-600 hover:border-secondary-blue/50",
+              )}
+              onClick={() => trocarEstilo(e.id)}
+            >
+              {e.rotulo}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <ul className="space-y-1.5">
         {value.map((r, i) => {
           const rede = porChave.get(r.chave);
           if (!rede) return null;
-          const bloqueada = !r.ativo && cheio;
+          const semLogo = !temEstilo(bloco, r.chave, estiloAtual);
+          const bloqueada = (!r.ativo && cheio) || semLogo;
+          const logo = rede.logos_url ? (rede.logos_url[estiloAtual] ?? null) : rede.logo_url;
           return (
             <li
               key={r.chave}
@@ -75,22 +125,30 @@ export function PapelariaRedesPicker({
                 aria-label={`Incluir ${rede.nome}`}
                 checked={r.ativo}
                 disabled={bloqueada}
-                title={bloqueada ? `Este modelo aceita até ${bloco.max} redes` : undefined}
+                title={
+                  semLogo
+                    ? "Sem logo neste estilo"
+                    : bloqueada
+                      ? `Este modelo aceita até ${bloco.max} redes`
+                      : undefined
+                }
                 onChange={(e) => set(r.chave, { ativo: e.target.checked })}
               />
-              {rede.logo_url ? (
-                <img src={apiUrl(rede.logo_url.replace(/^\/api/, ""))} alt="" className="size-5 shrink-0 object-contain" />
+              {logo ? (
+                <img src={apiUrl(logo.replace(/^\/api/, ""))} alt="" className="size-5 shrink-0 object-contain" />
               ) : (
                 <span className="size-5 shrink-0 rounded bg-slate-100" aria-hidden />
               )}
-              <span className="w-20 shrink-0 truncate text-[11px] font-medium text-neutral-700">{rede.nome}</span>
+              <span className={cn("w-20 shrink-0 truncate text-[11px] font-medium", semLogo ? "text-neutral-400" : "text-neutral-700")}>
+                {rede.nome}
+              </span>
               <input
                 type="text"
                 aria-label={`Perfil no ${rede.nome}`}
                 className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1 text-xs disabled:bg-slate-50 disabled:text-neutral-400"
-                placeholder={rede.exemplo || "@usuario"}
+                placeholder={semLogo ? "Sem logo neste estilo" : rede.exemplo || "@usuario"}
                 value={r.valor}
-                disabled={!r.ativo}
+                disabled={!r.ativo || semLogo}
                 maxLength={200}
                 onChange={(e) => set(r.chave, { valor: e.target.value })}
               />

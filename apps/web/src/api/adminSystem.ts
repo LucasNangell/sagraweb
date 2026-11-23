@@ -1296,23 +1296,49 @@ export async function savePapelariaVariaveis(
 
 // --- Redes sociais (catálogo universal) ---
 
+export type PapelariaRedeEstilo = "quadrado_policromia" | "quadrado_pb" | "policromia" | "pb";
+
+export interface PapelariaRedeEstiloInfo {
+  id: PapelariaRedeEstilo;
+  rotulo: string;
+}
+
 export interface PapelariaRedeSocial {
   chave: string;
   nome: string;
   exemplo: string;
   logo: string | null;
-  /** PNG do logo para exibição (relativo à API). */
+  /** Arquivo de logo por estilo (nem toda rede tem os 4). */
+  logos: Partial<Record<PapelariaRedeEstilo, string>>;
+  /** PNG do primeiro logo disponível (relativo à API). */
   logo_url: string | null;
+  /** PNG de cada estilo (relativo à API). */
+  logos_url: Partial<Record<PapelariaRedeEstilo, string>>;
   ativo: boolean;
 }
 
-export async function fetchPapelariaRedes(): Promise<{ redes: PapelariaRedeSocial[] }> {
+export interface PapelariaRedesResposta {
+  redes: PapelariaRedeSocial[];
+  estilos: PapelariaRedeEstiloInfo[];
+}
+
+export async function fetchPapelariaRedes(): Promise<PapelariaRedesResposta> {
   return apiFetch("/papelaria/admin/redes");
+}
+
+/** Remove o logo de um estilo da rede. */
+export async function removerPapelariaRedeLogo(
+  chave: string,
+  estilo: PapelariaRedeEstilo,
+): Promise<PapelariaRedesResposta> {
+  return apiFetch(`/papelaria/admin/redes/${encodeURIComponent(chave)}/logo?estilo=${estilo}`, {
+    method: "DELETE",
+  });
 }
 
 export async function savePapelariaRedes(
   redes: Array<Pick<PapelariaRedeSocial, "chave" | "nome" | "exemplo" | "ativo">>,
-): Promise<{ redes: PapelariaRedeSocial[] }> {
+): Promise<PapelariaRedesResposta> {
   return apiFetch("/papelaria/admin/redes", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1323,10 +1349,11 @@ export async function savePapelariaRedes(
 export async function uploadPapelariaRedeLogo(
   chave: string,
   file: File,
-): Promise<{ redes: PapelariaRedeSocial[] }> {
+  estilo: PapelariaRedeEstilo = "quadrado_policromia",
+): Promise<PapelariaRedesResposta> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(apiUrl(`/papelaria/admin/redes/${encodeURIComponent(chave)}/logo`), {
+  const res = await fetch(apiUrl(`/papelaria/admin/redes/${encodeURIComponent(chave)}/logo?estilo=${estilo}`), {
     method: "POST",
     body: form,
     credentials: "include",
@@ -1342,5 +1369,5 @@ export async function uploadPapelariaRedeLogo(
     }
     throw new Error(message);
   }
-  return res.json() as Promise<{ redes: PapelariaRedeSocial[] }>;
+  return res.json() as Promise<PapelariaRedesResposta>;
 }

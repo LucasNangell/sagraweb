@@ -852,16 +852,24 @@ def _redes_bloco_publico(modelo_id: int) -> Optional[dict[str, Any]]:
         bloco = pdf_svc.carregar_config(modelo_id).get("redes")
         if not isinstance(bloco, dict) or not bloco.get("ativo"):
             return None
+        redes = redes_svc.redes_do_bloco(bloco)
+        usados = {e for r in redes for e in (r.get("logos") or {})}
         return {
             "max": int(bloco.get("max") or 6),
+            "estilo_padrao": bloco.get("estilo_padrao") or redes_svc.ESTILO_PADRAO,
+            # Estilos com ao menos um logo entre as redes do bloco.
+            "estilos": [e for e in redes_svc.ESTILOS if e["id"] in usados],
             "redes": [
                 {
                     "chave": r["chave"],
                     "nome": r["nome"],
                     "exemplo": r["exemplo"],
                     "logo_url": f"/papelaria/redes/{r['chave']}/logo.png" if r.get("logo") else None,
+                    "logos_url": {
+                        e: f"/papelaria/redes/{r['chave']}/logo.png?estilo={e}" for e in (r.get("logos") or {})
+                    },
                 }
-                for r in redes_svc.redes_do_bloco(bloco)
+                for r in redes
             ],
         }
     except Exception as exc:

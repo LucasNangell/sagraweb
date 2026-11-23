@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { ArrowDown, ArrowUp, ImageUp, Loader2, Plus, RotateCcw, Save, Share2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ImageUp, Loader2, Plus, RotateCcw, Save, Share2, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
   fetchPapelariaRedes,
+  removerPapelariaRedeLogo,
   savePapelariaRedes,
   uploadPapelariaRedeLogo,
+  type PapelariaRedeEstilo,
+  type PapelariaRedeEstiloInfo,
   type PapelariaRedeSocial,
+  type PapelariaRedesResposta,
 } from "@/api/adminSystem";
 import { apiUrl } from "@/api/client";
 import { toast } from "@/components/ui/toastStore";
@@ -17,15 +21,29 @@ import { InlineMessage, StatusPill } from "./PapelariaWorkspaceUi";
 const QUERY_KEY = ["admin", "papelaria-redes"] as const;
 const CHAVE_RE = /^[a-z][a-z0-9_]{0,39}$/; // «x» (X/Twitter) tem 1 letra
 
+const ESTILOS_PADRAO: PapelariaRedeEstiloInfo[] = [
+  { id: "quadrado_policromia", rotulo: "Quadrado policromia" },
+  { id: "quadrado_pb", rotulo: "Quadrado PB" },
+  { id: "policromia", rotulo: "Policromia" },
+  { id: "pb", rotulo: "PB" },
+];
+
 type Linha = Pick<PapelariaRedeSocial, "chave" | "nome" | "exemplo" | "ativo"> & {
   _id: string;
   _nova?: boolean;
-  logo_url: string | null;
+  logos_url: PapelariaRedeSocial["logos_url"];
 };
 
 let seq = 0;
 const paraLinhas = (lista: PapelariaRedeSocial[]): Linha[] =>
-  lista.map((r) => ({ _id: `r${++seq}`, chave: r.chave, nome: r.nome, exemplo: r.exemplo, ativo: r.ativo, logo_url: r.logo_url }));
+  lista.map((r) => ({
+    _id: `r${++seq}`,
+    chave: r.chave,
+    nome: r.nome,
+    exemplo: r.exemplo,
+    ativo: r.ativo,
+    logos_url: r.logos_url ?? {},
+  }));
 const semExtras = (l: Linha) => ({ chave: l.chave, nome: l.nome, exemplo: l.exemplo, ativo: l.ativo });
 
 function slug(texto: string): string {
@@ -50,9 +68,9 @@ export function PapelariaRedesSection() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [base, setBase] = useState("");
   const [erro, setErro] = useState<string | null>(null);
-  const [versaoLogo, setVersaoLogo] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [alvoLogo, setAlvoLogo] = useState<string | null>(null);
+  const [alvoLogo, setAlvoLogo] = useState<{ chave: string; estilo: PapelariaRedeEstilo } | null>(null);
+  const estilos = query.data?.estilos?.length ? query.data.estilos : ESTILOS_PADRAO;
 
   useEffect(() => {
     if (!query.data) return;
@@ -62,7 +80,7 @@ export function PapelariaRedesSection() {
 
   const dirty = Boolean(base) && JSON.stringify(linhas.map(semExtras)) !== base;
 
-  const aplicarResposta = (data: { redes: PapelariaRedeSocial[] }) => {
+  const aplicarResposta = (data: PapelariaRedesResposta) => {
     qc.setQueryData(QUERY_KEY, data);
     void qc.invalidateQueries({ queryKey: ["papelaria"] });
     void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
@@ -79,11 +97,20 @@ export function PapelariaRedesSection() {
   });
 
   const logoMutation = useMutation({
-    mutationFn: (p: { chave: string; file: File }) => uploadPapelariaRedeLogo(p.chave, p.file),
+    mutationFn: (p: { chave: string; estilo: PapelariaRedeEstilo; file: File }) =>
+      uploadPapelariaRedeLogo(p.chave, p.file, p.estilo),
     onSuccess: (data) => {
       aplicarResposta(data);
-      setVersaoLogo((v) => v + 1);
       toast.success("Logo atualizado.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removerLogoMutation = useMutation({
+    mutationFn: (p: { chave: string; estilo: PapelariaRedeEstilo }) => removerPapelariaRedeLogo(p.chave, p.estilo),
+    onSuccess: (data) => {
+      aplicarResposta(data);
+      toast.success("Logo removido.");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -128,7 +155,7 @@ export function PapelariaRedesSection() {
   };
 
   /** Logo de rede ainda não salva: grava a lista antes de enviar o arquivo. */
-  const enviarLogo = async (chave: string, file: File) => {
+  const enviarLogo = async (chave: string, estilo: PapelariaRedeEstilo, file: File) => {
     if (dirty || linhas.some((l) => l._nova)) {
       if (!validar()) return;
       try {
@@ -137,7 +164,7 @@ export function PapelariaRedesSection() {
         return;
       }
     }
-    logoMutation.mutate({ chave, file });
+    logoMutation.mutate({ chave, estilo, file });
   };
 
   return (
@@ -161,7 +188,7 @@ export function PapelariaRedesSection() {
           type="button"
           className="sagra-btn sagra-btn--add sagra-btn--sm"
           onClick={() =>
-            setLinhas((prev) => [...prev, { _id: `r${++seq}`, _nova: true, chave: "", nome: "", exemplo: "@usuario", ativo: true, logo_url: null }])
+            setLinhas((prev) => [...prev, { _id: `r${++seq}`, _nova: true, chave: "", nome: "", exemplo: "@usuario", ativo: true, logos_url: {} }])
           }
         >
           <Plus className="size-3.5" aria-hidden /> Nova rede
@@ -177,7 +204,7 @@ export function PapelariaRedesSection() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file && alvoLogo) void enviarLogo(alvoLogo, file);
+          if (file && alvoLogo) void enviarLogo(alvoLogo.chave, alvoLogo.estilo, file);
         }}
       />
 
@@ -201,29 +228,60 @@ export function PapelariaRedesSection() {
                   <ArrowDown className="size-3.5" aria-hidden />
                 </button>
               </div>
-              <button
-                type="button"
-                className="pw-rede-logo"
-                title={
-                  l.chave
-                    ? "Enviar logo (SVG ou PDF vetorial; PNG também). Rede nova é salva antes."
-                    : "Preencha o nome da rede para enviar o logo"
-                }
-                aria-label={`Enviar logo de ${l.nome || "nova rede"}`}
-                disabled={!l.chave || logoMutation.isPending || saveMutation.isPending}
-                onClick={() => {
-                  setAlvoLogo(l.chave);
-                  inputRef.current?.click();
-                }}
-              >
-                {logoMutation.isPending && alvoLogo === l.chave ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : l.logo_url ? (
-                  <img src={`${apiUrl(l.logo_url.replace(/^\/api/, ""))}?v=${versaoLogo}`} alt="" />
-                ) : (
-                  <ImageUp className="size-4" aria-hidden />
-                )}
-              </button>
+              <div className="pw-rede-logos" role="group" aria-label={`Logos de ${l.nome || "nova rede"}`}>
+                {estilos.map((e) => {
+                  const url = l.logos_url[e.id];
+                  const enviando =
+                    (logoMutation.isPending || removerLogoMutation.isPending) &&
+                    alvoLogo?.chave === l.chave &&
+                    alvoLogo?.estilo === e.id;
+                  return (
+                    <div key={e.id} className={cn("pw-rede-logo-slot", url && "has-logo")}>
+                      <button
+                        type="button"
+                        className="pw-rede-logo"
+                        title={
+                          l.chave
+                            ? `${e.rotulo}: ${url ? "trocar" : "enviar"} logo (SVG ou PDF vetorial; PNG também)`
+                            : "Preencha o nome da rede para enviar o logo"
+                        }
+                        aria-label={`${url ? "Trocar" : "Enviar"} logo ${e.rotulo} de ${l.nome || "nova rede"}`}
+                        disabled={!l.chave || logoMutation.isPending || saveMutation.isPending}
+                        onClick={() => {
+                          setAlvoLogo({ chave: l.chave, estilo: e.id });
+                          inputRef.current?.click();
+                        }}
+                      >
+                        {enviando ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
+                        ) : url ? (
+                          <img src={apiUrl(url.replace(/^\/api/, ""))} alt="" />
+                        ) : (
+                          <ImageUp className="size-3.5" aria-hidden />
+                        )}
+                      </button>
+                      {url ? (
+                        <button
+                          type="button"
+                          className="pw-rede-logo-remover"
+                          aria-label={`Remover logo ${e.rotulo} de ${l.nome}`}
+                          title={`Remover logo ${e.rotulo}`}
+                          disabled={removerLogoMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Remover o logo «${e.rotulo}» de ${l.nome}?`)) {
+                              setAlvoLogo({ chave: l.chave, estilo: e.id });
+                              removerLogoMutation.mutate({ chave: l.chave, estilo: e.id });
+                            }
+                          }}
+                        >
+                          <X className="size-2.5" aria-hidden />
+                        </button>
+                      ) : null}
+                      <span className="pw-rede-logo-rotulo">{e.rotulo}</span>
+                    </div>
+                  );
+                })}
+              </div>
               <div className="pw-var-row__cell" data-label="Nome">
                 <input
                   className="pw-input pw-input--sm"
@@ -285,7 +343,7 @@ export function PapelariaRedesSection() {
               <RotateCcw className="size-3.5" aria-hidden /> Descartar
             </button>
           ) : (
-            <StatusPill tone="muted">Logo vetorial (SVG/PDF) mantém a nitidez na impressão</StatusPill>
+            <StatusPill tone="muted">Até 4 logos por rede (um por estilo) · SVG/PDF mantém a nitidez</StatusPill>
           )}
           <button type="button" className="sagra-btn sagra-btn--save sagra-btn--sm" disabled={!dirty || saveMutation.isPending} onClick={salvar}>
             {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Save className="size-3.5" aria-hidden />}

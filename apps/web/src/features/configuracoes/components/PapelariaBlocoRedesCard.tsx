@@ -240,15 +240,40 @@ export function PapelariaBlocoRedesCard({
               <input type="number" step={1} min={1} max={20} className="pw-input pw-input--sm" value={draft.max} onChange={(e) => numero("max", e.target.value)} />
             </Field>
           </div>
+          <Field
+            label="Estilo de logo padrão"
+            hint="Já vem selecionado na página Papelaria; o usuário pode trocar. Todas as redes da prova seguem o mesmo estilo."
+          >
+            <SegmentedControl
+              ariaLabel="Estilo de logo padrão"
+              size="sm"
+              value={draft.estilo_padrao ?? "quadrado_policromia"}
+              onChange={(v) => set({ estilo_padrao: v })}
+              options={[
+                { id: "quadrado_policromia", label: "Quadrado cor" },
+                { id: "quadrado_pb", label: "Quadrado PB" },
+                { id: "policromia", label: "Policromia" },
+                { id: "pb", label: "PB" },
+              ]}
+            />
+          </Field>
           <Field label="Redes que o usuário pode incluir neste modelo" hint="Cadastro de redes e logos em Configurações → Redes sociais.">
             <div className="pw-redes-permitidas">
-              {catalogo.map((r) => (
-                <label key={r.chave} className={cn("pw-rede-chip", permitida(r.chave) && "is-on")}>
-                  <input type="checkbox" className="sr-only" checked={permitida(r.chave)} onChange={() => alternarRede(r.chave)} />
-                  {r.logo_url ? <img src={apiUrl(r.logo_url.replace(/^\/api/, ""))} alt="" /> : null}
-                  {r.nome}
-                </label>
-              ))}
+              {catalogo.map((r) => {
+                const estilo = draft.estilo_padrao ?? "quadrado_policromia";
+                const url = r.logos_url?.[estilo];
+                return (
+                  <label
+                    key={r.chave}
+                    className={cn("pw-rede-chip", permitida(r.chave) && "is-on")}
+                    title={url ? undefined : "Sem logo no estilo padrão — o usuário só a vê em outro estilo"}
+                  >
+                    <input type="checkbox" className="sr-only" checked={permitida(r.chave)} onChange={() => alternarRede(r.chave)} />
+                    {url ? <img src={apiUrl(url.replace(/^\/api/, ""))} alt="" /> : <span className="size-4 rounded bg-slate-100" aria-hidden />}
+                    {r.nome}
+                  </label>
+                );
+              })}
             </div>
           </Field>
           <p className="text-[11px] text-slate-500">

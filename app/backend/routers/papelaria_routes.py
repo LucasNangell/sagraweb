@@ -510,18 +510,33 @@ class PapelariaBlocoRedesPayload(BaseModel):
 
 
 def _redes_publicas() -> list[Dict[str, Any]]:
+    import time as _time
+
     from services import papelaria_redes_service as redes_svc
 
+    v = int(_time.time())  # quebra o cache do navegador após trocar um logo
     return [
-        {**r, "logo_url": f"/papelaria/redes/{r['chave']}/logo.png" if r.get("logo") else None}
+        {
+            **r,
+            "logo_url": f"/papelaria/redes/{r['chave']}/logo.png?v={v}" if r.get("logo") else None,
+            "logos_url": {
+                e: f"/papelaria/redes/{r['chave']}/logo.png?estilo={e}&v={v}" for e in (r.get("logos") or {})
+            },
+        }
         for r in redes_svc.listar()
     ]
 
 
+def _redes_resposta() -> Dict[str, Any]:
+    from services import papelaria_redes_service as redes_svc
+
+    return {"redes": _redes_publicas(), "estilos": redes_svc.ESTILOS}
+
+
 @router.get("/admin/redes")
 def listar_redes_sociais(_session: SessionData = Depends(_require_import_access)):
-    """Catálogo universal de redes sociais (nome, exemplo, logo, ativo)."""
-    return {"redes": _redes_publicas()}
+    """Catálogo universal de redes sociais (nome, exemplo, logos por estilo, ativo)."""
+    return _redes_resposta()
 
 
 @router.put("/admin/redes")
@@ -535,35 +550,54 @@ def salvar_redes_sociais(
         redes_svc.salvar_lista(payload.redes)
     except redes_svc.RedesError as e:
         raise HTTPException(400, str(e))
-    return {"redes": _redes_publicas()}
+    return _redes_resposta()
 
 
 @router.post("/admin/redes/{chave}/logo")
 async def enviar_logo_rede(
     chave: str,
     file: UploadFile = File(...),
+    estilo: str = Query("quadrado_policromia"),
     _session: SessionData = Depends(_require_import_access),
 ):
-    """Logo da rede: SVG ou PDF (vetorial, recomendado) ou PNG."""
+    """Logo da rede num estilo: SVG ou PDF (vetorial, recomendado) ou PNG."""
     from services import papelaria_redes_service as redes_svc
 
     try:
-        redes_svc.salvar_logo(chave, file.filename or "", await file.read())
+        redes_svc.salvar_logo(chave, file.filename or "", await file.read(), estilo=estilo)
     except LookupError as e:
         raise HTTPException(404, str(e))
     except redes_svc.RedesError as e:
         raise HTTPException(400, str(e))
-    return {"redes": _redes_publicas()}
+    return _redes_resposta()
+
+
+@router.delete("/admin/redes/{chave}/logo")
+def remover_logo_rede(
+    chave: str,
+    estilo: str = Query(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    from services import papelaria_redes_service as redes_svc
+
+    try:
+        redes_svc.remover_logo(chave, estilo)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except redes_svc.RedesError as e:
+        raise HTTPException(400, str(e))
+    return _redes_resposta()
 
 
 @router.get("/redes/{chave}/logo.png")
 def logo_rede_png(
     chave: str,
+    estilo: Optional[str] = Query(None),
     _session: SessionData = Depends(_require_papelaria_access),
 ):
     from services import papelaria_redes_service as redes_svc
 
-    png = redes_svc.logo_png(chave)
+    png = redes_svc.logo_png(chave, estilo)
     if not png:
         raise HTTPException(404, "Logo não encontrado.")
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
@@ -1143,7 +1177,7 @@ def previa_pdf_ao_vivo(
     dados = {
         k: v
         for k, v in (payload.dados or {}).items()
-        if not str(k).startswith("__") or k == "__redes"
+        if not str(k).startswith("__") or k in ("__redes", "__redes_estilo")
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None

@@ -43,9 +43,24 @@ def catalogo(tmp_path, monkeypatch):
 
     monkeypatch.setattr(svc, "PASTA_LOGOS", tmp_path)
     redes = [
-        {"chave": "instagram", "nome": "Instagram", "exemplo": "@usuario", "logo": _logo_pdf(tmp_path, "instagram", (1, 0, 0.5)), "ativo": True},
-        {"chave": "whatsapp", "nome": "WhatsApp", "exemplo": "+55 61 99999-9999", "logo": _logo_pdf(tmp_path, "whatsapp", (0, 0.7, 0.3)), "ativo": True},
-        {"chave": "kwai", "nome": "Kwai", "exemplo": "@usuario", "logo": None, "ativo": False},
+        {
+            "chave": "instagram",
+            "nome": "Instagram",
+            "exemplo": "@usuario",
+            "logos": {
+                "quadrado_policromia": _logo_pdf(tmp_path, "instagram__quadrado_policromia", (1, 0, 0.5)),
+                "pb": _logo_pdf(tmp_path, "instagram__pb", (0.1, 0.1, 0.1)),
+            },
+            "ativo": True,
+        },
+        {
+            "chave": "whatsapp",
+            "nome": "WhatsApp",
+            "exemplo": "+55 61 99999-9999",
+            "logos": {"quadrado_policromia": _logo_pdf(tmp_path, "whatsapp__quadrado_policromia", (0, 0.7, 0.3))},
+            "ativo": True,
+        },
+        {"chave": "kwai", "nome": "Kwai", "exemplo": "@usuario", "logos": {}, "ativo": False},
     ]
     monkeypatch.setattr(svc, "listar", lambda: [dict(r) for r in redes])
     monkeypatch.setattr(svc, "por_chave", lambda: {r["chave"]: dict(r) for r in redes})
@@ -185,15 +200,117 @@ def test_salvar_logo_svg_vira_pdf_vetorial(tmp_path, monkeypatch):
     from services import papelaria_redes_service as svc
 
     monkeypatch.setattr(svc, "PASTA_LOGOS", tmp_path)
-    monkeypatch.setattr(svc, "por_chave", lambda: {"youtube": {"chave": "youtube", "nome": "YouTube", "logo": "youtube.pdf"}})
+    monkeypatch.setattr(svc, "por_chave", lambda: {"youtube": {"chave": "youtube", "nome": "YouTube", "logos": {}}})
     monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: [])
     monkeypatch.setattr(svc, "invalidar_cache", lambda: None)
     svg = (
         b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
         b'<rect width="24" height="24" rx="5" fill="#f00"/><path d="M9 7l8 5-8 5z" fill="#fff"/></svg>'
     )
-    svc.salvar_logo("youtube", "YouTube.svg", svg)
-    salvo = tmp_path / "youtube.pdf"
+    svc.salvar_logo("youtube", "YouTube.svg", svg, estilo="policromia")
+    salvo = tmp_path / "youtube__policromia.pdf"
     assert salvo.is_file()
     with fitz.open(salvo) as d:
         assert d.page_count == 1 and d[0].get_drawings()
+
+
+
+def _cores_preenchidas(pdf: bytes) -> list[tuple]:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        return [d["fill"] for d in doc[0].get_drawings() if d.get("fill")]
+    finally:
+        doc.close()
+
+
+def test_estilo_do_logo_e_comum_a_todas_as_redes(catalogo):
+    from services import papelaria_redes_service as svc
+
+    pdf = _pdf_verso_redes()
+    bloco = svc.detectar_bloco(pdf, 1, ["@exemplo.tiktok", "@exemplo.x", "exemplo.com/face"])
+    sel = [{"chave": "instagram", "valor": "@ana"}, {"chave": "whatsapp", "valor": "61 9"}]
+    # Quadrado policromia (padrão): os dois logos coloridos.
+    cores = _cores_preenchidas(svc.aplicar_bloco(pdf, bloco, sel, []))
+    assert (1.0, 0.0, 0.5) in [tuple(round(c, 1) for c in x) for x in cores]
+    # PB: Instagram em PB; WhatsApp não tem PB → usa outro estilo e avisa.
+    avisos: list[str] = []
+    cores = [tuple(round(c, 1) for c in x) for x in _cores_preenchidas(svc.aplicar_bloco(pdf, bloco, sel, avisos, estilo="pb"))]
+    assert (0.1, 0.1, 0.1) in cores and (1.0, 0.0, 0.5) not in cores
+    assert avisos and "WhatsApp" in avisos[0]
+    # Estilo padrão do bloco vale quando o usuário não escolhe.
+    cores = [tuple(round(c, 1) for c in x) for x in _cores_preenchidas(svc.aplicar_bloco(pdf, {**bloco, "estilo_padrao": "pb"}, sel[:1], []))]
+    assert (0.1, 0.1, 0.1) in cores
+
+
+def test_normalizar_estilo_e_sanitizar():
+    from services import papelaria_jobs_service as jobs
+    from services import papelaria_redes_service as svc
+
+    assert svc.normalizar_estilo_selecao("quadrado_pb") == "quadrado_pb"
+    assert svc.normalizar_estilo_selecao("") is None
+    with pytest.raises(svc.RedesError):
+        svc.normalizar_estilo_selecao("neon")
+    assert jobs._sanitize_dados({"__redes_estilo": "pb"})["__redes_estilo"] == "pb"
+    with pytest.raises(ValueError):
+        jobs._sanitize_dados({"__redes_estilo": "neon"})
+
+
+class _BancoRedes:
+    """tabPapelariaRedesSociais em memória (só o que a importação usa)."""
+
+    def __init__(self, linhas=None):
+        self.linhas = {l["Chave"]: dict(l) for l in (linhas or [])}
+
+    def __call__(self, sql, params=None):
+        q = " ".join(sql.split())
+        params = params or {}
+        if q.startswith("SELECT Chave, LogoArquivo, LogosJson, Ordem"):
+            return [dict(l) for l in self.linhas.values()]
+        if q.startswith("INSERT INTO tabPapelariaRedesSociais (Chave, Nome, Exemplo, LogosJson, Ativo, Ordem)"):
+            self.linhas[params["c"]] = {"Chave": params["c"], "Nome": params["n"], "LogoArquivo": None, "LogosJson": "{}", "Ordem": params["o"]}
+            return []
+        if q.startswith("UPDATE tabPapelariaRedesSociais SET LogosJson"):
+            self.linhas[params["c"]].update({"LogosJson": params["j"], "LogoArquivo": None})
+            return []
+        raise AssertionError(q)
+
+
+def test_importar_logos_dos_assets(tmp_path, monkeypatch):
+    from services import papelaria_redes_service as svc
+
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for nome in ["youtube__pb.pdf", "youtube__quadrado_policromia.pdf", "linkedin__quadrado_pb.pdf", "lixo.pdf"]:
+        (assets / nome).write_bytes(b"%PDF-1.4")
+    banco = _BancoRedes([{"Chave": "youtube", "Nome": "YouTube", "LogoArquivo": "meu_logo.pdf", "LogosJson": None, "Ordem": 10}])
+    monkeypatch.setattr(svc, "ASSETS_LOGOS", assets)
+    monkeypatch.setattr(svc, "PASTA_LOGOS", tmp_path / "logos")
+    monkeypatch.setattr(svc.db, "execute_query", banco)
+
+    r = svc.importar_logos_dos_assets()
+    assert r == {"redes": 1, "logos": 2}  # LinkedIn criado; YouTube ganha PB
+    yt = json.loads(banco.linhas["youtube"]["LogosJson"])
+    assert yt["quadrado_policromia"] == "meu_logo.pdf"  # logo enviado pelo admin fica
+    assert yt["pb"] == "youtube__pb.pdf"
+    assert banco.linhas["linkedin"]["Nome"] == "LinkedIn"
+    assert (tmp_path / "logos" / "linkedin__quadrado_pb.pdf").is_file()
+
+    # Rede excluída pelo admin não volta na próxima inicialização.
+    del banco.linhas["linkedin"]
+    assert svc.importar_logos_dos_assets() == {"redes": 0, "logos": 0}
+    assert "linkedin" not in banco.linhas
+
+
+def test_logos_padrao_do_repositorio():
+    """Os 47 logos extraídos do logos.pdf seguem o padrão <rede>__<estilo>.pdf."""
+    from services import papelaria_redes_service as svc
+
+    arquivos = sorted(p.name for p in svc.ASSETS_LOGOS.glob("*.pdf"))
+    assert len(arquivos) == 47
+    assert all(svc._ARQUIVO_ASSET_RE.match(a) for a in arquivos)
+    redes = {a.split("__")[0] for a in arquivos}
+    assert redes == {
+        "kwai", "linktree", "tiktok", "telegram", "instagram", "facebook", "whatsapp", "youtube",
+        "snapchat", "flickr", "x", "threads", "linkedin", "twitter",
+    }
+    assert all(r in svc._PADRAO for r in redes)

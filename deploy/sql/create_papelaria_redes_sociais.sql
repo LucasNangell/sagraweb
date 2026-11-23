@@ -11,3 +11,10 @@ CREATE TABLE IF NOT EXISTS tabPapelariaRedesSociais (
     Ordem INT NOT NULL DEFAULT 0,
     AtualizadoEm TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 0.90.0: até 4 logos por rede, um por estilo (quadrado_policromia, quadrado_pb,
+-- policromia, pb): {"<estilo>": "<arquivo>"}. LogoArquivo antigo vale como
+-- quadrado_policromia. Os logos padrão vêm de app/backend/assets/papelaria_redes
+-- (<rede>__<estilo>.pdf) e são importados uma vez, sem sobrescrever os enviados.
+ALTER TABLE tabPapelariaRedesSociais
+    ADD COLUMN IF NOT EXISTS LogosJson JSON NULL AFTER LogoArquivo;

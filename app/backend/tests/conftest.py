@@ -126,3 +126,19 @@ def storage_root(tmp_path, monkeypatch):
         lambda: [str(root.resolve())],
     )
     return root
+
+
+@pytest.fixture(autouse=True)
+def _variaveis_papelaria_sem_banco(monkeypatch, request):
+    """
+    O cadastro de variáveis da Papelaria (tabPapelariaVariaveis) vem do banco;
+    nos testes ele fica vazio (comportamento padrão) para não depender da máquina.
+    Testes do cadastro usam o marcador ``variaveis_reais``.
+    """
+    if request.node.get_closest_marker("variaveis_reais"):
+        return
+    try:
+        from services import papelaria_variaveis_service as svc
+    except Exception:
+        return
+    monkeypatch.setattr(svc, "mapa", lambda: {})

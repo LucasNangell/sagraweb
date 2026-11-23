@@ -1,5 +1,6 @@
 import { cn } from "@sagra/ui";
 import {
+  Braces,
   Briefcase,
   Calculator,
   ClipboardList,
@@ -26,6 +27,7 @@ import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
 import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
+import { PapelariaVariaveisSection } from "./PapelariaVariaveisSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
 import { SetorPainelDefaultsPanel } from "./SetorPainelDefaultsSection";
@@ -39,6 +41,7 @@ type ConfigTab =
   | "gerencia"
   | "cotas_graf"
   | "papelaria"
+  | "variaveis"
   | "credenciais_depol"
   | "caixas"
   | "sistema"
@@ -85,6 +88,13 @@ const TAB_META: Record<
     description:
       "Produtos, frentes e versos, mockup 3D, textos e prévia (Prova PDF), imposição e fila do worker.",
     icon: <Printer className="size-3.5" aria-hidden />,
+    hideIntro: true,
+  },
+  variaveis: {
+    label: "Variáveis",
+    description:
+      "Variáveis dos textos do PDF dos modelos: rótulo do campo na página Papelaria e o que o sistema preenche automaticamente.",
+    icon: <Braces className="size-3.5" aria-hidden />,
     hideIntro: true,
   },
   credenciais_depol: {
@@ -233,6 +243,15 @@ export function ConfiguracoesPage() {
           >
             <PapelariaProdutosAdminSection />
             <PapelariaWorkerQueueSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-variaveis"
+            aria-labelledby="config-tab-variaveis"
+            hidden={activeTab !== "variaveis"}
+            className="configuracoes-tab-panel"
+          >
+            {activeTab === "variaveis" ? <PapelariaVariaveisSection /> : null}
           </div>
           <div
             role="tabpanel"

@@ -819,11 +819,21 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
     }
     if include_campos:
         out["campos"] = campos if isinstance(campos, dict) else {}
-        out["campos_formulario"] = _build_campos_formulario_com_preview(
-            variaveis,
-            preview_json,
-            campos if isinstance(campos, dict) else None,
-        )
+        from services.papelaria_variaveis_service import variaveis_do_pdf_do_modelo
+
+        variaveis_pdf = variaveis_do_pdf_do_modelo(int(row["ID"]))
+        if variaveis_pdf is not None:
+            # Prova PDF: os campos do formulário são as variáveis dos textos ligados no PDF.
+            out["variaveis"] = variaveis_pdf
+            out["campos_formulario"] = build_campos_formulario(
+                variaveis_pdf, _infer_campo_labels(None, variaveis_pdf, preview_json)
+            )
+        else:
+            out["campos_formulario"] = _build_campos_formulario_com_preview(
+                variaveis,
+                preview_json,
+                campos if isinstance(campos, dict) else None,
+            )
     # Mockup 3D vale por produto (só frente / frente e verso), não por modelo.
     from services.papelaria_produto_mockup_service import aplicar_no_modelo
 
@@ -1339,22 +1349,42 @@ def build_campos_formulario(
     variaveis: list[str],
     labels: Optional[dict[str, str]] = None,
 ) -> list[dict[str, Any]]:
-    ordenadas = _order_variaveis_list(variaveis)
+    from services.papelaria_variaveis_service import mapa as mapa_variaveis
+
+    cadastro = mapa_variaveis()
     label_map = labels or {}
+    if cadastro:
+        # Ordem do cadastro universal; variáveis fora dele ficam no fim.
+        ordem = {k: i for i, k in enumerate(cadastro)}
+        ordenadas = sorted(
+            dict.fromkeys(v for v in variaveis if v not in VARIAVEIS_DERIVADAS),
+            key=lambda v: (ordem.get(v, 10_000), v),
+        )
+    else:
+        ordenadas = _order_variaveis_list(variaveis)
 
     fields: list[dict[str, Any]] = []
     for var in ordenadas:
         if var in VARIAVEIS_DERIVADAS:
             continue
-        field_type = "email" if var == "email" else "text"
-        if var in ("contato_assessor", "funcao_assessor"):
-            field_type = "textarea"
+        cfg = cadastro.get(var)
+        if cfg:
+            # Cadastro universal (Configurações → Variáveis) manda no rótulo e no tipo.
+            field_type = cfg["tipo"]
+            label = cfg["rotulo"]
+            required = bool(cfg["obrigatorio"])
+        else:
+            field_type = "email" if var == "email" else "text"
+            if var in ("contato_assessor", "funcao_assessor"):
+                field_type = "textarea"
+            label = label_map.get(var) or ROTULOS_VARIAVEIS.get(var, var.replace("_", " "))
+            required = var in ("nome_deputado", "genero", "partido", "uf", "gabinete")
         fields.append(
             {
                 "key": var,
-                "label": label_map.get(var) or ROTULOS_VARIAVEIS.get(var, var.replace("_", " ")),
+                "label": label,
                 "type": field_type,
-                "required": var in ("nome_deputado", "genero", "partido", "uf", "gabinete"),
+                "required": required,
                 "rows": 3 if field_type == "textarea" else None,
             }
         )
@@ -1721,6 +1751,15 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         )
 
     prefill = build_prefill_corel(ano, nro, row=row)
+    # Variáveis universais: cada uma recebe o valor da fonte configurada.
+    from services import papelaria_variaveis_service as variaveis_svc
+
+    fontes_os: dict[str, str] = {}
+    try:
+        fontes_os = variaveis_svc.calcular_fontes(ano=ano, nro=nro, row=row, dados=prefill)
+        prefill = variaveis_svc.aplicar_no_prefill(prefill, fontes_os)
+    except Exception as exc:
+        logger.warning("Preenchimento por variáveis falhou (%s/%s): %s", nro, ano, exc)
     campos_produto, produto_valores = _campos_produto_da_ultima_prova(ano, nro)
     if produto_valores:
         prefill = {**prefill, **produto_valores}
@@ -1857,4 +1896,8 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "cliente_alteracao": cliente_alteracao,
         "prova_modo": get_modo(),
         "prova_pdf_modelos": _prova_pdf_modelos(modelos),
+        # Variável → fonte (o front reaplica após enriquecer com a Câmara).
+        "variaveis_fonte": {
+            v["chave"]: v["fonte"] for v in variaveis_svc.mapa().values() if v.get("fonte")
+        },
     }

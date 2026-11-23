@@ -1250,3 +1250,46 @@ export async function createPapelariaModeloFromPdf(payload: {
   }
   return (await res.json()) as PapelariaAdminModelRecord;
 }
+
+// --- Variáveis universais da Papelaria ---
+
+export type PapelariaVariavelTipo = "text" | "textarea" | "email";
+
+export interface PapelariaVariavel {
+  chave: string;
+  rotulo: string;
+  /** Fonte de preenchimento automático; null = informado pelo usuário. */
+  fonte: string | null;
+  tipo: PapelariaVariavelTipo;
+  obrigatorio: boolean;
+}
+
+export interface PapelariaVariavelFonte {
+  id: string;
+  rotulo: string;
+  grupo: string;
+  exemplo: string;
+}
+
+export interface PapelariaVariaveisCadastro {
+  variaveis: PapelariaVariavel[];
+  fontes: PapelariaVariavelFonte[];
+  /** Variáveis automáticas (concordância a partir de {genero}). */
+  reservadas: string[];
+  /** Quantos modelos usam cada variável nos textos do PDF. */
+  uso: Record<string, number>;
+}
+
+export async function fetchPapelariaVariaveis(): Promise<PapelariaVariaveisCadastro> {
+  return apiFetch<PapelariaVariaveisCadastro>("/papelaria/admin/variaveis");
+}
+
+export async function savePapelariaVariaveis(
+  variaveis: PapelariaVariavel[],
+): Promise<PapelariaVariaveisCadastro> {
+  return apiFetch<PapelariaVariaveisCadastro>("/papelaria/admin/variaveis", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ variaveis }),
+  });
+}

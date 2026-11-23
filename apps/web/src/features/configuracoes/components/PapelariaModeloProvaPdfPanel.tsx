@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { fetchPapelariaVariaveis } from "@/api/adminSystem";
 import { fetchPapelariaCorelModelo } from "@/api/papelaria";
 import {
   deleteProvaPdfModelo,
@@ -47,22 +48,6 @@ const ALINHAMENTOS: Array<{ id: ProvaPdfAlinhamento; label: string }> = [
   { id: "centro", label: "Centro" },
   { id: "direita", label: "Direita" },
 ];
-/** Variáveis padrão do formulário da Papelaria (mesma ordem do backend). */
-const VARIAVEIS_PADRAO: Array<{ key: string; label: string }> = [
-  { key: "nome_deputado", label: "Nome do deputado/deputada" },
-  { key: "genero", label: "Gênero/Cargo" },
-  { key: "genero_curto", label: "Deputado/Deputada (derivado do gênero)" },
-  { key: "artigo", label: "do/da (derivado do gênero)" },
-  { key: "partido", label: "Partido" },
-  { key: "uf", label: "UF" },
-  { key: "anexo", label: "Anexo" },
-  { key: "gabinete", label: "Gabinete" },
-  { key: "email", label: "E-mail" },
-  { key: "nome_assessor", label: "Nome do assessor/assessora" },
-  { key: "contato_assessor", label: "Contato do assessor/assessora" },
-  { key: "funcao_assessor", label: "Função do assessor/assessora" },
-];
-
 const ANCORAS: Array<{ id: ProvaPdfAncora; label: string }> = [
   { id: "auto", label: "Automático" },
   { id: "topo", label: "Cresce p/ baixo" },
@@ -132,12 +117,23 @@ export function PapelariaModeloProvaPdfPanel({
         .filter((c): c is ProvaPdfCampo => Boolean(c?.template?.trim())),
     [orfaosKeys, campos],
   );
+  // Sugestões = cadastro universal (Configurações → Variáveis) + automáticas de gênero.
+  const variaveisQuery = useQuery({
+    queryKey: ["admin", "papelaria-variaveis"],
+    queryFn: fetchPapelariaVariaveis,
+    staleTime: 60_000,
+  });
   const variaveisModelo = useMemo(() => {
-    const doModelo = (detalheQuery.data?.campos_formulario ?? []).map((f) => ({ key: f.key, label: f.label }));
-    // Modelo novo (só PDF) ainda sem campos: sugere as variáveis padrão do sistema.
-    if (doModelo.length) return doModelo;
-    return VARIAVEIS_PADRAO;
-  }, [detalheQuery.data]);
+    const out = (variaveisQuery.data?.variaveis ?? []).map((v) => ({ key: v.chave, label: v.rotulo }));
+    const vistas = new Set(out.map((v) => v.key));
+    for (const f of detalheQuery.data?.campos_formulario ?? []) {
+      if (!vistas.has(f.key)) out.push({ key: f.key, label: `${f.label} (sem cadastro)` });
+    }
+    for (const r of variaveisQuery.data?.reservadas ?? []) {
+      out.push({ key: r, label: r === "artigo" ? "do/da — automático pelo gênero" : "Deputado/Deputada — automático pelo gênero" });
+    }
+    return out;
+  }, [variaveisQuery.data, detalheQuery.data]);
   const camposLigados = useMemo(
     () => Object.values(campos).filter((c) => c.template.trim()),
     [campos],
@@ -595,7 +591,9 @@ export function PapelariaModeloProvaPdfPanel({
 
               {variaveisModelo.length ? (
                 <div className="pw-vars">
-                  <span className="text-[11px] font-medium text-slate-500">Variáveis do modelo (clique para copiar):</span>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    Variáveis (clique para copiar · cadastro em Configurações → Variáveis):
+                  </span>
                   {variaveisModelo.map((v) => (
                     <button
                       key={v.key}

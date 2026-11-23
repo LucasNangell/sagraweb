@@ -166,6 +166,8 @@ export interface PapelariaOsContext {
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
   prova_modo?: "prova_web" | "prova_email" | "prova_pdf";
+  /** Variável → fonte de preenchimento (Configurações → Variáveis). */
+  variaveis_fonte?: Record<string, string>;
   /** Modo Prova PDF: modelos com PDF configurado (prova gerada no servidor, sem Corel). */
   prova_pdf_modelos?: number[];
   /** Campos do produto real da última prova (Corel da pasta), se houver. */

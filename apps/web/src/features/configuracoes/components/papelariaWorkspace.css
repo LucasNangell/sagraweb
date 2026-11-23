@@ -1912,3 +1912,165 @@ textarea.pw-input {
     top: 0;
   }
 }
+
+
+/* ---------------------------------------------- Variáveis (aba própria) */
+
+.pw-vars-section {
+  --pw-blue: var(--secondary-blue, #24344d);
+  --pw-border: #e2e8f0;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: 1px solid var(--pw-border);
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.pw-vars-body {
+  min-width: 0;
+}
+
+.pw-vars-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.pw-vars-toolbar .pw-nav__search {
+  position: relative;
+  max-width: 22rem;
+}
+
+.pw-vars-pendentes {
+  margin: 0 1rem 0.75rem;
+  border: 1px solid #fde68a;
+  border-radius: 0.55rem;
+  background: #fffbeb;
+  padding: 0.55rem 0.75rem;
+}
+
+.pw-var-table {
+  border-top: 1px solid #f1f5f9;
+}
+
+.pw-var-row {
+  display: grid;
+  align-items: start;
+  gap: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0.75rem 1rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pw-var-row.is-new {
+  background: color-mix(in srgb, var(--pw-blue) 4%, white);
+}
+
+.pw-var-row--head {
+  display: none;
+}
+
+.pw-var-row__order {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  grid-row: span 5;
+}
+
+.pw-var-row__order .pw-icon-btn {
+  padding: 0.2rem;
+}
+
+.pw-var-row__order .pw-icon-btn:disabled {
+  opacity: 0.3;
+}
+
+.pw-var-row__cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  grid-column: 2;
+}
+
+.pw-var-row__cell[data-label]::before {
+  content: attr(data-label);
+  color: #94a3b8;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pw-var-row__actions {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.pw-var-chave {
+  width: fit-content;
+  border-radius: 0.35rem;
+  background: #0f172a;
+  padding: 0.2rem 0.45rem;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+}
+
+.pw-var-uso {
+  color: #94a3b8;
+  font-size: 0.625rem;
+}
+
+.pw-icon-btn--danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.pw-vars-savebar {
+  border-width: 1px 0 0;
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .pw-var-row {
+    align-items: center;
+    grid-template-columns:
+      2rem minmax(9rem, 1fr) minmax(10rem, 1.25fr) minmax(12rem, 1.4fr)
+      minmax(7rem, 0.6fr) 5.5rem 2rem;
+  }
+
+  .pw-var-row--head {
+    display: grid;
+    background: #f8fafc;
+    padding-block: 0.45rem;
+    color: #64748b;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .pw-var-row__order {
+    flex-direction: row;
+    grid-row: auto;
+  }
+
+  .pw-var-row__order .pw-icon-btn + .pw-icon-btn {
+    margin-left: -0.3rem;
+  }
+
+  .pw-var-row__cell,
+  .pw-var-row__actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .pw-var-row__cell[data-label]::before {
+    display: none;
+  }
+}

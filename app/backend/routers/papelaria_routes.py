@@ -494,6 +494,43 @@ class PapelariaProdutoMockupPayload(BaseModel):
     mockup_config_json: Optional[Any] = None
 
 
+class PapelariaVariaveisPayload(BaseModel):
+    variaveis: list[Dict[str, Any]] = Field(default_factory=list)
+
+
+@router.get("/admin/variaveis")
+def listar_variaveis_papelaria(
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Cadastro universal de variáveis + catálogo de preenchimento automático + uso."""
+    from services import papelaria_variaveis_service as svc
+
+    dados = svc.publico()
+    try:
+        dados["uso"] = svc.uso_por_variavel()
+    except Exception as e:  # uso é informativo
+        logger.warning("Uso das variáveis indisponível: %s", e)
+        dados["uso"] = {}
+    return dados
+
+
+@router.put("/admin/variaveis")
+def salvar_variaveis_papelaria(
+    payload: PapelariaVariaveisPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    """Substitui o cadastro de variáveis (a ordem da lista é a ordem no formulário)."""
+    from services import papelaria_variaveis_service as svc
+
+    try:
+        svc.salvar_lista(payload.variaveis)
+    except svc.VariavelError as e:
+        raise HTTPException(400, str(e))
+    dados = svc.publico()
+    dados["uso"] = svc.uso_por_variavel()
+    return dados
+
+
 @router.get("/admin/produtos/mockup")
 def obter_mockup_produto(
     produto: str = Query(...),

@@ -62,6 +62,7 @@ import {
 } from "../applyPapelariaPrefill";
 import {
   applyCamaraCorelEnrichment,
+  aplicarVariaveisFonte,
   deputadoLookupToCorelPrefill,
 } from "../deputadoCorelPrefill";
 import {
@@ -761,7 +762,10 @@ export function PapelariaCorelPanel({
       camaraEnrichApplied.current = true;
       return;
     }
-    const enrich = deputadoLookupToCorelPrefill(dep);
+    const enrich = aplicarVariaveisFonte(
+      deputadoLookupToCorelPrefill(dep),
+      contextQuery.data?.variaveis_fonte,
+    );
     if (Object.keys(enrich).length === 0) {
       camaraEnrichApplied.current = true;
       return;
@@ -814,7 +818,10 @@ export function PapelariaCorelPanel({
       clienteCampos,
     );
     const enrich = deputadoEnrichQuery.data
-      ? deputadoLookupToCorelPrefill(deputadoEnrichQuery.data)
+      ? aplicarVariaveisFonte(
+          deputadoLookupToCorelPrefill(deputadoEnrichQuery.data),
+          contextQuery.data?.variaveis_fonte,
+        )
       : {};
     setFieldValues(applyCamaraCorelEnrichment(base, enrich, clienteCampos));
   };

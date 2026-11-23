@@ -226,7 +226,7 @@ export function ClienteProofPortalInstructionBanner({
     <div className="border-t border-amber-300 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-950 sm:px-5">
       <p>
         {fiel
-          ? "Clique nos textos da prévia (frente e verso) para editá-los. A imagem usa o mesmo PDF e as mesmas fontes da prova."
+          ? "Clique nos textos da prévia para editá-los. A imagem usa o mesmo PDF e as mesmas fontes da prova."
           : "Altere os dados do trabalho diretamente nos campos abaixo e veja uma prévia aproximada de como ficará o trabalho após as alterações."}
       </p>
       <p className="mt-3 rounded-lg border border-amber-300/80 bg-amber-100/80 px-3 py-2.5 font-semibold text-amber-950">

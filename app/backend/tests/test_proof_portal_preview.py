@@ -36,8 +36,8 @@ class TestProofPapelariaContext:
             lambda *_a, **_k: [],
         )
         monkeypatch.setattr(
-            "services.proof_papelaria_service._os_produto",
-            lambda *_a, **_k: "Cartão de visita",
+            "services.proof_papelaria_service._os_produto_e_cores",
+            lambda *_a, **_k: ("Cartão de visita", ""),
         )
 
         ctx = resolve_papelaria_proof_context({"ID": 9}, 2026, 5557)
@@ -219,6 +219,29 @@ class TestProofPortalPreviewEndpoints:
             token="tok",
         )
         assert len(out["paginas"]) == 1
+
+
+class TestMockupJsonEfetivoPortal:
+    def test_duas_paginas_escolhe_frente_verso(self):
+        from services.proof_papelaria_service import mockup_json_efetivo_para_paginas
+
+        meta = {
+            "mockup_produto": {"frente": '{"id":"f"}', "frente_verso": '{"id":"fv"}'},
+            "mockup_config_json": '{"id":"modelo"}',
+            "mockup_config_json_modelo": '{"id":"reserva"}',
+        }
+        assert mockup_json_efetivo_para_paginas(meta, 2) == '{"id":"fv"}'
+        assert mockup_json_efetivo_para_paginas(meta, 1) == '{"id":"f"}'
+
+    def test_sem_variante_usa_reserva_do_modelo(self):
+        from services.proof_papelaria_service import mockup_json_efetivo_para_paginas
+
+        meta = {
+            "mockup_produto": {"frente": None, "frente_verso": None},
+            "mockup_config_json_modelo": '{"id":"reserva"}',
+            "mockup_config_json": '{"id":"aplicado"}',
+        }
+        assert mockup_json_efetivo_para_paginas(meta, 2) == '{"id":"reserva"}'
 
 
 class TestProofPreviewService:

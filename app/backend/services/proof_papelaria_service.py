@@ -68,6 +68,9 @@ def resolve_papelaria_proof_context(
     mockup_config_json: Optional[str] = None
     job_id: Optional[int] = None
 
+    mockup_produto: Optional[dict[str, Any]] = None
+    mockup_config_json_modelo: Optional[str] = None
+
     if job:
         job_id = int(job["id"])
         produto = (job.get("produto") or "").strip()
@@ -83,7 +86,13 @@ def resolve_papelaria_proof_context(
 
             modelo = get_modelo_by_id(int(modelo_id))
             if modelo:
+                # Variações do produto (frente / frente_verso) — a página do
+                # preview escolhe pela quantidade de páginas do PDF.
+                mockup_produto = modelo.get("mockup_produto")
+                mockup_config_json_modelo = modelo.get("mockup_config_json_modelo")
                 mockup_config_json = modelo.get("mockup_config_json")
+                if not frente_verso:
+                    frente_verso = (modelo.get("frente_verso") or "").strip()
                 if not produto:
                     produto = (modelo.get("produto") or "").strip()
                 if not arquivo_modelo:
@@ -107,7 +116,33 @@ def resolve_papelaria_proof_context(
         "frente_verso": frente_verso,
         "cores": cores,
         "mockup_config_json": mockup_config_json,
+        "mockup_produto": mockup_produto,
+        "mockup_config_json_modelo": mockup_config_json_modelo,
     }
+
+
+def mockup_json_efetivo_para_paginas(
+    mockup_meta: dict[str, Any],
+    page_count: int,
+) -> Optional[str]:
+    """
+    Mesma regra da Papelaria: 2+ páginas → mockup «frente_verso» do produto;
+    1 página → «frente». Sem variação, cai no JSON do modelo / do aplicar_no_modelo.
+    """
+    produto = mockup_meta.get("mockup_produto")
+    if isinstance(produto, dict):
+        chave = "frente_verso" if int(page_count or 0) >= 2 else "frente"
+        variante = produto.get(chave)
+        if isinstance(variante, str) and variante.strip():
+            return variante.strip()
+        reserva = mockup_meta.get("mockup_config_json_modelo")
+        if isinstance(reserva, str) and reserva.strip():
+            return reserva.strip()
+        return None
+    atual = mockup_meta.get("mockup_config_json")
+    if isinstance(atual, str) and atual.strip():
+        return atual.strip()
+    return None
 
 
 def _os_observ(ano: int, os_id: int) -> str:

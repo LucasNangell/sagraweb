@@ -12,6 +12,23 @@ describe("getPapelariaMockupConfig", () => {
     expect(r.isFallback).toBe(false);
   });
 
+  it("CtVisita com 2 paginas usa frente e verso (nao so frente)", () => {
+    const r = getPapelariaMockupConfig({
+      arquivoModelo: "06600-CtVisita_BaseSefoc.cdr",
+      produto: "Cartão de Visita",
+      pageCount: 2,
+    });
+    expect(r.config.id).toBe("cartao_visita_frente_verso");
+  });
+
+  it("CtVisita com 1 pagina usa so frente", () => {
+    const r = getPapelariaMockupConfig({
+      arquivoModelo: "CtVisita.cdr",
+      pageCount: 1,
+    });
+    expect(r.config.id).toBe("cartao_visita_frente");
+  });
+
   it("resolve Ct Duplo Retrato Lateral por produto", () => {
     const r = getPapelariaMockupConfig({
       produto: "Ct Duplo Retrato Lateral",

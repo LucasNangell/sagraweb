@@ -94,6 +94,26 @@ export function getPapelariaMockupConfig(
   const arquivo = norm(input.arquivoModelo);
   const frenteVerso = norm(input.frenteVerso);
   const pageCount = input.pageCount ?? 0;
+  const arquivoIndicaFv =
+    Boolean(arquivo) && matchArquivoModelo(arquivo, ["CtVisitaFV", "VisitaFV"]);
+  const querFrenteVerso =
+    pageCount >= 2 ||
+    arquivoIndicaFv ||
+    (frenteVerso.includes("frente") && frenteVerso.includes("verso"));
+
+  // CtVisita / Cartão de visita: o match genérico «CtVisita» não distingue
+  // só-frente de frente+verso — usa páginas / metadado F/V / sufixo FV.
+  const isCartaoVisita =
+    (arquivo &&
+      (matchArquivoModelo(arquivo, ["CtVisita", "CtVisitaF", "CtVisitaFV", "VisitaFV"]) ||
+        matchArquivoModelo(arquivo, ["cartao visita", "cartão visita"]))) ||
+    (produto && matchProduto(produto, ["ct visita", "cartão visita", "cartao visita"]));
+  if (isCartaoVisita) {
+    const preset = querFrenteVerso
+      ? PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente_verso
+      : PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente;
+    return { config: cloneConfig(preset), isFallback: false, source: "preset" };
+  }
 
   const byArquivoSpecificity = PAPELARIA_MOCKUP_CONFIG_LIST.filter(
     (p) => !p.isFallback && p.arquivoModeloMatch?.length,
@@ -124,7 +144,7 @@ export function getPapelariaMockupConfig(
     }
   }
 
-  if (frenteVerso.includes("frente") && frenteVerso.includes("verso")) {
+  if (querFrenteVerso && frenteVerso.includes("frente") && frenteVerso.includes("verso")) {
     return {
       config: cloneConfig(PAPELARIA_MOCKUP_CONFIGS.cartao_visita_frente_verso),
       isFallback: false,

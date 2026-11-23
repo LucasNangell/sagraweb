@@ -286,12 +286,15 @@ def build_proof_preview_pages_payload(
         }
         for item in meta["pages"]
     ]
+    total_pages = int(meta.get("total_pages", len(pages)) or len(pages))
+    from services.proof_papelaria_service import mockup_json_efetivo_para_paginas
+
     return {
         "isPapelaria": True,
         "pages": pages,
-        "total_pages": meta.get("total_pages", len(pages)),
+        "total_pages": total_pages,
         "truncated": bool(meta.get("truncated")),
-        "mockupConfigJson": mockup_meta.get("mockup_config_json"),
+        "mockupConfigJson": mockup_json_efetivo_para_paginas(mockup_meta, total_pages),
         "produto": mockup_meta.get("produto") or "",
         "arquivoModelo": mockup_meta.get("arquivo_modelo") or "",
         "frenteVerso": mockup_meta.get("frente_verso") or "",

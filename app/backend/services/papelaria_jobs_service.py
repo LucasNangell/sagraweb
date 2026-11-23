@@ -40,6 +40,9 @@ INPUT_CDR_DADOS_KEY = "__input_cdr"
 BASE_CDR_DADOS_KEY = "__base_cdr"
 # Usuário escolheu manter os textos do Corel da pasta (não aplicar o formulário).
 MANTER_DADOS_COREL_KEY = "__manter_dados_corel"
+# «Gerar Corel» a partir do PDF final: nome do PDF (na pasta da OS) que o
+# worker importa no CorelDRAW. Definido só pelo servidor.
+PDF_FONTE_COREL_DADOS_KEY = "__pdf_fonte_corel"
 ARTEFATOS_DADOS_KEY = "__artefatos"
 
 OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
@@ -337,7 +340,12 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if comp:
                 cleaned[key_stripped] = json.dumps(comp, ensure_ascii=False)
             continue
-        if key_stripped in (INPUT_CDR_DADOS_KEY, BASE_CDR_DADOS_KEY, MANTER_DADOS_COREL_KEY):
+        if key_stripped in (
+            INPUT_CDR_DADOS_KEY,
+            BASE_CDR_DADOS_KEY,
+            MANTER_DADOS_COREL_KEY,
+            PDF_FONTE_COREL_DADOS_KEY,
+        ):
             # Definidos só pelo servidor (nunca aceitar caminho vindo do cliente).
             continue
         if value is None:
@@ -469,7 +477,9 @@ def create_job(
 ) -> dict[str, Any]:
     """
     ``gerar_corel``: exceção pedida na página Papelaria — gera o arquivo
-    CorelDRAW pelo worker mesmo com PDF do modelo configurado.
+    CorelDRAW pelo worker. Com PDF do modelo configurado, o servidor monta o
+    PDF final (o mesmo da prova) e o worker o importa no CorelDRAW com os
+    textos editáveis; sem PDF, usa o modelo .cdr (fluxo antigo).
     """
     ensure_papelaria_jobs_tables()
     from services import papelaria_models_service as models_svc
@@ -509,14 +519,20 @@ def create_job(
 
             prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
 
+    corel_do_pdf = False
     if gerar_corel:
-        if str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf"):
-            raise ValueError(
-                "Este modelo foi cadastrado só com PDF — não há arquivo CorelDRAW para gerar."
-            )
-        # O worker usa o .cdr do modelo inteiro: a composição frente/verso não se aplica.
+        from services import papelaria_prova_pdf_service as prova_pdf_svc
+
         prova_pdf_servidor = False
-        dados_clean.pop("__composicao", None)
+        corel_do_pdf = "__composicao" in dados_clean or prova_pdf_svc.tem_modelo_pdf(modelo_id)
+        if not corel_do_pdf:
+            if str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf"):
+                raise ValueError(
+                    "Este modelo ainda não tem textos ligados aos campos. Configure em "
+                    "Configurações → Papelaria → Textos e prévia."
+                )
+            # Sem PDF: o worker usa o .cdr do modelo (composição não se aplica).
+            dados_clean.pop("__composicao", None)
 
     # Frente e verso independentes (frente de um modelo + verso de outro).
     if "__composicao" in dados_clean:
@@ -533,11 +549,32 @@ def create_job(
             dados_clean.pop("__composicao", None)
         else:
             dados_clean["__composicao"] = json.dumps(comp, ensure_ascii=False)
-            prova_pdf_servidor = True
+            prova_pdf_servidor = not gerar_corel
+
+    # PDF final (o mesmo da prova) que o worker importa no CorelDRAW.
+    pdf_fonte_corel: Optional[bytes] = None
+    if corel_do_pdf:
+        from services import papelaria_prova_pdf_service as prova_pdf_svc
+
+        try:
+            pdf_fonte_corel, _n_campos = prova_pdf_svc.renderizar_pdf_final(
+                modelo_id, dados_clean, modelo
+            )
+        except prova_pdf_svc.ProvaPdfError as exc:
+            raise ValueError(str(exc)) from exc
+        _cdr_nome, pdf_nome = build_output_filenames(ano, nro)
+        try:
+            sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=True)
+            with open(os.path.join(sefoc_dir, pdf_nome), "wb") as fh:
+                fh.write(pdf_fonte_corel)
+        except OSError as exc:
+            raise ValueError(f"Não foi possível gravar o PDF na pasta da OS: {exc}") from exc
+        dados_clean[PDF_FONTE_COREL_DADOS_KEY] = pdf_nome
 
     if (
         tipo_job == TIPO_JOB_CREATE
         and not prova_pdf_servidor
+        and pdf_fonte_corel is None
         and str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf")
     ):
         raise ValueError(
@@ -548,7 +585,7 @@ def create_job(
     # Já existe Corel na pasta da OS (fora cópia de segurança)? A prova é
     # montada a partir dele, com os campos do formulário aplicados por cima.
     base_cdr: Optional[dict[str, Any]] = None
-    if tipo_job == TIPO_JOB_CREATE and not prova_pdf_servidor:
+    if tipo_job == TIPO_JOB_CREATE and not prova_pdf_servidor and pdf_fonte_corel is None:
         base_cdr = find_os_base_cdr(ano, nro)
         if base_cdr:
             dados_clean[BASE_CDR_DADOS_KEY] = base_cdr["relative_path"]
@@ -621,7 +658,14 @@ def create_job(
         return job
 
     append_job_log(job_id, "Job criado e aguardando processamento.", "info")
-    if tipo_job == TIPO_JOB_CREATE:
+    if pdf_fonte_corel is not None:
+        append_job_log(
+            job_id,
+            "Gerar Corel: PDF final montado no servidor (igual à prova) — o worker "
+            "importa no CorelDRAW mantendo os textos editáveis.",
+            "info",
+        )
+    elif tipo_job == TIPO_JOB_CREATE:
         from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
 
         if get_modo() == MODO_PROVA_PDF:
@@ -2844,6 +2888,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
     input_cdr_rel = dados.pop(INPUT_CDR_DADOS_KEY, None)
     base_cdr_rel = dados.pop(BASE_CDR_DADOS_KEY, None)
     manter_dados_corel = str(dados.pop(MANTER_DADOS_COREL_KEY, "") or "") == "1"
+    pdf_fonte_corel_nome = str(dados.pop(PDF_FONTE_COREL_DADOS_KEY, "") or "").strip()
     from services.papelaria_campos_produto import (
         CHAVE_CAMPOS_PRODUTO,
         campos_modelo_sem_objetos,
@@ -2930,7 +2975,12 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         }
         if campos_produto:
             payload["campos_produto_objetos"] = campos_produto["objetos"]
-        if job["tipo_job"] == TIPO_JOB_CREATE and base_cdr_rel:
+        if job["tipo_job"] == TIPO_JOB_CREATE and pdf_fonte_corel_nome:
+            # .cdr a partir do PDF final gravado pelo servidor na pasta da OS.
+            payload["source_pdf_path"] = os.path.join(
+                output_dir, os.path.basename(pdf_fonte_corel_nome)
+            )
+        elif job["tipo_job"] == TIPO_JOB_CREATE and base_cdr_rel:
             try:
                 payload["base_cdr_path"] = resolve_os_relative_cdr_path(
                     job["ano_protocolo"],

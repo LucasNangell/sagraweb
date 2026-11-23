@@ -168,7 +168,7 @@ export function PapelariaActionBar({
         <ActionButton
           label="Gerar Corel"
           pending={false}
-          title="Exceção: gerar o arquivo CorelDRAW (.cdr) desta OS pelo worker, em vez da Prova PDF"
+          title="Exceção: gerar o arquivo CorelDRAW (.cdr) desta OS a partir do PDF da prova, com os textos editáveis"
           disabled={
             baseDisabled ||
             createJobPending ||

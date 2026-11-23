@@ -1025,6 +1025,9 @@ export function PapelariaCorelPanel({
     };
   }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados]);
 
+  /** «Gerar Corel» parte do PDF final quando o modelo (ou a composição) tem Prova PDF. */
+  const temProvaPdfModelo = Boolean(modelDetailQuery.data?.tem_prova_pdf) || Boolean(composicao);
+
   const camposEditaveisPrevia = useMemo(
     () => new Set((camposFormulario ?? []).map((f) => f.key)),
     [camposFormulario],
@@ -1057,12 +1060,16 @@ export function PapelariaCorelPanel({
     if (!selectedModelId) return;
     const gerarCorel = gerarCorelRef.current;
     const dados = { ...dadosForJob };
-    if (gerarCorel) delete dados[COMPOSICAO_DADOS_KEY];
+    // Sem PDF do modelo, o Corel sai do .cdr do modelo (frente e verso dele).
+    if (gerarCorel && !temProvaPdfModelo) delete dados[COMPOSICAO_DADOS_KEY];
     createJobMutation.mutate({
       ano: anoNum,
       nro: nroNum,
       // Na composição (Prova PDF), a prova pertence ao modelo da frente.
-      modelo_id: gerarCorel ? selectedModelId : (composicao?.frente.modelo_id ?? selectedModelId),
+      modelo_id:
+        gerarCorel && !temProvaPdfModelo
+          ? selectedModelId
+          : (composicao?.frente.modelo_id ?? selectedModelId),
       dados,
       lancar_andamento: lancarAndamento,
       manter_dados_corel: manterDadosCorelRef.current,
@@ -1196,6 +1203,26 @@ export function PapelariaCorelPanel({
   /** Exceção: gerar o arquivo CorelDRAW (worker) mesmo com Prova PDF disponível. */
   const handleGerarCorel = () => {
     if (!validateFormForAction()) return;
+    if (temProvaPdfModelo) {
+      // Corel a partir do PDF final (o mesmo da prova): textos editáveis,
+      // frente/verso escolhidos e textos editados na prévia.
+      const baseSefoc = usableCdrFiles(cdrPathQuery.data).find((f) =>
+        /-BaseSefoc\.cdr$/i.test(f.filename),
+      );
+      if (
+        baseSefoc &&
+        !window.confirm(
+          `O arquivo ${baseSefoc.filename} da pasta da OS será substituído pelo Corel ` +
+            "gerado a partir do PDF desta prova. Continuar?",
+        )
+      ) {
+        return;
+      }
+      manterDadosCorelRef.current = false;
+      gerarCorelRef.current = true;
+      void ensureOsFolderThen("gerar");
+      return;
+    }
     if (
       composicao &&
       (composicao.frente.modelo_id !== composicao.verso.modelo_id) &&

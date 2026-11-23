@@ -236,20 +236,78 @@ def test_face_oculta_some_das_opcoes(modelos_ct_visita):
     assert (1, 1) in {(f["modelo_id"], f["pagina"]) for f in r["frente"]}
 
 
-def test_create_job_gerar_corel_vai_para_o_worker(monkeypatch):
-    """Exceção «Gerar Corel»: mesmo com PDF do modelo, o job fica para o worker."""
+def _gerar_corel_com_pdf(monkeypatch, tmp_path, render=None):
+    from services import papelaria_jobs_service as jobs
+    from services import papelaria_prova_pdf_service as pdf_svc
     from tests.test_papelaria_prova_pdf import _run_create
 
-    monkeypatch.setattr("services.papelaria_prova_modo.get_modo", lambda: "prova_pdf")
+    renderizados: list[dict] = []
+
+    def _render(modelo_id, dados, modelo, avisos=None):
+        renderizados.append(dict(dados))
+        return b"%PDF-final", 3
+
+    monkeypatch.setattr(pdf_svc, "renderizar_pdf_final", render or _render)
+    monkeypatch.setattr(jobs, "resolve_os_papelaria_dir", lambda ano, nro, create=False: str(tmp_path))
+    monkeypatch.setattr(jobs, "get_os_folder_basename", lambda ano, nro: "05954-Pasta")
+    original = jobs.create_job
+    monkeypatch.setattr(jobs, "create_job", lambda **kw: original(**{**kw, "gerar_corel": True}))
+    r = _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)
+    return r, renderizados
+
+
+def test_create_job_gerar_corel_parte_do_pdf_final(monkeypatch, tmp_path):
+    """«Gerar Corel» com PDF do modelo: o servidor monta o PDF final e o worker o importa."""
     from services import papelaria_jobs_service as jobs
 
-    original = jobs.create_job
-    monkeypatch.setattr(
-        jobs, "create_job", lambda **kw: original(**{**kw, "gerar_corel": True})
-    )
-    r = _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)
+    r, renderizados = _gerar_corel_com_pdf(monkeypatch, tmp_path)
     assert r["inserted"]["status"] == jobs.STATUS_PENDING
-    assert r["gerados"] == []
+    assert r["gerados"] == []  # a prova não é gerada no servidor
+    assert r["cdrs"] == []  # não usa o Corel da pasta da OS
+    assert renderizados and renderizados[0]["nome_deputado"] == "Fulano"
+    dados = json.loads(r["inserted"]["dados"])
+    assert dados[jobs.PDF_FONTE_COREL_DADOS_KEY] == "05954-Pasta-BaseSefoc.pdf"
+    assert (tmp_path / "05954-Pasta-BaseSefoc.pdf").read_bytes() == b"%PDF-final"
+    assert any("importa no CorelDRAW" in m for m in r["logs"])
+
+
+def test_create_job_gerar_corel_erro_do_pdf_nao_cria_job(monkeypatch, tmp_path):
+    from services import papelaria_prova_pdf_service as pdf_svc
+
+    def _erro(*_a, **_k):
+        raise pdf_svc.ProvaPdfError("A fonte não tem os caracteres ŵ")
+
+    with pytest.raises(ValueError, match="caracteres"):
+        _gerar_corel_com_pdf(monkeypatch, tmp_path, render=_erro)
+    assert not list(tmp_path.iterdir())
+
+
+def test_payload_do_worker_aponta_o_pdf_final(monkeypatch, tmp_path):
+    from unittest.mock import patch as _patch
+
+    from services import papelaria_jobs_service as jobs
+    from tests.test_papelaria_jobs_service import MODEL_SAMPLE
+
+    job = {
+        "id": 90,
+        "ano_protocolo": 2026,
+        "nro_protocolo": 5954,
+        "tipo_job": jobs.TIPO_JOB_CREATE,
+        "produto": MODEL_SAMPLE["produto"],
+        "modelo_id": 1,
+        "arquivo_modelo": MODEL_SAMPLE["arquivo_modelo"],
+        "dados": {"nome_deputado": "Ana", jobs.PDF_FONTE_COREL_DADOS_KEY: "05954-Pasta-BaseSefoc.pdf"},
+        "tentativas": 0,
+    }
+    monkeypatch.setattr(jobs, "get_job", lambda job_id: job if job_id == 90 else None)
+    monkeypatch.setattr(jobs, "resolve_os_papelaria_dir", lambda ano, nro, create=False: str(tmp_path))
+    monkeypatch.setattr(jobs, "get_os_folder_basename", lambda ano, nro: "05954-Pasta")
+    monkeypatch.setattr("routers.os_routes._get_os_folder_path", lambda ano, nro: str(tmp_path))
+    with _patch("services.papelaria_models_service.get_modelo_by_id", return_value=MODEL_SAMPLE):
+        payload = jobs.build_worker_job_payload(90)
+    assert payload["source_pdf_path"] == str(tmp_path / "05954-Pasta-BaseSefoc.pdf")
+    assert jobs.PDF_FONTE_COREL_DADOS_KEY not in payload["dados"]
+    assert "base_cdr_path" not in payload
 
 
 # --------------------------------------------------------------- modelo só PDF
@@ -319,5 +377,6 @@ def test_modelo_so_pdf_nao_vai_para_o_worker(monkeypatch):
         _run_create(monkeypatch, modo="prova_pdf", tem_pdf=False)
     original = jobs.create_job
     monkeypatch.setattr(jobs, "create_job", lambda **kw: original(**{**kw, "gerar_corel": True}))
-    with pytest.raises(ValueError, match="só com PDF"):
-        _run_create(monkeypatch, modo="prova_pdf", tem_pdf=True)
+    # «Gerar Corel» de modelo só PDF ainda sem textos configurados: não há de onde partir.
+    with pytest.raises(ValueError, match="textos ligados"):
+        _run_create(monkeypatch, modo="prova_pdf", tem_pdf=False)

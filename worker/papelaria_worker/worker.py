@@ -42,6 +42,7 @@ from corel_generator import (
     validar_acesso_job,
 )
 from pdf_blank_pages import copy_pdf_without_blank_pages, summarize_kept_pages
+from pdf_para_cdr import gerar_cdr_de_pdf, validar_pdf_fonte
 from prova_email_a4 import compose_prova_email_a4
 from credenciais_depol_generator import gerar_credenciais_depol
 from timbrado_a4_digital_generator import (
@@ -284,6 +285,11 @@ def _caminho_modelo_produto(cfg: WorkerConfig, job: dict) -> str | None:
         return None
 
 
+def pdf_fonte_do_job(job: dict) -> str:
+    """PDF final (pasta da OS) a importar no CorelDRAW — «Gerar Corel» do modo Prova PDF."""
+    return str(job.get("source_pdf_path") or "").strip()
+
+
 def _caminho_modelo_create(cfg: WorkerConfig, job: dict) -> str:
     base = base_cdr_da_os(job)
     if base:
@@ -509,12 +515,15 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
     else:
         models_cache_dir = os.path.join(cfg.temp_dir, "_models_cache")
         try:
-            caminho_modelo = _caminho_modelo_create(cfg, job)
-            validar_acesso_job(
-                caminho_modelo,
-                output_dir,
-                models_cache_dir=models_cache_dir,
-            )
+            if pdf_fonte_do_job(job):
+                validar_pdf_fonte(pdf_fonte_do_job(job), output_dir)
+            else:
+                caminho_modelo = _caminho_modelo_create(cfg, job)
+                validar_acesso_job(
+                    caminho_modelo,
+                    output_dir,
+                    models_cache_dir=models_cache_dir,
+                )
         except (CorelGenerationError, FileNotFoundError) as exc:
             logging.error("Job #%s — pré-validação falhou: %s", job_id, exc)
             api.fail(job_id, str(exc), retryable=False)
@@ -820,45 +829,63 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 "campos": job.get("campos") or {},
             }
             dados = job.get("dados") or {}
-            caminho_modelo = _caminho_modelo_create(cfg, job)
-            usa_corel_da_os = bool(base_cdr_da_os(job))
+            pdf_fonte = pdf_fonte_do_job(job)
+            caminho_modelo = pdf_fonte or _caminho_modelo_create(cfg, job)
+            usa_corel_da_os = bool(base_cdr_da_os(job)) and not pdf_fonte
             prova_modo = str(job.get("prova_modo") or "").strip()
             prova_email = prova_modo == "prova_email"
             prova_web = prova_modo == "prova_web" or not prova_modo
-            api.append_log(
-                job_id,
-                (
-                    "Iniciando geração WEB — Corel da pasta da OS "
-                    f"{os.path.basename(caminho_modelo)} (campos aplicados sobre ele)"
-                    if usa_corel_da_os
-                    else f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}"
-                ),
-                "info",
-            )
-            result = gerar_arquivo_corel(
-                modelo=modelo,
-                dados=dados,
-                caminho_modelo=caminho_modelo,
-                temp_dir=cfg.temp_dir,
-                output_cdr_path=output_cdr,
-                output_pdf_path=output_pdf,
-                corel_visible=cfg.corel_visible,
-                job_timeout_sec=cfg.job_timeout_sec,
-                job_id=job_id,
-                preview_config=job.get("preview_config"),
-                campos_dinamicos_layout=job.get("campos_dinamicos_layout"),
-                exclusoes=job.get("exclusoes") or [],
-                carimbo=None,
-                pdf_somente_primeira_pagina=False,
-                base_cdr_da_os=usa_corel_da_os,
-                modelo_produto_path=(
-                    _caminho_modelo_produto(cfg, job) if usa_corel_da_os else None
-                ),
-                aplicar_campos=not (
-                    usa_corel_da_os and bool(job.get("manter_dados_corel"))
-                ),
-                objetos_produto=job.get("campos_produto_objetos") or None,
-            )
+            if pdf_fonte:
+                api.append_log(
+                    job_id,
+                    f"Gerar Corel a partir do PDF final — {os.path.basename(pdf_fonte)} "
+                    "(texto editável, sem o modelo .cdr)",
+                    "info",
+                )
+                result = gerar_cdr_de_pdf(
+                    pdf_path=pdf_fonte,
+                    temp_dir=cfg.temp_dir,
+                    output_cdr_path=output_cdr,
+                    output_pdf_path=output_pdf,
+                    corel_visible=cfg.corel_visible,
+                    job_timeout_sec=cfg.job_timeout_sec,
+                    job_id=job_id,
+                )
+            else:
+                api.append_log(
+                    job_id,
+                    (
+                        "Iniciando geração WEB — Corel da pasta da OS "
+                        f"{os.path.basename(caminho_modelo)} (campos aplicados sobre ele)"
+                        if usa_corel_da_os
+                        else f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}"
+                    ),
+                    "info",
+                )
+                result = gerar_arquivo_corel(
+                    modelo=modelo,
+                    dados=dados,
+                    caminho_modelo=caminho_modelo,
+                    temp_dir=cfg.temp_dir,
+                    output_cdr_path=output_cdr,
+                    output_pdf_path=output_pdf,
+                    corel_visible=cfg.corel_visible,
+                    job_timeout_sec=cfg.job_timeout_sec,
+                    job_id=job_id,
+                    preview_config=job.get("preview_config"),
+                    campos_dinamicos_layout=job.get("campos_dinamicos_layout"),
+                    exclusoes=job.get("exclusoes") or [],
+                    carimbo=None,
+                    pdf_somente_primeira_pagina=False,
+                    base_cdr_da_os=usa_corel_da_os,
+                    modelo_produto_path=(
+                        _caminho_modelo_produto(cfg, job) if usa_corel_da_os else None
+                    ),
+                    aplicar_campos=not (
+                        usa_corel_da_os and bool(job.get("manter_dados_corel"))
+                    ),
+                    objetos_produto=job.get("campos_produto_objetos") or None,
+                )
             if prova_email and not cancel_requested.is_set():
                 prova_name = str(job.get("prova_email_pdf_name") or "").strip()
                 if not prova_name:

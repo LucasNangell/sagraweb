@@ -1442,6 +1442,62 @@ def previa_png(
 # ---------------------------------------------------------------------------
 
 
+def renderizar_pdf_final(
+    modelo_id: int,
+    dados_brutos: dict[str, Any],
+    modelo: dict[str, Any],
+    avisos: Optional[list[str]] = None,
+) -> tuple[bytes, int]:
+    """
+    PDF final do produto com os dados do job (os mesmos da prova): campos,
+    textos editados na prévia, frente/verso independentes e redes sociais.
+    Devolve (PDF, nº de campos aplicados).
+    """
+    from services.papelaria_corel_dados_service import preparar_dados
+    from services.papelaria_faces_service import composicao_do_job
+
+    brutos = dados_brutos or {}
+    dados = preparar_dados({k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo)
+    composicao = composicao_do_job({"modelo_id": modelo_id, "dados": brutos})
+    redes_sel = selecao_redes_dos_dados(brutos)
+    estilo_sel = estilo_redes_dos_dados(brutos)
+    try:
+        textos = normalizar_textos(brutos.get(TEXTOS_DADOS_KEY))
+    except ProvaPdfError:
+        textos = {}
+    if composicao is not None:
+        # Frente de um modelo + verso de outro (frente e verso independentes).
+        n_campos = sum(
+            1
+            for face in ("frente", "verso")
+            for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
+            if c.get("template")
+        )
+        conteudo = renderizar_composicao(
+            composicao, dados, avisos=avisos, redes=redes_sel, estilo_redes=estilo_sel, textos=textos
+        )
+        return conteudo, n_campos
+    campos = [c for c in carregar_config(int(modelo_id)).get("campos") or [] if c.get("template")]
+    pdf = caminho_pdf(int(modelo_id))
+    if not pdf.is_file():
+        raise ProvaPdfError("O modelo não tem PDF configurado.")
+    prefixo = f"{int(modelo_id)}:"
+    conteudo = (
+        renderizar(
+            pdf,
+            campos,
+            dados,
+            avisos=avisos,
+            exigir_campos=False,
+            textos={k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)},
+        )
+        if campos
+        else pdf.read_bytes()
+    )
+    conteudo = _aplicar_redes(int(modelo_id), conteudo, redes_sel, avisos, estilo=estilo_sel)
+    return conteudo, len(campos)
+
+
 def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
     """
     Gera BaseSefoc.pdf + ProvaN.pdf do job no servidor e conclui o job como
@@ -1450,7 +1506,6 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
     """
     from database import db
     from services import papelaria_jobs_service as jobs_svc
-    from services.papelaria_corel_dados_service import preparar_dados
     from services import papelaria_models_service as models_svc
 
     job = jobs_svc.get_job(job_id)
@@ -1458,46 +1513,8 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
         raise LookupError("Job não encontrado.")
     t0 = time.perf_counter()
     try:
-        from services.papelaria_faces_service import composicao_do_job
-
         modelo = models_svc.get_modelo_by_id(int(job["modelo_id"] or 0)) or {}
-        dados = preparar_dados(
-            {k: v for k, v in (job.get("dados") or {}).items() if not str(k).startswith("__")},
-            modelo,
-        )
-        composicao = composicao_do_job(job)
-        redes_sel = selecao_redes_dos_dados(job.get("dados") or {})
-        estilo_sel = estilo_redes_dos_dados(job.get("dados") or {})
-        try:
-            textos_job = normalizar_textos((job.get("dados") or {}).get(TEXTOS_DADOS_KEY))
-        except ProvaPdfError:
-            textos_job = {}
-        if composicao is not None:
-            # Frente de um modelo + verso de outro (frente e verso independentes).
-            campos = [
-                c
-                for face in ("frente", "verso")
-                for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
-                if c.get("template")
-            ]
-            conteudo = renderizar_composicao(
-                composicao, dados, redes=redes_sel, estilo_redes=estilo_sel, textos=textos_job
-            )
-        else:
-            campos = [c for c in carregar_config(int(job["modelo_id"])).get("campos") or [] if c.get("template")]
-            pdf_job = caminho_pdf(int(job["modelo_id"]))
-            conteudo = (
-                renderizar(
-                    pdf_job,
-                    campos,
-                    dados,
-                    exigir_campos=False,
-                    textos=textos_do_modelo(job.get("dados") or {}, int(job["modelo_id"])),
-                )
-                if campos
-                else pdf_job.read_bytes()
-            )
-            conteudo = _aplicar_redes(int(job["modelo_id"]), conteudo, redes_sel, None, estilo=estilo_sel)
+        conteudo, n_campos = renderizar_pdf_final(int(job["modelo_id"]), job.get("dados") or {}, modelo)
 
         ano, nro = int(job["ano_protocolo"]), int(job["nro_protocolo"])
         sefoc = jobs_svc.resolve_os_papelaria_dir(ano, nro, create=True)
@@ -1543,7 +1560,7 @@ def gerar_prova_do_job(job_id: int) -> dict[str, Any]:
         )
         jobs_svc.append_job_log(
             job_id,
-            f"Prova PDF gerada no servidor em {ms} ms ({len(campos)} campo(s)) — "
+            f"Prova PDF gerada no servidor em {ms} ms ({n_campos} campo(s)) — "
             f"{base_pdf} e {prova_pdf}. Aguardando aprovação do técnico.",
             "info",
         )

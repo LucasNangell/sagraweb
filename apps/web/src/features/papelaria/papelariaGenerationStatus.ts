@@ -55,7 +55,7 @@ export function papelariaGenerationStatusLabel(
           ? "Gerando Timbrado A4 Digital"
           : "Gerando arquivo Corel/PDF",
         detail: digital
-          ? "Processando — CorelDRAW e Word em execução..."
+          ? "Processando — PDF do timbrado e Word (DOCX)..."
           : "Processando — CorelDRAW em execução no worker...",
       };
     case "failed":

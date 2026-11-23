@@ -1,6 +1,8 @@
 """
-Timbrado A4 Digital — preenche Cabecalho/Rodape no CDR temp, exporta SVG em curvas
-e monta DOCX Cor/PB a partir dos templates Word (posição dos placeholders).
+Timbrado A4 Digital — monta DOCX Cor/PB (Word) a partir de imagens de
+cabeçalho/rodapé. O caminho atual recebe PNGs gerados no servidor via Prova PDF
+(``gerar_timbrado_a4_digital_de_imagens``). O fluxo legado Corel
+(``gerar_timbrado_a4_digital``) permanece no módulo só para referência/testes.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from corel_generator import (
+    _corel_thread,
     CorelGenerationError,
     _assert_documento_e_copia_temp,
     _corel_session,
@@ -1297,8 +1300,8 @@ def gerar_timbrado_a4_digital(
             f"Pasta de templates Timbrado A4 Digital indisponível: {templates_dir}"
         )
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
+    if True:  # thread única do Corel (reaproveita a instância aberta)
+        future = _corel_thread.submit(
             _gerar_timbrado_a4_digital_impl,
             modelo=modelo,
             dados=dados_norm,
@@ -1334,3 +1337,128 @@ def gerar_timbrado_a4_digital(
             raise CorelGenerationError(humanizar_erro_corel(exc)) from exc
 
     return TimbradoDigitalResult(artefatos=list(artefatos), logs=logs)
+
+
+def _montar_docx_cor_pb(
+    *,
+    templates_dir: str,
+    temp_job_dir: str,
+    output_dir: str,
+    path_cab: str,
+    path_rod: str,
+    output_docx_cor: str,
+    output_docx_pb: str,
+    logs: list[str],
+) -> list[str]:
+    """Monta DOCX Cor/PB a partir das imagens de cabeçalho/rodapé (Word COM)."""
+    os.makedirs(temp_job_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+
+    template_cor = _resolve_template_path(templates_dir, _TEMPLATE_COR)
+    template_pb = _resolve_template_path(templates_dir, _TEMPLATE_PB)
+    logs.append(f"Template Cor: {os.path.basename(template_cor)}")
+    logs.append(f"Template PB: {os.path.basename(template_pb)}")
+
+    dest_cor = os.path.join(output_dir, output_docx_cor)
+    dest_pb = os.path.join(output_dir, output_docx_pb)
+    for dest in (dest_cor, dest_pb):
+        if os.path.exists(dest):
+            os.remove(dest)
+
+    import pythoncom
+    import win32com.client  # type: ignore
+
+    pythoncom.CoInitialize()
+    word = None
+    try:
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = 0
+        try:
+            word.ConfirmConversions = False
+        except Exception:
+            pass
+        _montar_docx_com_imagens(
+            template_cor, dest_cor, path_cab, path_rod, temp_job_dir, logs, word=word
+        )
+        _montar_docx_com_imagens(
+            template_pb, dest_pb, path_cab, path_rod, temp_job_dir, logs, word=word
+        )
+    finally:
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+
+    artefatos: list[str] = []
+    for name in (output_docx_cor, output_docx_pb):
+        path = os.path.join(output_dir, name)
+        if not os.path.isfile(path) or os.path.getsize(path) <= 0:
+            raise CorelGenerationError(f"Artefato DOCX não gerado: {name}")
+        artefatos.append(name)
+    return artefatos
+
+
+def gerar_timbrado_a4_digital_de_imagens(
+    *,
+    cabecalho_img: str,
+    rodape_img: str,
+    templates_dir: str,
+    temp_dir: str,
+    output_dir: str,
+    output_docx_cor: str,
+    output_docx_pb: str,
+    job_timeout_sec: int = 300,
+    job_id: Optional[int] = None,
+) -> TimbradoDigitalResult:
+    """
+    Monta DOCX Cor/PB a partir de PNGs gerados pelo servidor (Prova PDF).
+    Não usa CorelDRAW.
+    """
+    logs: list[str] = []
+    job_tag = f"job_{job_id}" if job_id else "job"
+    temp_job_dir = os.path.join(temp_dir, job_tag, "timbrado_digital")
+    os.makedirs(temp_job_dir, exist_ok=True)
+
+    for rotulo, path in (("cabecalho", cabecalho_img), ("rodape", rodape_img)):
+        if not path or not os.path.isfile(path) or os.path.getsize(path) <= 0:
+            raise CorelGenerationError(
+                f"Imagem de {rotulo} ausente ou vazia (Prova PDF): {path or '(vazio)'}"
+            )
+    if not os.path.isdir(templates_dir):
+        raise CorelGenerationError(
+            f"Pasta de templates Timbrado A4 Digital indisponível: {templates_dir}"
+        )
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    logs.append(
+        f"Montagem DOCX via PDF — cab={os.path.basename(cabecalho_img)}, "
+        f"rod={os.path.basename(rodape_img)}"
+    )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            _montar_docx_cor_pb,
+            templates_dir=templates_dir,
+            temp_job_dir=temp_job_dir,
+            output_dir=output_dir,
+            path_cab=cabecalho_img,
+            path_rod=rodape_img,
+            output_docx_cor=output_docx_cor,
+            output_docx_pb=output_docx_pb,
+            logs=logs,
+        )
+        try:
+            artefatos = future.result(timeout=max(30, job_timeout_sec))
+        except FuturesTimeoutError as exc:
+            raise CorelGenerationError(
+                f"Timeout na montagem Word do Timbrado Digital ({job_timeout_sec}s)."
+            ) from exc
+
+    return TimbradoDigitalResult(artefatos=artefatos, logs=logs)

@@ -1681,13 +1681,13 @@ def create_timbrado_a4_digital_job(
     if not modelo:
         raise LookupError("Modelo não encontrado ou inativo.")
 
-    campos = modelo.get("campos") or {}
-    campos_norm = {str(k).strip().lower(): k for k in campos}
-    for esperado in ("cabecalho", "rodape"):
-        if esperado not in campos_norm:
-            raise ValueError(
-                "Modelo sem campos Cabecalho/Rodape necessários para Timbrado A4 Digital."
-            )
+    from services.papelaria_prova_pdf_service import tem_modelo_pdf
+
+    if not tem_modelo_pdf(modelo_id):
+        raise ValueError(
+            "Timbrado A4 Digital exige modelo com Prova PDF configurada "
+            "(PDF + campos). Configure o PDF do modelo antes de gerar."
+        )
 
     dados_clean = _sanitize_dados(dados)
     missing = _validate_required_fields(modelo, dados_clean)
@@ -3012,6 +3012,30 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         payload["output_docx_pb"] = artifacts["docx_pb"]
         payload["output_cdr_name"] = ""
         payload["output_pdf_name"] = ""
+        # Imagens cab/rod a partir do PDF preenchido (sem Corel no worker).
+        from services.papelaria_timbrado_digital_service import (
+            TimbradoDigitalPdfError,
+            exportar_imagens_timbrado_digital,
+        )
+
+        modelo_id_digital = job.get("modelo_id")
+        if not modelo_id_digital:
+            raise ValueError("Job Timbrado A4 Digital sem modelo_id.")
+        try:
+            imgs = exportar_imagens_timbrado_digital(
+                int(modelo_id_digital),
+                job.get("dados") if isinstance(job.get("dados"), dict) else {},
+                payload["output_dir"],
+            )
+        except TimbradoDigitalPdfError:
+            raise
+        except Exception as exc:
+            raise TimbradoDigitalPdfError(
+                f"Falha ao gerar imagens do Timbrado Digital via PDF: {exc}"
+            ) from exc
+        payload["cabecalho_img"] = imgs["cabecalho"]
+        payload["rodape_img"] = imgs["rodape"]
+        payload["fonte_imagens"] = "prova_pdf"
 
     from services.papelaria_prova_modo import (
         MODO_PROVA_EMAIL,

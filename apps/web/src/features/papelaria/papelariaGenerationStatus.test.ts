@@ -41,4 +41,13 @@ describe("papelariaGenerationStatusLabel", () => {
       "Processando",
     );
   });
+
+  it("digital menciona PDF e Word", () => {
+    expect(
+      papelariaGenerationStatusLabel("processing", { isTimbradoDigital: true }).detail,
+    ).toContain("PDF");
+    expect(
+      papelariaGenerationStatusLabel("processing", { isTimbradoDigital: true }).detail,
+    ).toContain("Word");
+  });
 });

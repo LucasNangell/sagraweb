@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -2525,6 +2526,9 @@ class TestTimbradoA4DigitalJob:
         with patch(
             "services.papelaria_models_service.get_modelo_by_id",
             return_value=TIMBRADO_DIGITAL_MODEL,
+        ), patch(
+            "services.papelaria_prova_pdf_service.tem_modelo_pdf",
+            return_value=True,
         ):
             job = svc.create_timbrado_a4_digital_job(
                 ano=2026,
@@ -2569,6 +2573,20 @@ class TestTimbradoA4DigitalJob:
             "routers.os_routes._get_os_folder_path",
             lambda ano, nro: str(tmp_path),
         )
+
+        def fake_export(modelo_id, dados, dest_dir, **kwargs):
+            dest = Path(dest_dir)
+            dest.mkdir(parents=True, exist_ok=True)
+            cab = dest / "cabecalho.png"
+            rod = dest / "rodape.png"
+            cab.write_bytes(b"cab")
+            rod.write_bytes(b"rod")
+            return {"cabecalho": str(cab), "rodape": str(rod)}
+
+        monkeypatch.setattr(
+            "services.papelaria_timbrado_digital_service.exportar_imagens_timbrado_digital",
+            fake_export,
+        )
         with patch(
             "services.papelaria_models_service.get_modelo_by_id",
             return_value=TIMBRADO_DIGITAL_MODEL,
@@ -2584,6 +2602,9 @@ class TestTimbradoA4DigitalJob:
         assert payload["output_docx_pb"] == "05954-Pasta-TimbradoA4Digital-PB.docx"
         assert payload["output_cabecalho_svg"]
         assert payload["output_rodape_svg"]
+        assert payload["fonte_imagens"] == "prova_pdf"
+        assert Path(payload["cabecalho_img"]).name == "cabecalho.png"
+        assert Path(payload["rodape_img"]).name == "rodape.png"
 
     def test_complete_sem_prova_revisao_pending(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc

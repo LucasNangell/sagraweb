@@ -1,0 +1,45 @@
+{
+  "arquivo_original": "TimbradoA4.pdf",
+  "atualizado_em": "2026-11-23 18:14:27",
+  "regioes_digitais": {
+    "cabecalho": {
+      "pagina": 1,
+      "unidade": "pt",
+      "bbox": [0, 18, 595.28, 105]
+    },
+    "rodape": {
+      "pagina": 1,
+      "unidade": "pt",
+      "bbox": [0, 795, 595.28, 842]
+    }
+  },
+  "campos": [
+    {
+      "marcador": "Câmara dos Deputados | Anexo IV - Gabinete 000 | CEP 70160-900 - Brasília/DF",
+      "pagina": 1,
+      "template": "Câmara dos Deputados | Anexo {anexo} - Gabinete {gabinete} | CEP 70160-900 - Brasília/DF",
+      "alinhamento": "auto",
+      "ancora": "auto",
+      "entrelinha": 1.2,
+      "reduzir_para_caber": true
+    },
+    {
+      "marcador": "Tels (61) 3215-5000/3000 | dep.nomedep@camara.leg.br",
+      "pagina": 1,
+      "template": "Tels (61) 3215-5{gabinete}/3{gabinete} | {email}",
+      "alinhamento": "auto",
+      "ancora": "auto",
+      "entrelinha": 1.2,
+      "reduzir_para_caber": true
+    },
+    {
+      "marcador": "Gabinete do Deputado Nome Deputado - PARTIDO/UF",
+      "pagina": 1,
+      "template": "Gabinete {artigo} {genero} **{nome_deputado}** - {partido}/{uf}",
+      "alinhamento": "auto",
+      "ancora": "auto",
+      "entrelinha": 1.2,
+      "reduzir_para_caber": true
+    }
+  ]
+}

@@ -26,7 +26,11 @@ from runtime import (
 )
 from corel_generator import (
     CorelGenerationError,
+    CorelTomadoPeloUsuarioError,
     GenerationResult,
+    configurar_keep_warm,
+    finalizar_trabalho_corel,
+    verificar_corel_ocioso,
     aguardar_corel_disponivel,
     montar_carimbo_prova_email,
     resolve_prova_numero,
@@ -46,7 +50,7 @@ from pdf_para_cdr import gerar_cdr_de_pdf, validar_pdf_fonte
 from prova_email_a4 import compose_prova_email_a4
 from credenciais_depol_generator import gerar_credenciais_depol
 from timbrado_a4_digital_generator import (
-    gerar_timbrado_a4_digital,
+    gerar_timbrado_a4_digital_de_imagens,
     resolve_timbrado_a4_digital_templates_dir,
 )
 from auto_update import try_auto_update
@@ -374,7 +378,7 @@ def process_inspect(api: PapelariaWorkerApiClient, cfg: WorkerConfig, inspect: d
         api.fail_inspect(inspect_id, msg)
     finally:
         _processing_job = False
-        reset_corel_session()
+        finalizar_trabalho_corel()
         if os.path.isfile(local_cdr):
             try:
                 os.remove(local_cdr)
@@ -492,22 +496,32 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             api.fail(job_id, msg, retryable=False)
             return
     elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
-        caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
         templates_dir = resolve_timbrado_a4_digital_templates_dir(
             cfg.models_dir,
             getattr(cfg, "timbrado_a4_digital_templates_dir", "") or "",
         )
-        models_cache_dir = os.path.join(cfg.temp_dir, "_models_cache")
+        cab_img = str(job.get("cabecalho_img") or "").strip()
+        rod_img = str(job.get("rodape_img") or "").strip()
         try:
-            validar_acesso_job(
-                caminho_modelo,
-                output_dir,
-                models_cache_dir=models_cache_dir,
-            )
+            if not cab_img or not os.path.isfile(cab_img):
+                raise CorelGenerationError(
+                    "Imagem de cabeçalho (Prova PDF) ausente no payload do job."
+                )
+            if not rod_img or not os.path.isfile(rod_img):
+                raise CorelGenerationError(
+                    "Imagem de rodapé (Prova PDF) ausente no payload do job."
+                )
             if not os.path.isdir(templates_dir):
                 raise CorelGenerationError(
                     f"Pasta de templates Timbrado A4 Digital indisponível: {templates_dir}"
                 )
+            if not os.path.isdir(output_dir):
+                try:
+                    os.makedirs(output_dir, exist_ok=True)
+                except OSError as exc:
+                    raise CorelGenerationError(
+                        f"Pasta de saída Timbrado Digital indisponível: {output_dir} ({exc})"
+                    ) from exc
         except CorelGenerationError as exc:
             logging.error("Job #%s — pré-validação Timbrado Digital falhou: %s", job_id, exc)
             api.fail(job_id, str(exc), retryable=False)
@@ -787,40 +801,25 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 job_id=job_id,
             )
         elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
-            modelo = {
-                "produto": job.get("produto"),
-                "cores": job.get("cores"),
-                "campos": job.get("campos") or {},
-            }
-            dados = job.get("dados") or {}
-            caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
             templates_dir = resolve_timbrado_a4_digital_templates_dir(
                 cfg.models_dir,
                 getattr(cfg, "timbrado_a4_digital_templates_dir", "") or "",
             )
             api.append_log(
                 job_id,
-                "Iniciando Timbrado A4 Digital (SVG + DOCX Cor/PB)",
+                "Iniciando Timbrado A4 Digital (PDF → DOCX Cor/PB)",
                 "info",
             )
-            result = gerar_timbrado_a4_digital(
-                modelo=modelo,
-                dados=dados,
-                caminho_modelo=caminho_modelo,
+            result = gerar_timbrado_a4_digital_de_imagens(
+                cabecalho_img=str(job.get("cabecalho_img") or ""),
+                rodape_img=str(job.get("rodape_img") or ""),
                 templates_dir=templates_dir,
                 temp_dir=cfg.temp_dir,
                 output_dir=output_dir,
-                output_cabecalho_svg=str(
-                    job.get("output_cabecalho_svg") or "cabecalho.svg"
-                ),
-                output_rodape_svg=str(job.get("output_rodape_svg") or "rodape.svg"),
                 output_docx_cor=str(job.get("output_docx_cor") or ""),
                 output_docx_pb=str(job.get("output_docx_pb") or ""),
-                corel_visible=cfg.corel_visible,
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
-                exclusoes=job.get("exclusoes") or [],
-                preview_config=job.get("preview_config"),
             )
         elif tipo_job == TIPO_JOB_CREATE:
             modelo = {
@@ -1036,6 +1035,10 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             pdf_name or "",
             output_dir,
         )
+    except CorelTomadoPeloUsuarioError as exc:
+        # Nunca encerrar o Corel aqui: agora ele é do designer.
+        logging.warning("Job #%s: %s", job_id, exc)
+        api.fail(job_id, str(exc), retryable=True)
     except (CorelGenerationError, FileNotFoundError, OSError) as exc:
         tb = traceback.format_exc()
         msg_usuario = humanizar_erro_corel(exc)
@@ -1059,7 +1062,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         stop_heartbeat.set()
         heartbeat_thread.join(timeout=3)
         cleanup_temp_dir(cfg.temp_dir, job_id)
-        reset_corel_session()
+        finalizar_trabalho_corel()
 
 
 def run_loop(cfg: WorkerConfig) -> int:
@@ -1079,12 +1082,29 @@ def run_loop(cfg: WorkerConfig) -> int:
         _liberar_protecao_suspensao(cfg)
 
 
+def _verificar_corel_ocioso_no_loop() -> None:
+    estado = verificar_corel_ocioso()
+    if estado == "tomado":
+        logging.info(
+            "CorelDRAW mantido aberto passou a ser usado nesta máquina — "
+            "worker soltou a instância (sem fechar)."
+        )
+    elif estado == "fechado":
+        logging.info("CorelDRAW ocioso encerrado (fim do keep-warm).")
+
+
 def _run_loop_inner(api: PapelariaWorkerApiClient, cfg: WorkerConfig) -> int:
     logging.info(
         "Worker %s iniciado — API %s",
         cfg.worker_id,
         cfg.api_base_url,
     )
+    configurar_keep_warm(cfg.corel_keep_warm_sec)
+    if cfg.corel_keep_warm_sec:
+        logging.info(
+            "CorelDRAW fica aberto por até %s s após cada trabalho (keep-warm).",
+            cfg.corel_keep_warm_sec,
+        )
 
     logging.info("Verificando se o CorelDRAW está livre nesta máquina...")
     if not _esperar_corel_livre(cfg):
@@ -1107,6 +1127,7 @@ def _run_loop_inner(api: PapelariaWorkerApiClient, cfg: WorkerConfig) -> int:
     while not _shutdown:
         try:
             api.heartbeat(_heartbeat_meta(cfg))
+            _verificar_corel_ocioso_no_loop()
             if corel_em_uso_externamente():
                 _log_corel_aguardando()
                 time.sleep(max(3, cfg.poll_interval_sec))

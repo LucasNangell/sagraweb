@@ -335,6 +335,22 @@ class TestProcessJobDispatch:
         )
         assert gerar.call_args.kwargs["objetos_produto"] == objetos
 
+    def test_corel_tomado_pelo_designer_volta_para_fila_sem_matar(
+        self, patched_runtime, monkeypatch
+    ):
+        gerar, _exportar, cfg = patched_runtime
+        gerar.side_effect = worker_mod.CorelTomadoPeloUsuarioError("Corel em uso")
+        mortes = []
+        monkeypatch.setattr(
+            worker_mod,
+            "encerrar_corel_forcadamente",
+            lambda **k: mortes.append(k),
+        )
+        api = FakeApi()
+        worker_mod._process_job_body(api, cfg, _job(tipo_job="create"))
+        assert mortes == []
+        assert api.failed and api.failed[0][2] is True  # retryable
+
     def test_create_sem_corel_na_pasta_usa_modelo(self, patched_runtime, tmp_path):
         gerar, _exportar, cfg = patched_runtime
         worker_mod._process_job_body(FakeApi(), cfg, _job(tipo_job="create"))
@@ -461,7 +477,13 @@ class TestProcessJobDispatch:
                 logs=["ok"],
             )
         )
-        monkeypatch.setattr(worker_mod, "gerar_timbrado_a4_digital", digital)
+        monkeypatch.setattr(worker_mod, "gerar_timbrado_a4_digital_de_imagens", digital)
+        cab = tmp_path / "cabecalho.png"
+        rod = tmp_path / "rodape.png"
+        out = tmp_path / "Digital"
+        out.mkdir()
+        cab.write_bytes(b"png")
+        rod.write_bytes(b"png")
         api = FakeApi()
         worker_mod._process_job_body(
             api,
@@ -470,12 +492,16 @@ class TestProcessJobDispatch:
                 tipo_job="timbrado_a4_digital",
                 arquivo_modelo="TimbradoA4.cdr",
                 produto="Timbrado A4 (Digital)",
+                output_dir=str(out),
                 output_cdr_name="",
                 output_pdf_name="",
                 output_cabecalho_svg="cabecalho.svg",
                 output_rodape_svg="rodape.svg",
                 output_docx_cor="a-Cor.docx",
                 output_docx_pb="a-PB.docx",
+                cabecalho_img=str(cab),
+                rodape_img=str(rod),
+                fonte_imagens="prova_pdf",
             ),
         )
         digital.assert_called_once()

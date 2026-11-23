@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@sagra/ui";
-import { Loader2, Save, Trash2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { FileText, FolderOpen, Loader2, RotateCcw, Save, Tag, Trash2, Upload } from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
 
 import {
   clearPapelariaProvaEmailTemplate,
@@ -10,7 +9,12 @@ import {
   savePapelariaAdminPastaImposicao,
   uploadPapelariaProvaEmailTemplate,
 } from "@/api/adminSystem";
+import { toast } from "@/components/ui/toastStore";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
+
+import { Field, InlineMessage, PanelCard, StatusPill } from "./PapelariaWorkspaceUi";
+
+type Erros = Partial<Record<"nome" | "pasta" | "template" | "excluir", string>>;
 
 export function PapelariaModeloDadosPanel({
   modelo,
@@ -22,13 +26,12 @@ export function PapelariaModeloDadosPanel({
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [nome, setNome] = useState(modelo.nome_exibicao);
-  const [pastaImposicao, setPastaImposicao] = useState(
-    modelo.pasta_imposicao ?? "",
-  );
-  const [templatePath, setTemplatePath] = useState(
-    modelo.prova_email_template_pdf ?? "",
-  );
-  const [localMsg, setLocalMsg] = useState<string | null>(null);
+  const [pastaImposicao, setPastaImposicao] = useState(modelo.pasta_imposicao ?? "");
+  const [templatePath, setTemplatePath] = useState(modelo.prova_email_template_pdf ?? "");
+  const [erros, setErros] = useState<Erros>({});
+
+  const setErro = (k: keyof Erros, msg?: string) => setErros((prev) => ({ ...prev, [k]: msg }));
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
 
   const saveNomeMutation = useMutation({
     mutationFn: () => {
@@ -36,11 +39,12 @@ export function PapelariaModeloDadosPanel({
       return savePapelariaAdminNomeExibicao(modelo.id, trimmed || null);
     },
     onSuccess: (data) => {
-      setLocalMsg("Nome salvo.");
+      setErro("nome");
       setNome(data.nome_exibicao);
-      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+      toast.success("Nome de exibição salvo.");
+      invalidate();
     },
-    onError: (err: Error) => setLocalMsg(err.message),
+    onError: (err: Error) => setErro("nome", err.message),
   });
 
   const savePastaMutation = useMutation({
@@ -49,50 +53,53 @@ export function PapelariaModeloDadosPanel({
       return savePapelariaAdminPastaImposicao(modelo.id, trimmed || null);
     },
     onSuccess: (data) => {
-      setLocalMsg("Pasta de imposição salva.");
+      setErro("pasta");
       setPastaImposicao(data.pasta_imposicao ?? "");
-      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+      toast.success("Pasta de imposição salva.");
+      invalidate();
     },
-    onError: (err: Error) => setLocalMsg(err.message),
+    onError: (err: Error) => setErro("pasta", err.message),
   });
 
   const uploadTemplateMutation = useMutation({
     mutationFn: (file: File) => uploadPapelariaProvaEmailTemplate(modelo.id, file),
     onSuccess: (data) => {
-      setLocalMsg("PDF padrão de prova salvo.");
+      setErro("template");
       setTemplatePath(data.prova_email_template_pdf ?? "");
-      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+      toast.success("PDF padrão de prova salvo.");
+      invalidate();
     },
-    onError: (err: Error) => setLocalMsg(err.message),
+    onError: (err: Error) => setErro("template", err.message),
   });
 
   const clearTemplateMutation = useMutation({
     mutationFn: () => clearPapelariaProvaEmailTemplate(modelo.id),
     onSuccess: () => {
-      setLocalMsg("PDF padrão de prova removido.");
+      setErro("template");
       setTemplatePath("");
-      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+      toast.success("PDF padrão de prova removido.");
+      invalidate();
     },
-    onError: (err: Error) => setLocalMsg(err.message),
+    onError: (err: Error) => setErro("template", err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePapelariaAdminModelo(modelo.id),
+    onSuccess: () => {
+      toast.success("Modelo excluído.");
+      invalidate();
+      onDeleted?.(modelo.id);
+    },
+    onError: (err: Error) => setErro("excluir", err.message),
   });
 
   const dirtyNome = nome.trim() !== modelo.nome_exibicao.trim();
-  const dirtyPasta =
-    pastaImposicao.trim() !== (modelo.pasta_imposicao ?? "").trim();
+  const dirtyPasta = pastaImposicao.trim() !== (modelo.pasta_imposicao ?? "").trim();
   const saving =
     saveNomeMutation.isPending ||
     savePastaMutation.isPending ||
     uploadTemplateMutation.isPending ||
     clearTemplateMutation.isPending;
-
-  const deleteMutation = useMutation({
-    mutationFn: () => deletePapelariaAdminModelo(modelo.id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
-      onDeleted?.(modelo.id);
-    },
-    onError: (err: Error) => setLocalMsg(err.message),
-  });
 
   const handleDelete = () => {
     const label = modelo.nome_exibicao || modelo.arquivo_modelo;
@@ -106,205 +113,247 @@ export function PapelariaModeloDadosPanel({
     deleteMutation.mutate();
   };
 
-  const msgIsError =
-    saveNomeMutation.isError ||
-    savePastaMutation.isError ||
-    uploadTemplateMutation.isError ||
-    clearTemplateMutation.isError ||
-    deleteMutation.isError;
+  /** Enter salva, Esc descarta a edição do campo. */
+  const inputKeys =
+    (dirty: boolean, save: () => void, revert: () => void) => (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" && dirty && !saving) {
+        e.preventDefault();
+        save();
+      } else if (e.key === "Escape" && dirty) {
+        e.preventDefault();
+        revert();
+      }
+    };
 
   const templateFileName = templatePath
     ? templatePath.replace(/\\/g, "/").split("/").pop() || templatePath
     : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Arquivo Corel
-          </p>
-          <p className="mt-1 font-mono text-[11px] text-slate-700">{modelo.arquivo_modelo}</p>
-        </div>
-        <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Variação
-          </p>
-          <p className="mt-1 text-slate-700">
-            {modelo.frente_versao || "—"}
-            {modelo.cores ? ` · ${modelo.cores}` : ""}
-          </p>
-        </div>
-      </div>
-
-      <label className="flex max-w-xl flex-col gap-1 text-xs text-slate-600">
-        Nome de exibição
-        <input
-          type="text"
-          className="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-800"
-          value={nome}
-          maxLength={255}
-          placeholder="Nome exibido na página Papelaria"
-          onChange={(e) => {
-            setNome(e.target.value);
-            setLocalMsg(null);
-          }}
-        />
-        <span className="text-[10px] text-slate-500">
-          Deixe em branco e salve para voltar ao nome automático (produto + frente/verso + cores).
-        </span>
-      </label>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-semibold",
-            dirtyNome
-              ? "bg-secondary-blue text-white hover:bg-secondary-blue/90"
-              : "border border-slate-300 text-slate-500",
-          )}
-          disabled={!dirtyNome || saving}
-          onClick={() => saveNomeMutation.mutate()}
+    <div className="pw-panel pw-scroll">
+      <div className="pw-dados-grid">
+        {/* Identificação */}
+        <PanelCard
+          className="pw-dados-grid__wide"
+          icon={<Tag className="size-3.5" aria-hidden />}
+          title="Identificação"
+          description="Como o modelo aparece para quem pede a prova na página Papelaria."
         >
-          {saveNomeMutation.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Save className="size-3.5" aria-hidden />
-          )}
-          Salvar nome
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
-          disabled={deleteMutation.isPending || saving}
-          onClick={handleDelete}
-        >
-          {deleteMutation.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Trash2 className="size-3.5" aria-hidden />
-          )}
-          Excluir modelo
-        </button>
-      </div>
+          <dl className="pw-facts">
+            <div>
+              <dt>Arquivo Corel</dt>
+              <dd className="font-mono" title={modelo.arquivo_modelo}>
+                {modelo.arquivo_modelo}
+              </dd>
+            </div>
+            <div>
+              <dt>Frente / verso</dt>
+              <dd>{modelo.frente_versao || "—"}</dd>
+            </div>
+            <div>
+              <dt>Cores</dt>
+              <dd>{modelo.cores || "—"}</dd>
+            </div>
+            <div>
+              <dt>ID</dt>
+              <dd className="font-mono">#{modelo.id}</dd>
+            </div>
+          </dl>
 
-      <label className="flex max-w-xl flex-col gap-1 text-xs text-slate-600">
-        Pasta do PDF de Imposição
-        <input
-          type="text"
-          className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
-          value={pastaImposicao}
-          maxLength={512}
-          placeholder="\\redecamara\DfsData\..."
-          onChange={(e) => {
-            setPastaImposicao(e.target.value);
-            setLocalMsg(null);
-          }}
-        />
-        <span className="text-[10px] text-slate-500">
-          Caminho absoluto UNC onde o botão Imposição grava o PDF. Em branco = pasta Sefoc da OS.
-        </span>
-      </label>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-semibold",
-            dirtyPasta
-              ? "bg-secondary-blue text-white hover:bg-secondary-blue/90"
-              : "border border-slate-300 text-slate-500",
-          )}
-          disabled={!dirtyPasta || saving}
-          onClick={() => savePastaMutation.mutate()}
-        >
-          {savePastaMutation.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Save className="size-3.5" aria-hidden />
-          )}
-          Salvar pasta
-        </button>
-      </div>
-
-      <div className="max-w-xl rounded border border-slate-200 bg-slate-50 px-3 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          PDF padrão de prova (modo e-mail)
-        </p>
-        <p className="mt-1 text-[10px] text-slate-500">
-          Opcional. Quando cadastrado e o modo Prova e-mail estiver ativo, a prova
-          usa este PDF: a página 1 do BaseSefoc entra na área BordaF e o carimbo
-          recebe os dados da OS.
-        </p>
-        <p className="mt-2 font-mono text-[11px] text-slate-700">
-          {templateFileName ? `Atual: ${templateFileName}` : "Nenhum PDF cadastrado."}
-        </p>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            setLocalMsg(null);
-            uploadTemplateMutation.mutate(file);
-          }}
-        />
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-1 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
-            disabled={saving}
-            onClick={() => fileInputRef.current?.click()}
+          <Field
+            className="mt-4"
+            label="Nome de exibição"
+            htmlFor={`pw-nome-${modelo.id}`}
+            hint="Em branco + salvar = volta ao nome automático (produto + frente/verso + cores). Enter salva · Esc desfaz."
           >
-            {uploadTemplateMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            <div className="pw-input-group">
+              <input
+                id={`pw-nome-${modelo.id}`}
+                type="text"
+                className="pw-input"
+                value={nome}
+                maxLength={255}
+                placeholder="Nome exibido na página Papelaria"
+                onChange={(e) => {
+                  setNome(e.target.value);
+                  setErro("nome");
+                }}
+                onKeyDown={inputKeys(dirtyNome, () => saveNomeMutation.mutate(), () => setNome(modelo.nome_exibicao))}
+              />
+              {dirtyNome ? (
+                <button
+                  type="button"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                  title="Desfazer alteração"
+                  aria-label="Desfazer alteração do nome"
+                  onClick={() => setNome(modelo.nome_exibicao)}
+                >
+                  <RotateCcw className="size-3.5" aria-hidden />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--save sagra-btn--sm"
+                disabled={!dirtyNome || saving}
+                onClick={() => saveNomeMutation.mutate()}
+              >
+                {saveNomeMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Save className="size-3.5" aria-hidden />
+                )}
+                Salvar
+              </button>
+            </div>
+          </Field>
+          {erros.nome ? <InlineMessage tone="error" className="mt-2">{erros.nome}</InlineMessage> : null}
+        </PanelCard>
+
+        {/* Pasta de imposição */}
+        <PanelCard
+          icon={<FolderOpen className="size-3.5" aria-hidden />}
+          title="Pasta do PDF de imposição"
+          description="Onde o botão Imposição grava o PDF gerado."
+          actions={
+            (modelo.pasta_imposicao ?? "").trim() ? (
+              <StatusPill tone="ok">Personalizada</StatusPill>
             ) : (
-              <Upload className="size-3.5" aria-hidden />
-            )}
-            {templateFileName ? "Substituir PDF" : "Enviar PDF"}
-          </button>
-          {templateFileName ? (
+              <StatusPill tone="muted">Pasta Sefoc da OS</StatusPill>
+            )
+          }
+        >
+          <Field
+            label="Caminho UNC"
+            htmlFor={`pw-pasta-${modelo.id}`}
+            hint="Caminho absoluto. Em branco = pasta Sefoc da OS."
+          >
+            <div className="pw-input-group">
+              <input
+                id={`pw-pasta-${modelo.id}`}
+                type="text"
+                className="pw-input font-mono"
+                value={pastaImposicao}
+                maxLength={512}
+                placeholder="\\redecamara\DfsData\..."
+                onChange={(e) => {
+                  setPastaImposicao(e.target.value);
+                  setErro("pasta");
+                }}
+                onKeyDown={inputKeys(
+                  dirtyPasta,
+                  () => savePastaMutation.mutate(),
+                  () => setPastaImposicao(modelo.pasta_imposicao ?? ""),
+                )}
+              />
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--save sagra-btn--sm"
+                disabled={!dirtyPasta || saving}
+                onClick={() => savePastaMutation.mutate()}
+              >
+                {savePastaMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Save className="size-3.5" aria-hidden />
+                )}
+                Salvar
+              </button>
+            </div>
+          </Field>
+          {erros.pasta ? <InlineMessage tone="error" className="mt-2">{erros.pasta}</InlineMessage> : null}
+        </PanelCard>
+
+        {/* PDF padrão de prova (modo e-mail) */}
+        <PanelCard
+          icon={<FileText className="size-3.5" aria-hidden />}
+          title="PDF padrão de prova (modo e-mail)"
+          description="Opcional. No modo Prova e-mail, a página 1 do BaseSefoc entra na área BordaF e o carimbo recebe os dados da OS."
+          actions={
+            templateFileName ? <StatusPill tone="ok">Cadastrado</StatusPill> : <StatusPill tone="muted">Não cadastrado</StatusPill>
+          }
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              setErro("template");
+              uploadTemplateMutation.mutate(file);
+            }}
+          />
+          <div className="pw-file-row">
+            <FileText className="size-4 shrink-0 text-slate-400" aria-hidden />
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-700" title={templatePath || undefined}>
+              {templateFileName ?? "Nenhum PDF cadastrado"}
+            </span>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                disabled={saving}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploadTemplateMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="size-3.5" aria-hidden />
+                )}
+                {templateFileName ? "Substituir" : "Enviar PDF"}
+              </button>
+              {templateFileName ? (
+                <button
+                  type="button"
+                  className="sagra-btn sagra-btn--delete-outline sagra-btn--sm"
+                  disabled={saving}
+                  onClick={() => {
+                    if (!window.confirm("Remover o PDF padrão de prova deste modelo?")) return;
+                    setErro("template");
+                    clearTemplateMutation.mutate();
+                  }}
+                >
+                  {clearTemplateMutation.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Trash2 className="size-3.5" aria-hidden />
+                  )}
+                  Remover
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {erros.template ? <InlineMessage tone="error" className="mt-2">{erros.template}</InlineMessage> : null}
+        </PanelCard>
+
+        {/* Zona de perigo */}
+        <PanelCard
+          className="pw-dados-grid__wide"
+          tone="danger"
+          icon={<Trash2 className="size-3.5" aria-hidden />}
+          title="Excluir modelo"
+          description="O modelo deixa de aparecer na Papelaria. Jobs já gerados não são afetados."
+          actions={
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
-              disabled={saving}
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    "Remover o PDF padrão de prova deste modelo?",
-                  )
-                ) {
-                  return;
-                }
-                setLocalMsg(null);
-                clearTemplateMutation.mutate();
-              }}
+              className="sagra-btn sagra-btn--delete-outline sagra-btn--sm"
+              disabled={deleteMutation.isPending || saving}
+              onClick={handleDelete}
             >
-              {clearTemplateMutation.isPending ? (
+              {deleteMutation.isPending ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
               ) : (
                 <Trash2 className="size-3.5" aria-hidden />
               )}
-              Remover
+              Excluir modelo
             </button>
-          ) : null}
-        </div>
-      </div>
-
-      {localMsg ? (
-        <p
-          className={cn(
-            "text-xs",
-            msgIsError ? "text-red-600" : "text-emerald-700",
-          )}
+          }
         >
-          {localMsg}
-        </p>
-      ) : null}
+          {erros.excluir ? <InlineMessage tone="error">{erros.excluir}</InlineMessage> : null}
+        </PanelCard>
+      </div>
     </div>
   );
 }

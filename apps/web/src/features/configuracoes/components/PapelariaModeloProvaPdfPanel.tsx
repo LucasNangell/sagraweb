@@ -1,6 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { AlertTriangle, CheckCircle2, Eye, Loader2, Save, Trash2, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  FileText,
+  Info,
+  Link2,
+  Loader2,
+  Save,
+  Trash2,
+  Type as TypeIcon,
+  Upload,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchPapelariaCorelModelo } from "@/api/papelaria";
@@ -16,6 +28,7 @@ import {
   type ProvaPdfModelo,
   type ProvaPdfTexto,
 } from "@/api/papelariaProvaPdf";
+import { toast } from "@/components/ui/toastStore";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
 import {
@@ -24,6 +37,7 @@ import {
   hidratarCampos,
   variaveisDosTemplates,
 } from "./provaPdfCampos";
+import { EmptyState, Field, InlineMessage, PanelCard, StatusPill } from "./PapelariaWorkspaceUi";
 
 export { variaveisDosTemplates } from "./provaPdfCampos";
 
@@ -187,24 +201,24 @@ export function PapelariaModeloProvaPdfPanel({
     const ligado = Boolean(c.template.trim());
     return (
       <>
-        <td className="px-2 py-1.5">
+        <div className="pw-map-row__cell" data-label="Template do campo (vazio = fixo)">
           <textarea
-            className="w-full rounded border border-slate-300 px-1.5 py-1 font-mono text-[11px]"
+            className="pw-input pw-input--sm font-mono"
             rows={Math.max(1, Math.min(5, c.template.split("\n").length))}
             placeholder="ex.: {nome_deputado}"
+            aria-label={`Template para ${c.marcador}`}
             value={c.template}
             onChange={(e) => opts.onChange({ template: e.target.value })}
             data-testid={opts.testId}
           />
-        </td>
-        <td className="px-2 py-1.5">
+        </div>
+        <div className="pw-map-row__cell" data-label="Alinhamento">
           <select
-            className="rounded border border-slate-300 px-1 py-1 text-[11px]"
+            className="pw-input pw-input--sm"
+            aria-label={`Alinhamento de ${c.marcador}`}
             value={c.alinhamento}
             disabled={!ligado}
-            onChange={(e) =>
-              opts.onChange({ alinhamento: e.target.value as ProvaPdfAlinhamento })
-            }
+            onChange={(e) => opts.onChange({ alinhamento: e.target.value as ProvaPdfAlinhamento })}
           >
             {ALINHAMENTOS.map((a) => (
               <option key={a.id} value={a.id}>
@@ -214,10 +228,11 @@ export function PapelariaModeloProvaPdfPanel({
               </option>
             ))}
           </select>
-        </td>
-        <td className="px-2 py-1.5">
+        </div>
+        <div className="pw-map-row__cell" data-label="Várias linhas">
           <select
-            className="rounded border border-slate-300 px-1 py-1 text-[11px]"
+            className="pw-input pw-input--sm"
+            aria-label={`Crescimento de ${c.marcador}`}
             value={c.ancora}
             disabled={!ligado}
             onChange={(e) => opts.onChange({ ancora: e.target.value as ProvaPdfAncora })}
@@ -230,7 +245,7 @@ export function PapelariaModeloProvaPdfPanel({
               </option>
             ))}
           </select>
-          <label className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
+          <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-600">
             <input
               type="checkbox"
               checked={c.reduzir_para_caber}
@@ -239,321 +254,400 @@ export function PapelariaModeloProvaPdfPanel({
             />
             Reduzir para caber
           </label>
-        </td>
+        </div>
       </>
     );
   };
 
+  const fontes = query.data?.analise?.fontes ?? [];
+  const fontesComProblema = fontes.filter((f) => !(f.editavel && f.completa)).length;
+  const copiarVariavel = (key: string) => {
+    const texto = `{${key}}`;
+    try {
+      void navigator.clipboard?.writeText(texto).then(
+        () => toast.success(`${texto} copiado.`),
+        () => undefined,
+      );
+    } catch {
+      /* clipboard indisponível (contexto não seguro) */
+    }
+  };
+
+  const salvar = () => {
+    if (
+      camposLigados.length === 0 &&
+      (query.data?.campos?.length ?? 0) > 0 &&
+      !window.confirm(
+        "Nenhum campo ligado. Isso remove todos os campos salvos deste modelo. Continuar?",
+      )
+    ) {
+      return;
+    }
+    saveMutation.mutate(camposLigados);
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="papelaria-prova-pdf-panel">
-      <div className="rounded border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-900">
-        Usado no modo de geração <strong>Prova PDF</strong>. Exporte o modelo do CorelDRAW para PDF com{" "}
-        <strong>«Incorporar fontes no documento»</strong> e <strong>sem subconjunto de fontes</strong>, com os
-        textos como texto (não curvas). Ligue cada texto variável a um template de campo; os demais ficam fixos.
-        Use <code className="rounded bg-sky-100 px-1">**trecho**</code> ou{" "}
-        <code className="rounded bg-sky-100 px-1">**{"{variavel}"}**</code> para negrito — o PDF do modelo
-        precisa ter a fonte Bold da mesma família incorporada. Linha do template cujos campos ficarem vazios
-        sai da prova inteira, com o texto fixo dela (ex.: «Fone: »).
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          className="hidden"
-          data-testid="papelaria-prova-pdf-input"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) uploadMutation.mutate(file);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          className="sagra-btn sagra-btn--primary sagra-btn--sm"
-          disabled={ocupado}
-          onClick={() => inputRef.current?.click()}
+    <div className="pw-panel pw-scroll" data-testid="papelaria-prova-pdf-panel">
+      <div className="pw-prova">
+        {/* PDF do modelo */}
+        <PanelCard
+          icon={<FileText className="size-3.5" aria-hidden />}
+          title="PDF do modelo"
+          description={
+            <>
+              Usado no modo de geração <strong>Prova PDF</strong>. Ligue cada texto variável a um template de
+              campo; os demais ficam fixos.
+            </>
+          }
+          actions={
+            query.data?.tem_pdf ? (
+              <StatusPill tone="ok">PDF cadastrado</StatusPill>
+            ) : query.isPending ? null : (
+              <StatusPill tone="muted">Sem PDF — usa CorelDRAW</StatusPill>
+            )
+          }
         >
-          {uploadMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-          {query.data?.tem_pdf ? "Trocar PDF do modelo" : "Enviar PDF do modelo"}
-        </button>
-        {query.data?.tem_pdf ? (
-          <>
-            <span className="font-mono text-[11px] text-slate-600">{query.data.arquivo}</span>
-            <button
-              type="button"
-              className="sagra-btn sagra-btn--outline sagra-btn--sm text-red-700"
-              disabled={ocupado}
-              onClick={() => {
-                if (window.confirm("Remover o PDF deste modelo? No modo Prova PDF ele volta a ser gerado pelo CorelDRAW.")) {
-                  deleteMutation.mutate();
-                }
-              }}
-            >
-              <Trash2 className="size-3.5" /> Remover
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      {msg ? (
-        <p className={cn("text-xs", msg.erro ? "text-sagra-danger" : "text-emerald-700")}>{msg.texto}</p>
-      ) : null}
-
-      {query.isPending ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500">
-          <Loader2 className="size-4 animate-spin" /> Lendo o PDF do modelo…
-        </p>
-      ) : null}
-
-      {query.data?.analise ? (
-        <>
-          <div className="space-y-1" data-testid="papelaria-prova-pdf-fontes">
-            {query.data.analise.fontes.map((f) => {
-              const ok = f.editavel && f.completa;
-              return (
-                <p
-                  key={f.nome}
-                  className={cn("flex items-center gap-1.5 text-xs", ok ? "text-emerald-800" : "text-amber-800")}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            data-testid="papelaria-prova-pdf-input"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadMutation.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <div className="pw-file-row">
+            <FileText className="size-4 shrink-0 text-slate-400" aria-hidden />
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-700">
+              {query.isPending ? "Lendo o PDF do modelo…" : query.data?.tem_pdf ? query.data.arquivo : "Nenhum PDF enviado"}
+            </span>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                disabled={ocupado}
+                onClick={() => inputRef.current?.click()}
+              >
+                {uploadMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="size-3.5" aria-hidden />
+                )}
+                {query.data?.tem_pdf ? "Trocar PDF" : "Enviar PDF do modelo"}
+              </button>
+              {query.data?.tem_pdf ? (
+                <button
+                  type="button"
+                  className="sagra-btn sagra-btn--delete-outline sagra-btn--sm"
+                  disabled={ocupado}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Remover o PDF deste modelo? No modo Prova PDF ele volta a ser gerado pelo CorelDRAW.",
+                      )
+                    ) {
+                      deleteMutation.mutate();
+                    }
+                  }}
                 >
-                  {ok ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
-                  <span className="font-mono">{f.nome}</span>
-                  {ok
-                    ? ` — incorporada inteira (${f.glifos} glifos)`
-                    : f.editavel
-                      ? ` — incompleta, faltam: ${f.faltam.join(" ")} (exporte sem subconjunto)`
-                      : " — não editável (exporte com «Incorporar fontes no documento»)"}
-                </p>
-              );
-            })}
-          </div>
-
-          {camposLigados.length ? (
-            <div
-              className="sticky top-0 z-10 space-y-2 rounded border border-emerald-200 bg-emerald-50/95 p-3 shadow-sm backdrop-blur-sm"
-              data-testid="papelaria-prova-pdf-campos-fixos"
-            >
-              <p className="text-xs font-semibold text-emerald-900">
-                Campos configurados ({camposLigados.length}) — permanecem editáveis após salvar/prévia
-              </p>
-              <ul className="space-y-2">
-                {camposLigados.map((c) => (
-                  <li
-                    key={chaveTexto(c)}
-                    className="rounded border border-emerald-100 bg-white px-2 py-1.5"
-                  >
-                    <p className="text-[10px] font-medium text-slate-600">
-                      {c.marcador}
-                      <span className="ml-1 font-normal text-slate-400">· pág. {c.pagina}</span>
-                    </p>
-                    <textarea
-                      className="mt-1 w-full rounded border border-slate-300 px-1.5 py-1 font-mono text-[11px]"
-                      rows={Math.max(1, Math.min(4, c.template.split("\n").length))}
-                      value={c.template}
-                      onChange={(e) => atualizar(c, { template: e.target.value })}
-                      data-testid={`papelaria-prova-pdf-fixos-${c.marcador}`}
-                    />
-                  </li>
-                ))}
-              </ul>
+                  <Trash2 className="size-3.5" aria-hidden /> Remover
+                </button>
+              ) : null}
             </div>
-          ) : null}
-
-          <div className="overflow-x-auto rounded border border-slate-200">
-            <table className="w-full min-w-[720px] text-xs" data-testid="papelaria-prova-pdf-textos">
-              <thead className="bg-slate-50 text-left text-[10px] uppercase text-slate-500">
-                <tr>
-                  <th className="px-2 py-1.5">Texto no PDF</th>
-                  <th className="px-2 py-1.5">Template do campo (vazio = fixo)</th>
-                  <th className="px-2 py-1.5">Alinhamento</th>
-                  <th className="px-2 py-1.5">Várias linhas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {textos.map((t) => {
-                  const c = campos[chaveTexto(t)] ?? campoVazio(t);
-                  const ligado = Boolean(c.template.trim());
-                  return (
-                    <tr
-                      key={chaveTexto(t)}
-                      className={cn(
-                        "border-t border-slate-100 align-top",
-                        ligado && "bg-emerald-50/40",
-                      )}
-                    >
-                      <td className="px-2 py-1.5">
-                        <p className="font-medium text-slate-800">{t.marcador}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {t.fonte} · {t.tamanho} pt · pág. {t.pagina}
-                        </p>
-                      </td>
-                      {renderCampoControls(c, {
-                        alinhamentoSugerido: t.alinhamento_sugerido,
-                        ancoraSugerida: t.ancora_sugerida,
-                        onChange: (patch) => atualizar(t, patch),
-                        testId: `papelaria-prova-pdf-template-${t.marcador}`,
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
 
-          {orfaosVisiveis.length ? (
-            <div
-              className="space-y-2 rounded border border-amber-200 bg-amber-50/50 p-3"
-              data-testid="papelaria-prova-pdf-orfaos"
-            >
-              <p className="text-xs font-semibold text-amber-900">
-                Campos salvos sem texto correspondente no PDF
-              </p>
-              <p className="text-[11px] text-amber-800">
-                O marcador não aparece mais na análise atual (PDF trocado ou texto de exemplo
-                diferente). Edite o template ou remova o vínculo.
-              </p>
-              <div className="overflow-x-auto rounded border border-amber-200 bg-white">
-                <table className="w-full min-w-[720px] text-xs">
-                  <thead className="bg-amber-50 text-left text-[10px] uppercase text-amber-800">
-                    <tr>
-                      <th className="px-2 py-1.5">Marcador salvo</th>
-                      <th className="px-2 py-1.5">Template</th>
-                      <th className="px-2 py-1.5">Alinhamento</th>
-                      <th className="px-2 py-1.5">Várias linhas</th>
-                      <th className="px-2 py-1.5" />
-                    </tr>
-                  </thead>
-                  <tbody>
+          <details className="pw-details mt-3">
+            <summary>
+              <Info className="size-3.5" aria-hidden /> Como exportar o PDF do CorelDRAW
+            </summary>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-[11px] leading-relaxed text-slate-600">
+              <li>
+                Marque <strong>«Incorporar fontes no documento»</strong> e <strong>desative o subconjunto de fontes</strong>.
+              </li>
+              <li>Mantenha os textos como texto (não converta em curvas).</li>
+              <li>
+                Negrito: use <code className="pw-code-inline">**trecho**</code> ou{" "}
+                <code className="pw-code-inline">**{"{variavel}"}**</code> — o PDF precisa ter a fonte Bold da mesma
+                família incorporada.
+              </li>
+              <li>
+                Linha do template cujos campos ficarem vazios sai inteira da prova, com o texto fixo dela (ex.: «Fone: »).
+              </li>
+            </ul>
+          </details>
+        </PanelCard>
+
+        {msg ? <InlineMessage tone={msg.erro ? "error" : "ok"}>{msg.texto}</InlineMessage> : null}
+
+        {query.data?.analise ? (
+          <div className="pw-prova__grid">
+            <div className="pw-prova__main">
+              {/* Fontes */}
+              <PanelCard
+                icon={<TypeIcon className="size-3.5" aria-hidden />}
+                title="Fontes incorporadas"
+                actions={
+                  fontesComProblema ? (
+                    <StatusPill tone="warn">{fontesComProblema} com problema</StatusPill>
+                  ) : (
+                    <StatusPill tone="ok">Todas OK</StatusPill>
+                  )
+                }
+              >
+                <ul className="space-y-1" data-testid="papelaria-prova-pdf-fontes">
+                  {fontes.map((f) => {
+                    const ok = f.editavel && f.completa;
+                    return (
+                      <li
+                        key={f.nome}
+                        className={cn("flex items-start gap-1.5 text-xs", ok ? "text-emerald-800" : "text-amber-800")}
+                      >
+                        {ok ? (
+                          <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden />
+                        ) : (
+                          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+                        )}
+                        <span className="min-w-0">
+                          <span className="font-mono">{f.nome}</span>
+                          {ok
+                            ? ` — incorporada inteira (${f.glifos} glifos)`
+                            : f.editavel
+                              ? ` — incompleta, faltam: ${f.faltam.join(" ")} (exporte sem subconjunto)`
+                              : " — não editável (exporte com «Incorporar fontes no documento»)"}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </PanelCard>
+
+              {camposLigados.length ? (
+                <div className="pw-prova__ligados" data-testid="papelaria-prova-pdf-campos-fixos">
+                  <p className="text-xs font-semibold text-emerald-900">
+                    Campos configurados ({camposLigados.length}) — permanecem editáveis após salvar/prévia
+                  </p>
+                  <ul className="pw-prova__ligados-list pw-scroll">
+                    {camposLigados.map((c) => (
+                      <li key={chaveTexto(c)} className="rounded border border-emerald-100 bg-white px-2 py-1.5">
+                        <p className="text-[10px] font-medium text-slate-600">
+                          {c.marcador}
+                          <span className="ml-1 font-normal text-slate-400">· pág. {c.pagina}</span>
+                        </p>
+                        <textarea
+                          className="pw-input pw-input--sm mt-1 font-mono"
+                          rows={Math.max(1, Math.min(4, c.template.split("\n").length))}
+                          aria-label={`Template de ${c.marcador}`}
+                          value={c.template}
+                          onChange={(e) => atualizar(c, { template: e.target.value })}
+                          data-testid={`papelaria-prova-pdf-fixos-${c.marcador}`}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {/* Mapeamento texto → campo */}
+              <PanelCard
+                icon={<Link2 className="size-3.5" aria-hidden />}
+                title="Textos do PDF"
+                description="Template vazio = texto fixo. Linhas ligadas ficam destacadas."
+                actions={
+                  <StatusPill tone={camposLigados.length ? "info" : "muted"}>
+                    {camposLigados.length}/{textos.length} ligados
+                  </StatusPill>
+                }
+                bodyClassName="p-0"
+              >
+                <div className="pw-map" role="table" data-testid="papelaria-prova-pdf-textos">
+                  <div className="pw-map-row pw-map-row--head" role="row">
+                    <span role="columnheader">Texto no PDF</span>
+                    <span role="columnheader">Template do campo (vazio = fixo)</span>
+                    <span role="columnheader">Alinhamento</span>
+                    <span role="columnheader">Várias linhas</span>
+                  </div>
+                  {textos.map((t) => {
+                    const c = campos[chaveTexto(t)] ?? campoVazio(t);
+                    const ligado = Boolean(c.template.trim());
+                    return (
+                      <div key={chaveTexto(t)} role="row" className={cn("pw-map-row", ligado && "is-linked")}>
+                        <div className="pw-map-row__cell pw-map-row__source">
+                          <p className="font-medium text-slate-800">{t.marcador}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {t.fonte} · {t.tamanho} pt · pág. {t.pagina}
+                          </p>
+                        </div>
+                        {renderCampoControls(c, {
+                          alinhamentoSugerido: t.alinhamento_sugerido,
+                          ancoraSugerida: t.ancora_sugerida,
+                          onChange: (patch) => atualizar(t, patch),
+                          testId: `papelaria-prova-pdf-template-${t.marcador}`,
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </PanelCard>
+
+              {orfaosVisiveis.length ? (
+                <PanelCard
+                  tone="danger"
+                  className="pw-card--warn"
+                  icon={<AlertTriangle className="size-3.5" aria-hidden />}
+                  title="Campos salvos sem texto correspondente no PDF"
+                  description="O marcador não aparece mais na análise atual (PDF trocado ou texto de exemplo diferente). Edite o template ou remova o vínculo."
+                  bodyClassName="p-0"
+                >
+                  <div className="pw-map pw-map--orfaos" role="table" data-testid="papelaria-prova-pdf-orfaos">
+                    <div className="pw-map-row pw-map-row--head" role="row">
+                      <span role="columnheader">Marcador salvo</span>
+                      <span role="columnheader">Template</span>
+                      <span role="columnheader">Alinhamento</span>
+                      <span role="columnheader">Várias linhas</span>
+                      <span role="columnheader" className="sr-only">
+                        Ações
+                      </span>
+                    </div>
                     {orfaosVisiveis.map((c) => {
                       const chave = chaveTexto(c);
                       if (textoKeys.has(chave)) return null;
                       return (
-                        <tr key={chave} className="border-t border-amber-100 align-top">
-                          <td className="px-2 py-1.5">
+                        <div key={chave} role="row" className="pw-map-row">
+                          <div className="pw-map-row__cell pw-map-row__source">
                             <p className="font-medium text-slate-800">{c.marcador}</p>
                             <p className="text-[10px] text-slate-500">pág. {c.pagina}</p>
-                          </td>
+                          </div>
                           {renderCampoControls(c, {
                             onChange: (patch) => atualizar(c, patch),
                             testId: `papelaria-prova-pdf-orfao-${c.marcador}`,
                           })}
-                          <td className="px-2 py-1.5">
+                          <div className="pw-map-row__cell">
                             <button
                               type="button"
-                              className="sagra-btn sagra-btn--outline sagra-btn--sm text-red-700"
+                              className="sagra-btn sagra-btn--delete-outline sagra-btn--xs"
                               onClick={() => removerOrfao(c)}
                             >
                               Remover
                             </button>
-                          </td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          {variaveisModelo.length ? (
-            <p className="text-[11px] text-slate-500">
-              Variáveis do modelo:{" "}
-              {variaveisModelo.map((v) => (
-                <code key={v.key} className="mr-1 rounded bg-slate-100 px-1" title={v.label}>
-                  {`{${v.key}}`}
-                </code>
-              ))}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="sagra-btn sagra-btn--primary sagra-btn--sm"
-              disabled={ocupado}
-              onClick={() => {
-                if (
-                  camposLigados.length === 0 &&
-                  (query.data?.campos?.length ?? 0) > 0 &&
-                  !window.confirm(
-                    "Nenhum campo ligado. Isso remove todos os campos salvos deste modelo. Continuar?",
-                  )
-                ) {
-                  return;
-                }
-                saveMutation.mutate(camposLigados);
-              }}
-              data-testid="papelaria-prova-pdf-salvar"
-            >
-              {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-              Salvar campos ({camposLigados.length})
-            </button>
-          </div>
-
-          {camposLigados.length || previa ? (
-            <div className="space-y-2 rounded border border-slate-200 p-3">
-              <p className="text-xs font-semibold text-secondary-blue">Prévia com valores de teste</p>
-              {camposLigados.length ? (
-                <>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {variaveisTeste.map((v) => (
-                      <label key={v} className="flex flex-col gap-0.5 text-[11px] text-slate-600">
-                        <span className="font-mono">{`{${v}}`}</span>
-                        <textarea
-                          rows={1}
-                          className="rounded border border-slate-300 px-1.5 py-1 text-xs"
-                          value={teste[v] ?? ""}
-                          onChange={(e) => setTeste((p) => ({ ...p, [v]: e.target.value }))}
-                        />
-                      </label>
-                    ))}
                   </div>
-                  <button
-                    type="button"
-                    className="sagra-btn sagra-btn--outline sagra-btn--sm"
-                    disabled={ocupado || !camposLigados.length}
-                    onClick={() =>
-                      previaMutation.mutate({
-                        lista: camposLigados,
-                        dadosTeste: teste,
-                      })
-                    }
-                  >
-                    {previaMutation.isPending ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Eye className="size-3.5" />
-                    )}
-                    Gerar prévia
-                  </button>
-                </>
+                </PanelCard>
               ) : null}
-              {previa ? (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-slate-500">Gerada no servidor em {previa.ms} ms.</p>
-                  {(previa.avisos ?? []).map((aviso, i) => (
-                    <p
-                      key={i}
-                      className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900"
+
+              {variaveisModelo.length ? (
+                <div className="pw-vars">
+                  <span className="text-[11px] font-medium text-slate-500">Variáveis do modelo (clique para copiar):</span>
+                  {variaveisModelo.map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      className="pw-chip pw-chip--action font-mono"
+                      title={v.label}
+                      onClick={() => copiarVariavel(v.key)}
                     >
-                      {aviso}
-                    </p>
-                  ))}
-                  {previa.paginas.map((src, i) => (
-                    <img
-                      key={i}
-                      src={src}
-                      alt={`Prévia da página ${i + 1}`}
-                      className="max-w-full rounded border border-slate-200 shadow-sm"
-                    />
+                      {`{${v.key}}`}
+                    </button>
                   ))}
                 </div>
               ) : null}
+
+              <div className="pw-savebar pw-savebar--sticky">
+                <span className="pw-savebar__clean">
+                  {camposLigados.length
+                    ? `${camposLigados.length} campo(s) ligado(s) ao PDF`
+                    : "Nenhum texto ligado — a prova sairá igual ao PDF"}
+                </span>
+                <button
+                  type="button"
+                  className="sagra-btn sagra-btn--save sagra-btn--sm"
+                  disabled={ocupado}
+                  onClick={salvar}
+                  data-testid="papelaria-prova-pdf-salvar"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Save className="size-3.5" aria-hidden />
+                  )}
+                  Salvar campos ({camposLigados.length})
+                </button>
+              </div>
             </div>
-          ) : null}
-        </>
-      ) : null}
+
+            {/* Prévia */}
+            <aside className="pw-prova__aside">
+              <PanelCard
+                icon={<Eye className="size-3.5" aria-hidden />}
+                title="Prévia com valores de teste"
+                description={camposLigados.length ? "Salva os campos e gera a prova no servidor." : undefined}
+              >
+                {camposLigados.length ? (
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                      {variaveisTeste.map((v) => (
+                        <Field key={v} label={<span className="font-mono">{`{${v}}`}</span>}>
+                          <textarea
+                            rows={1}
+                            className="pw-input pw-input--sm"
+                            value={teste[v] ?? ""}
+                            onChange={(e) => setTeste((p) => ({ ...p, [v]: e.target.value }))}
+                          />
+                        </Field>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="sagra-btn sagra-btn--previa sagra-btn--sm w-full justify-center"
+                      disabled={ocupado || !camposLigados.length}
+                      onClick={() =>
+                        previaMutation.mutate({
+                          lista: camposLigados,
+                          dadosTeste: teste,
+                        })
+                      }
+                    >
+                      {previaMutation.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Eye className="size-3.5" aria-hidden />
+                      )}
+                      Gerar prévia
+                    </button>
+                  </div>
+                ) : !previa ? (
+                  <EmptyState title="Ligue ao menos um texto">
+                    Preencha o template de um texto do PDF para testar a prova aqui.
+                  </EmptyState>
+                ) : null}
+                {previa ? (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] text-slate-500">Gerada no servidor em {previa.ms} ms.</p>
+                    {(previa.avisos ?? []).map((aviso, i) => (
+                      <InlineMessage key={i} tone="warn">
+                        {aviso}
+                      </InlineMessage>
+                    ))}
+                    {previa.paginas.map((src, i) => (
+                      <img
+                        key={i}
+                        src={src}
+                        alt={`Prévia da página ${i + 1}`}
+                        className="max-w-full rounded border border-slate-200 shadow-sm"
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </PanelCard>
+            </aside>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

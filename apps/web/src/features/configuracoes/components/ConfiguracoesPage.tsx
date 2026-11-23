@@ -51,7 +51,13 @@ type ConfigTab =
 
 const TAB_META: Record<
   ConfigTab,
-  { label: string; description: string; icon: ReactNode }
+  {
+    label: string;
+    description: string;
+    icon: ReactNode;
+    /** Oculta o bloco de introdução (a própria aba já é autoexplicativa). */
+    hideIntro?: boolean;
+  }
 > = {
   analise: {
     label: "Scripts de pré-análise",
@@ -78,8 +84,9 @@ const TAB_META: Record<
   papelaria: {
     label: "Papelaria",
     description:
-      "Produtos de papelaria: modelos Corel, mockup 3D e prévia em tempo real. Monitoramento da fila do worker.",
+      "Modo de geração de provas, produtos e modelos Corel, mockup 3D, prévia, Prova PDF, imposição e fila do worker.",
     icon: <Printer className="size-3.5" aria-hidden />,
+    hideIntro: true,
   },
   credenciais_depol: {
     label: "Credenciais DEPOL",
@@ -171,13 +178,15 @@ export function ConfiguracoesPage() {
           </div>
         </header>
 
-        <div className="configuracoes-tab-intro shrink-0" role="note">
-          <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-            {activeMeta.icon}
-            {activeMeta.label}
-          </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{activeMeta.description}</p>
-        </div>
+        {activeMeta.hideIntro ? null : (
+          <div className="configuracoes-tab-intro shrink-0" role="note">
+            <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+              {activeMeta.icon}
+              {activeMeta.label}
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{activeMeta.description}</p>
+          </div>
+        )}
 
         <div className="configuracoes-tab-panel pb-4">
           <div

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@sagra/ui";
+import { ArrowLeft, CheckCircle2, FileUp, Loader2, UploadCloud, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import {
   createPapelariaModeloFromCdr,
@@ -16,14 +17,17 @@ import {
 } from "@/features/papelaria/preview";
 import { PAPELARIA_MOCKUP_CONFIGS } from "@/features/papelaria/mockup/papelariaMockupConfigs";
 
+import { Field, InlineMessage, normalizeSearch, SegmentedControl } from "./PapelariaWorkspaceUi";
+
 const PRESET_OPTIONS = [
-  { id: "folha_a4_simples", label: "Folha simples" },
-  { id: "cartao_visita_frente", label: "Cartão simples" },
-  { id: "cartao_visita_frente_verso", label: "Cartão frente e verso" },
-  { id: "cartao_duplo_retrato_lateral", label: "Cartão dobrado lateral" },
-  { id: "folha_simples", label: "Fallback genérico" },
+  { id: "folha_a4_simples", label: "Folha simples", hint: "Folha única, sem dobra" },
+  { id: "cartao_visita_frente", label: "Cartão simples", hint: "Cartão com uma face" },
+  { id: "cartao_visita_frente_verso", label: "Cartão frente e verso", hint: "Cartão que gira para mostrar o verso" },
+  { id: "cartao_duplo_retrato_lateral", label: "Cartão dobrado lateral", hint: "Dobra vertical, abre como livro" },
+  { id: "folha_simples", label: "Fallback genérico", hint: "Preset neutro para casos não previstos" },
 ] as const;
 
+const FRENTE_VERSO = ["Frente", "Frente e Verso", "Verso"] as const;
 const CORES_OPCOES = ["Policromia", "Relevo seco", "Port/Inglês"];
 
 const INSPECT_POLL_MS = 2000;
@@ -35,10 +39,13 @@ function isInspectPending(status: PapelariaCdrInspectResult["status"]): boolean 
 
 export function PapelariaNovoModeloForm({
   lockedProduto,
+  produtosExistentes,
   onCreated,
   onCancel,
 }: {
   lockedProduto?: string | null;
+  /** Nomes já cadastrados — avisa quando o "novo" produto já existe. */
+  produtosExistentes?: string[];
   onCreated: (modelo: PapelariaAdminModelRecord) => void;
   onCancel?: () => void;
 }) {
@@ -59,6 +66,7 @@ export function PapelariaNovoModeloForm({
   );
   const [inspectLoading, setInspectLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const produtoFinal = (lockedProduto ?? produtoNovo).trim();
   const variaveisDetectadas = inspectResult?.variaveis ?? [];
@@ -69,6 +77,12 @@ export function PapelariaNovoModeloForm({
     () => Boolean(produtoFinal && cdrFile && !inspectLoading),
     [produtoFinal, cdrFile, inspectLoading],
   );
+
+  const produtoJaExiste = useMemo(() => {
+    if (lockedProduto || !produtoNovo.trim()) return null;
+    const alvo = normalizeSearch(produtoNovo);
+    return (produtosExistentes ?? []).find((p) => normalizeSearch(p) === alvo) ?? null;
+  }, [lockedProduto, produtoNovo, produtosExistentes]);
 
   useEffect(() => {
     return () => {
@@ -179,6 +193,7 @@ export function PapelariaNovoModeloForm({
 
     if (!file) {
       setInspectLoading(false);
+      if (fileRef.current) fileRef.current.value = "";
       return;
     }
 
@@ -210,162 +225,260 @@ export function PapelariaNovoModeloForm({
     }
   };
 
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".cdr")) {
+      setLocalError("Envie um arquivo CorelDRAW (.cdr).");
+      return;
+    }
+    void handleCdrChange(file);
+  };
+
+  const pendencia = !cdrFile
+    ? "Selecione o arquivo .cdr."
+    : !produtoFinal
+      ? "Informe o nome do produto."
+      : inspectLoading
+        ? "Aguardando a análise do arquivo…"
+        : null;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-800">
-          {lockedProduto ? "Novo modelo" : "Novo produto"}
-        </h3>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-          Envie o template Corel. O sistema registra o modelo com configurações iniciais de
-          mockup e prévia — ajuste-as em seguida nas abas do modelo.
-        </p>
-      </div>
+    <div className="pw-panel pw-scroll">
+      <div className="pw-form">
+        <div className="pw-form__header">
+          {onCancel ? (
+            <button
+              type="button"
+              className="pw-icon-btn"
+              aria-label="Voltar"
+              title="Voltar"
+              onClick={onCancel}
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+            </button>
+          ) : null}
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-slate-800">
+              {lockedProduto ? `Novo modelo em ${lockedProduto}` : "Novo produto"}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Envie o template CorelDRAW. O modelo é criado com mockup e prévia iniciais, que você
+              ajusta em seguida.
+            </p>
+          </div>
+        </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Produto
-          {lockedProduto ? (
-            <input
-              className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800"
-              value={lockedProduto}
-              readOnly
-            />
-          ) : (
-            <input
-              className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-              value={produtoNovo}
-              onChange={(e) => setProdutoNovo(e.target.value)}
-              placeholder="Nome do produto"
-            />
-          )}
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Frente / Verso
-          <select
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-            value={frenteVerso}
-            onChange={(e) => setFrenteVerso(e.target.value)}
-          >
-            <option value="Frente">Frente</option>
-            <option value="Frente e Verso">Frente e Verso</option>
-            <option value="Verso">Verso</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Cores
-          <select
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-            value={cores}
-            onChange={(e) => setCores(e.target.value)}
-          >
-            {CORES_OPCOES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Preset mockup inicial
-          <select
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-            value={presetId}
-            onChange={(e) =>
-              setPresetId(e.target.value as keyof typeof PAPELARIA_MOCKUP_CONFIGS)
-            }
-          >
-            {PRESET_OPTIONS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-slate-600 md:col-span-2">
-          Nome de exibição (opcional)
-          <input
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-            value={nomeExibicao}
-            onChange={(e) => setNomeExibicao(e.target.value)}
-            maxLength={255}
-            placeholder="Ex.: Cartão visita clássico — frente e verso"
-          />
-        </label>
-
-        <div className="flex flex-col gap-1 text-xs text-slate-600 md:col-span-2">
-          Arquivo .cdr
+        {/* 1. Arquivo */}
+        <fieldset className="pw-step">
+          <legend className="pw-step__legend">
+            <span className="pw-step__num">1</span> Arquivo Corel (.cdr)
+          </legend>
           <input
             ref={fileRef}
             type="file"
             accept=".cdr,application/x-coreldraw"
-            className="text-xs"
+            className="hidden"
             onChange={(e) => void handleCdrChange(e.target.files?.[0] ?? null)}
           />
           {cdrFile ? (
-            <span className="font-mono text-[10px] text-slate-500">{cdrFile.name}</span>
-          ) : null}
-          {inspectLoading ? (
-            <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-600">
-              <Loader2 className="size-3 animate-spin" aria-hidden />
-              Analisando objetos nomeados no CorelDRAW (worker)...
-            </span>
-          ) : null}
-          {!inspectLoading && inspectResult?.status === "completed" ? (
-            <div className="mt-1 space-y-1 rounded border border-emerald-200 bg-emerald-50/60 p-2 text-[10px] text-emerald-900">
-              <p>
-                <strong>{camposNomes.length}</strong> campo(s) Corel detectado(s)
-                {variaveisDetectadas.length > 0
-                  ? ` — variáveis: ${variaveisDetectadas.join(", ")}`
-                  : ""}
+            <div className="pw-file-row">
+              {inspectLoading ? (
+                <Loader2 className="size-4 shrink-0 animate-spin text-secondary-blue" aria-hidden />
+              ) : inspectResult?.status === "completed" ? (
+                <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden />
+              ) : (
+                <FileUp className="size-4 shrink-0 text-slate-400" aria-hidden />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-mono text-[11px] font-medium text-slate-800">{cdrFile.name}</p>
+                <p className="text-[10px] text-slate-500">
+                  {inspectLoading
+                    ? "Analisando objetos nomeados no CorelDRAW (worker)…"
+                    : inspectResult?.status === "completed"
+                      ? `${camposNomes.length} campo(s) Corel detectado(s)`
+                      : `${(cdrFile.size / 1024).toFixed(0)} KB`}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                onClick={() => fileRef.current?.click()}
+              >
+                Trocar
+              </button>
+              <button
+                type="button"
+                className="pw-icon-btn"
+                aria-label="Remover arquivo"
+                title="Remover arquivo"
+                onClick={() => void handleCdrChange(null)}
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              className={cn("pw-dropzone", dragOver && "is-over")}
+              onClick={() => fileRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileRef.current?.click();
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+            >
+              <UploadCloud className="size-6 text-slate-400" aria-hidden />
+              <p className="text-xs font-semibold text-slate-700">
+                Arraste o .cdr aqui ou <span className="text-secondary-blue underline">escolha o arquivo</span>
               </p>
-              {camposNomes.length > 0 ? (
-                <ul className="list-inside list-disc font-mono text-[10px]">
+              <p className="text-[10px] text-slate-500">
+                O worker CorelDRAW lê os objetos nomeados para montar os campos da prévia.
+              </p>
+            </div>
+          )}
+
+          {!inspectLoading && inspectResult?.status === "completed" ? (
+            camposNomes.length > 0 ? (
+              <div className="pw-detected">
+                <p className="text-[11px] font-semibold text-emerald-900">
+                  {camposNomes.length} campo(s) detectado(s)
+                  {variaveisDetectadas.length > 0 ? ` · variáveis: ${variaveisDetectadas.join(", ")}` : ""}
+                </p>
+                <ul className="mt-1.5 flex flex-wrap gap-1">
                   {camposNomes.map((nome) => (
-                    <li key={nome}>{nome}</li>
+                    <li key={nome} className="pw-chip font-mono">
+                      {nome}
+                    </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-amber-800">
-                  Nenhum objeto nomeado com texto encontrado. O modelo será criado com campos
-                  padrão.
-                </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <InlineMessage tone="warn" className="mt-2">
+                Nenhum objeto nomeado com texto encontrado. O modelo será criado com campos padrão.
+              </InlineMessage>
+            )
           ) : null}
+        </fieldset>
+
+        {/* 2. Identificação */}
+        <fieldset className="pw-step">
+          <legend className="pw-step__legend">
+            <span className="pw-step__num">2</span> Identificação
+          </legend>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Produto" htmlFor="pw-novo-produto">
+              {lockedProduto ? (
+                <input id="pw-novo-produto" className="pw-input" value={lockedProduto} readOnly />
+              ) : (
+                <input
+                  id="pw-novo-produto"
+                  className="pw-input"
+                  value={produtoNovo}
+                  onChange={(e) => setProdutoNovo(e.target.value)}
+                  placeholder="Ex.: Cartão de visita"
+                  autoComplete="off"
+                />
+              )}
+            </Field>
+            <Field label="Nome de exibição (opcional)" htmlFor="pw-novo-nome">
+              <input
+                id="pw-novo-nome"
+                className="pw-input"
+                value={nomeExibicao}
+                onChange={(e) => setNomeExibicao(e.target.value)}
+                maxLength={255}
+                placeholder="Ex.: Cartão visita clássico — frente e verso"
+              />
+            </Field>
+            <Field label="Frente / verso">
+              <SegmentedControl
+                ariaLabel="Frente / verso"
+                size="sm"
+                value={frenteVerso as (typeof FRENTE_VERSO)[number]}
+                onChange={setFrenteVerso}
+                options={FRENTE_VERSO.map((v) => ({ id: v, label: v }))}
+              />
+            </Field>
+            <Field label="Cores">
+              <SegmentedControl
+                ariaLabel="Cores"
+                size="sm"
+                value={cores}
+                onChange={setCores}
+                options={CORES_OPCOES.map((c) => ({ id: c, label: c }))}
+              />
+            </Field>
+          </div>
+          {produtoJaExiste ? (
+            <InlineMessage tone="info" className="mt-2">
+              Já existe o produto “{produtoJaExiste}”. O modelo será criado como nova variação dele se
+              o nome for idêntico.
+            </InlineMessage>
+          ) : null}
+        </fieldset>
+
+        {/* 3. Mockup */}
+        <fieldset className="pw-step">
+          <legend className="pw-step__legend">
+            <span className="pw-step__num">3</span> Mockup 3D inicial
+          </legend>
+          <div className="pw-preset-grid" role="radiogroup" aria-label="Preset de mockup inicial">
+            {PRESET_OPTIONS.map((p) => {
+              const active = presetId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={cn("pw-preset", active && "is-active")}
+                  onClick={() => setPresetId(p.id)}
+                >
+                  <span className="pw-preset__label">{p.label}</span>
+                  <span className="pw-preset__hint">{p.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {localError ? <InlineMessage tone="error">{localError}</InlineMessage> : null}
+
+        <div className="pw-form__footer">
+          <span className="text-[11px] text-slate-500">{pendencia ?? "Tudo pronto para criar o modelo."}</span>
+          <div className="flex flex-wrap gap-2">
+            {onCancel ? (
+              <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={onCancel}>
+                Cancelar
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="sagra-btn sagra-btn--add sagra-btn--sm"
+              disabled={!canSubmit || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <FileUp className="size-3.5" aria-hidden />
+              )}
+              Criar modelo
+            </button>
+          </div>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="sagra-btn sagra-btn--secondary sagra-btn--md"
-          disabled={!canSubmit || createMutation.isPending}
-          onClick={() => createMutation.mutate()}
-        >
-          {createMutation.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <FileUp className="size-3.5" aria-hidden />
-          )}
-          Criar modelo
-        </button>
-        {onCancel ? (
-          <button
-            type="button"
-            className="sagra-btn sagra-btn--outline sagra-btn--sm"
-            onClick={onCancel}
-          >
-            Cancelar
-          </button>
-        ) : null}
-      </div>
-
-      {localError ? <p className="text-xs text-red-600">{localError}</p> : null}
     </div>
   );
 }

@@ -1,8 +1,18 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, Upload } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
-
 import { cn } from "@sagra/ui";
+import {
+  Braces,
+  ChevronDown,
+  Eye,
+  ImageUp,
+  Loader2,
+  Plus,
+  Save,
+  SlidersHorizontal,
+  Sparkles,
+  Type,
+} from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   fetchPapelariaPreviewConfigExample,
@@ -10,6 +20,7 @@ import {
   uploadPapelariaPreviewBase,
   validatePapelariaAdminPreviewConfig,
 } from "@/api/adminSystem";
+import { toast } from "@/components/ui/toastStore";
 import { PapelariaLivePreview } from "@/features/papelaria/components/PapelariaLivePreview";
 import {
   COMMON_DYNAMIC_FIELD_TEMPLATES,
@@ -25,6 +36,14 @@ import {
   type PreviewPositionSlotId,
 } from "@/features/papelaria/preview";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
+
+import {
+  EmptyState,
+  Field,
+  InlineMessage,
+  SegmentedControl,
+  StatusPill,
+} from "./PapelariaWorkspaceUi";
 
 const DEMO_VALUES: Record<string, string> = {
   nome_deputado: "Maria da Silva Santos",
@@ -65,6 +84,35 @@ const EMPTY_ELEMENT: PapelariaPreviewTextElement = {
   lineHeight: 1.1,
 };
 
+const ALIGN_OPTIONS = [
+  { id: "left", label: "Esquerda" },
+  { id: "center", label: "Centro" },
+  { id: "right", label: "Direita" },
+] as const;
+
+const ANCHOR_OPTIONS = [
+  { id: "start", label: "Início" },
+  { id: "middle", label: "Meio" },
+  { id: "end", label: "Fim" },
+] as const;
+
+type NumKey = "x" | "y" | "width" | "height" | "fontSize" | "fontWeight" | "lineHeight" | "letterSpacing";
+
+const GEOMETRIA: Array<[NumKey, string]> = [
+  ["x", "X"],
+  ["y", "Y"],
+  ["width", "Largura"],
+  ["height", "Altura"],
+];
+const TIPOGRAFIA_NUM: Array<[NumKey, string]> = [
+  ["fontSize", "Tamanho"],
+  ["fontWeight", "Peso"],
+  ["lineHeight", "Entrelinha"],
+  ["letterSpacing", "Espaçamento"],
+];
+
+type EditorTab = "elementos" | "dinamicos" | "json";
+
 function configToJsonText(config: PapelariaPreviewConfig): string {
   return JSON.stringify(config, null, 2);
 }
@@ -72,6 +120,10 @@ function configToJsonText(config: PapelariaPreviewConfig): string {
 function tryParseConfig(raw: string): PapelariaPreviewConfig | null {
   const parsed = parsePreviewConfigJson(raw);
   return parsed.ok ? parsed.config : null;
+}
+
+function isHexColor(v: string | undefined): v is string {
+  return Boolean(v && /^#[0-9a-f]{6}$/i.test(v));
 }
 
 export function PapelariaModeloPreviewPanel({
@@ -82,18 +134,22 @@ export function PapelariaModeloPreviewPanel({
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialPretty = prettyPreviewJsonForDisplay(modelo.preview_config_json);
-  const [uploadFaceId, setUploadFaceId] = useState("frente");
   const [draftConfig, setDraftConfig] = useState<PapelariaPreviewConfig | null>(() =>
     initialPretty.trim() ? tryParseConfig(initialPretty) : null,
   );
   const [jsonText, setJsonText] = useState(initialPretty);
+  const [savedText, setSavedText] = useState(initialPretty);
   const [jsonSyncError, setJsonSyncError] = useState<string | null>(null);
   const [previewFaceId, setPreviewFaceId] = useState<string>("");
   const [baseImageVersion, setBaseImageVersion] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [validateMsg, setValidateMsg] = useState<string | null>(null);
+  const [validateMsg, setValidateMsg] = useState<{ tone: "ok" | "error" | "info"; text: string } | null>(null);
+  const [editorTab, setEditorTab] = useState<EditorTab>(() => (initialPretty.trim() ? "elementos" : "json"));
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
 
+  const faces = draftConfig?.faces ?? [];
   const activeFaceId = previewFaceId || draftConfig?.faces[0]?.id || "frente";
+  const dirty = jsonText.trim() !== savedText.trim();
 
   const applyConfigDraft = useCallback((next: PapelariaPreviewConfig) => {
     setDraftConfig(next);
@@ -103,6 +159,7 @@ export function PapelariaModeloPreviewPanel({
 
   const handleJsonTextChange = useCallback((raw: string) => {
     setJsonText(raw);
+    setValidateMsg(null);
     if (!raw.trim()) {
       setDraftConfig(null);
       setJsonSyncError(null);
@@ -124,6 +181,8 @@ export function PapelariaModeloPreviewPanel({
     },
     onSuccess: () => {
       setLocalError(null);
+      setSavedText(jsonText);
+      toast.success("Prévia salva.");
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
     },
     onError: (err: Error) => setLocalError(err.message),
@@ -131,15 +190,16 @@ export function PapelariaModeloPreviewPanel({
 
   const validateMutation = useMutation({
     mutationFn: () => validatePapelariaAdminPreviewConfig(jsonText.trim() || null),
-    onSuccess: (data) => setValidateMsg(data.message),
-    onError: (err: Error) => setValidateMsg(err.message),
+    onSuccess: (data) => setValidateMsg({ tone: data.valid === false ? "error" : "ok", text: data.message }),
+    onError: (err: Error) => setValidateMsg({ tone: "error", text: err.message }),
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadPapelariaPreviewBase(modelo.id, uploadFaceId, file),
+    mutationFn: (file: File) => uploadPapelariaPreviewBase(modelo.id, activeFaceId, file),
     onSuccess: () => {
       setLocalError(null);
       setBaseImageVersion((v) => v + 1);
+      toast.success(`Imagem base da face "${activeFaceId}" enviada.`);
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
     },
     onError: (err: Error) => setLocalError(err.message),
@@ -153,6 +213,7 @@ export function PapelariaModeloPreviewPanel({
       applyConfigDraft(parsed);
       setLocalError(null);
       setValidateMsg(null);
+      setEditorTab("elementos");
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Erro ao carregar exemplo.");
     }
@@ -172,16 +233,16 @@ export function PapelariaModeloPreviewPanel({
 
   const validateLocal = () => {
     if (!jsonText.trim()) {
-      setValidateMsg("Configuração vazia (sem prévia em tempo real).");
+      setValidateMsg({ tone: "info", text: "Configuração vazia (sem prévia em tempo real)." });
       return;
     }
     try {
       const parsed = JSON.parse(jsonText) as unknown;
       const err = validatePreviewConfigObject(parsed);
-      setValidateMsg(err ?? "Configuração válida.");
+      setValidateMsg(err ? { tone: "error", text: err } : { tone: "ok", text: "Configuração válida." });
       if (!err) void validateMutation.mutate();
     } catch {
-      setValidateMsg("JSON inválido.");
+      setValidateMsg({ tone: "error", text: "JSON inválido." });
     }
   };
 
@@ -247,11 +308,10 @@ export function PapelariaModeloPreviewPanel({
       const next: PapelariaPreviewConfig = structuredClone(draftConfig);
       const face = next.faces.find((f) => f.id === faceId);
       if (!face) return;
-      face.elementos.push({
-        ...EMPTY_ELEMENT,
-        id: `campo_${face.elementos.length + 1}`,
-      });
+      const id = `campo_${face.elementos.length + 1}`;
+      face.elementos.push({ ...EMPTY_ELEMENT, id });
       applyConfigDraft(next);
+      setAbertos((prev) => ({ ...prev, [`${faceId}:${id}`]: true }));
     },
     [applyConfigDraft, draftConfig],
   );
@@ -262,79 +322,373 @@ export function PapelariaModeloPreviewPanel({
     [modelo.preview_faces, activeFaceId],
   );
   const activeFaceHasBase = activeFaceMeta?.hasBaseImage ?? false;
+  const dinamicos = draftConfig?.camposDinamicos ?? [];
+  const presetsDisponiveis = COMMON_DYNAMIC_FIELD_TEMPLATES.filter(
+    (p) => !dinamicos.some((t) => templateId(t) === templateId(p)),
+  );
+
+  const setNumber = (el: PapelariaPreviewTextElement, key: NumKey, raw: string) =>
+    updateElement(activeFaceId, el.id, {
+      [key]: raw === "" ? 0 : Number(raw),
+    } as Partial<PapelariaPreviewTextElement>);
+
+  const noConfig = (
+    <EmptyState
+      icon={<Eye className="size-6" />}
+      title={jsonText.trim() ? "JSON com erro" : "Prévia ainda não configurada"}
+      action={
+        <>
+          <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={() => void applyExample()}>
+            <Sparkles className="size-3.5" aria-hidden /> Aplicar exemplo
+          </button>
+          <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={() => setEditorTab("json")}>
+            <Braces className="size-3.5" aria-hidden /> Editar JSON
+          </button>
+        </>
+      }
+    >
+      {jsonText.trim()
+        ? "Corrija o JSON na aba avançada para voltar a editar visualmente."
+        : "Comece por um exemplo ou cole um PreviewConfigJson."}
+    </EmptyState>
+  );
 
   return (
-    <div className="papelaria-admin-three-col min-h-0 flex-1 p-4">
-      <div className="papelaria-admin-col gap-2">
-        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          PreviewConfigJson
-        </p>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <select
-            className="rounded border border-slate-300 px-2 py-1 text-xs"
-            value={uploadFaceId}
-            onChange={(e) => setUploadFaceId(e.target.value)}
-          >
-            {(draftConfig?.faces ?? [{ id: "frente" }]).map((f) => (
-              <option key={f.id} value={f.id}>
-                Upload face: {f.id}
-              </option>
-            ))}
-          </select>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) uploadMutation.mutate(file);
-              e.target.value = "";
-            }}
+    <div className="pw-split pw-split--preview">
+      <div className="pw-split__editor">
+        <div className="pw-editor-toolbar">
+          <SegmentedControl<EditorTab>
+            ariaLabel="Modo de edição da prévia"
+            size="sm"
+            value={editorTab}
+            onChange={setEditorTab}
+            options={[
+              { id: "elementos", label: "Elementos", icon: <Type className="size-3.5 shrink-0" aria-hidden /> },
+              {
+                id: "dinamicos",
+                label: "Campos dinâmicos",
+                icon: <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden />,
+              },
+              { id: "json", label: "JSON", icon: <Braces className="size-3.5 shrink-0" aria-hidden /> },
+            ]}
           />
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadMutation.isPending}
-          >
-            <Upload className="size-3.5" aria-hidden />
-            {uploadMutation.isPending ? "Enviando..." : "Upload PNG/JPG base"}
-          </button>
         </div>
-        <p className="text-[10px] leading-relaxed text-slate-500">
-          PNG/JPG apenas com gráficos fixos (sem campos de texto). Gravado em{" "}
-          <span className="font-mono">previews/{modelo.id}/</span> no servidor.
-        </p>
-        {activeFaceMeta && !activeFaceHasBase ? (
-          <p className="text-[10px] font-medium text-amber-700">
-            Face &quot;{activeFaceId}&quot; sem imagem base — envie o upload acima.
-          </p>
-        ) : null}
-        <textarea
-          className="papelaria-admin-json-editor w-full flex-1 rounded border border-slate-300 p-2 font-mono text-[11px] leading-relaxed"
-          value={jsonText}
-          onChange={(e) => handleJsonTextChange(e.target.value)}
-          placeholder="PreviewConfigJson"
-          spellCheck={false}
-        />
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <button type="button" className="rounded border px-2 py-1 text-xs" onClick={formatJson}>
-            Formatar JSON
-          </button>
-          <button type="button" className="rounded border px-2 py-1 text-xs" onClick={validateLocal}>
-            Validar
-          </button>
+
+        <div className="pw-editor-body pw-scroll">
+          {editorTab === "json" ? (
+            <div className="flex min-h-full flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--xs" onClick={formatJson}>
+                  Formatar
+                </button>
+                <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--xs" onClick={validateLocal}>
+                  {validateMutation.isPending ? <Loader2 className="size-3 animate-spin" aria-hidden /> : null}
+                  Validar
+                </button>
+                <button
+                  type="button"
+                  className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                  onClick={() => void applyExample()}
+                >
+                  <Sparkles className="size-3" aria-hidden /> Aplicar exemplo
+                </button>
+              </div>
+              <textarea
+                aria-label="PreviewConfigJson"
+                className="pw-code pw-code--tall"
+                value={jsonText}
+                onChange={(e) => handleJsonTextChange(e.target.value)}
+                placeholder="PreviewConfigJson"
+                spellCheck={false}
+              />
+            </div>
+          ) : !draftConfig ? (
+            noConfig
+          ) : editorTab === "elementos" ? (
+            !activeFace ? (
+              <EmptyState title="Face não encontrada">Escolha uma face na pré-visualização.</EmptyState>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-500">
+                    {activeFace.elementos.length} elemento(s) na face{" "}
+                    <strong className="text-slate-700">{activeFace.nome ?? activeFace.id}</strong>
+                  </p>
+                  <button
+                    type="button"
+                    className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                    onClick={() => addElement(activeFaceId)}
+                  >
+                    <Plus className="size-3" aria-hidden /> Elemento
+                  </button>
+                </div>
+                {activeFace.elementos.length === 0 ? (
+                  <EmptyState title="Nenhum elemento nesta face">
+                    Adicione um elemento de texto para posicioná-lo sobre a imagem base.
+                  </EmptyState>
+                ) : null}
+                {activeFace.elementos.map((el) => {
+                  const k = `${activeFaceId}:${el.id}`;
+                  const open = abertos[k] ?? activeFace.elementos.length === 1;
+                  return (
+                    <div key={el.id} className={cn("pw-accordion", open && "is-open")}>
+                      <button
+                        type="button"
+                        className="pw-accordion__head"
+                        aria-expanded={open}
+                        onClick={() => setAbertos((prev) => ({ ...prev, [k]: !open }))}
+                      >
+                        <ChevronDown className="pw-accordion__chevron size-3.5" aria-hidden />
+                        <span className="min-w-0 flex-1 text-left">
+                          <span className="block truncate text-xs font-semibold text-secondary-blue">{el.id}</span>
+                          <span className="block truncate font-mono text-[10px] text-slate-500">{el.template}</span>
+                        </span>
+                        {el.posicaoSlot ? <StatusPill tone="info">slot</StatusPill> : null}
+                      </button>
+                      {open ? (
+                        <div className="pw-accordion__body">
+                          <Field label="Texto / template">
+                            <input
+                              className="pw-input pw-input--sm font-mono"
+                              value={el.template ?? ""}
+                              onChange={(e) => updateElement(activeFaceId, el.id, { template: e.target.value })}
+                            />
+                          </Field>
+
+                          <p className="pw-group-label">Posição e tamanho</p>
+                          <div className="pw-grid-4">
+                            {GEOMETRIA.map(([key, label]) => (
+                              <Field key={key} label={label}>
+                                <input
+                                  type="number"
+                                  className="pw-input pw-input--sm"
+                                  value={String(el[key] ?? "")}
+                                  onChange={(e) => setNumber(el, key, e.target.value)}
+                                />
+                              </Field>
+                            ))}
+                          </div>
+
+                          <p className="pw-group-label">Tipografia</p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Field label="Fonte">
+                              <input
+                                className="pw-input pw-input--sm"
+                                value={el.fontFamily ?? ""}
+                                onChange={(e) => updateElement(activeFaceId, el.id, { fontFamily: e.target.value })}
+                              />
+                            </Field>
+                            <Field label="Cor">
+                              <div className="pw-input-group">
+                                <input
+                                  type="color"
+                                  aria-label="Selecionar cor"
+                                  className="pw-color"
+                                  value={isHexColor(el.color) ? el.color : "#000000"}
+                                  onChange={(e) => updateElement(activeFaceId, el.id, { color: e.target.value })}
+                                />
+                                <input
+                                  className="pw-input pw-input--sm font-mono"
+                                  value={el.color ?? ""}
+                                  onChange={(e) => updateElement(activeFaceId, el.id, { color: e.target.value })}
+                                />
+                              </div>
+                            </Field>
+                          </div>
+                          <div className="pw-grid-4">
+                            {TIPOGRAFIA_NUM.map(([key, label]) => (
+                              <Field key={key} label={label}>
+                                <input
+                                  type="number"
+                                  step={key === "lineHeight" ? 0.05 : undefined}
+                                  className="pw-input pw-input--sm"
+                                  value={String(el[key] ?? "")}
+                                  onChange={(e) => setNumber(el, key, e.target.value)}
+                                />
+                              </Field>
+                            ))}
+                          </div>
+
+                          <p className="pw-group-label">Alinhamento e agrupamento</p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Field label="Alinhamento">
+                              <SegmentedControl
+                                ariaLabel="Alinhamento"
+                                size="sm"
+                                value={el.align ?? "left"}
+                                onChange={(v) => updateElement(activeFaceId, el.id, { align: v })}
+                                options={ALIGN_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+                              />
+                            </Field>
+                            <Field label="Âncora">
+                              <SegmentedControl
+                                ariaLabel="Âncora"
+                                size="sm"
+                                value={el.anchor ?? "start"}
+                                onChange={(v) => updateElement(activeFaceId, el.id, { anchor: v })}
+                                options={ANCHOR_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+                              />
+                            </Field>
+                            <Field label="Posição pré-definida">
+                              <select
+                                className="pw-input pw-input--sm"
+                                value={el.posicaoSlot ?? ""}
+                                onChange={(e) =>
+                                  updateElement(activeFaceId, el.id, {
+                                    posicaoSlot: (e.target.value || undefined) as PreviewPositionSlotId | undefined,
+                                  })
+                                }
+                              >
+                                <option value="">Manual (X/Y)</option>
+                                {PREVIEW_POSITION_SLOTS.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            <Field label="Grupo">
+                              <input
+                                className="pw-input pw-input--sm"
+                                value={el.grupo ?? ""}
+                                onChange={(e) =>
+                                  updateElement(activeFaceId, el.id, { grupo: e.target.value || undefined })
+                                }
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <div className="space-y-3">
+              <label className="pw-switch-row">
+                <input
+                  type="checkbox"
+                  className="pw-switch"
+                  checked={draftConfig.habilitarCamposDinamicos ?? false}
+                  onChange={(e) =>
+                    applyConfigDraft({ ...draftConfig, habilitarCamposDinamicos: e.target.checked })
+                  }
+                />
+                <span>
+                  <span className="block text-xs font-semibold text-slate-800">
+                    Habilitar campos dinâmicos neste modelo
+                  </span>
+                  <span className="block text-[11px] text-slate-500">
+                    O usuário adiciona estes campos na página Papelaria ao criar a prova.
+                  </span>
+                </span>
+              </label>
+
+              {presetsDisponiveis.length ? (
+                <div>
+                  <p className="pw-group-label">Adicionar campo</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {presetsDisponiveis.map((preset) => (
+                      <button
+                        key={templateId(preset)}
+                        type="button"
+                        className="pw-chip pw-chip--action"
+                        onClick={() => addDynamicTemplateFromPreset(preset)}
+                      >
+                        <Plus className="size-3" aria-hidden /> {preset.label ?? preset.variavel}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {dinamicos.length === 0 ? (
+                <EmptyState title="Nenhum campo dinâmico">Adicione um dos campos acima.</EmptyState>
+              ) : (
+                dinamicos.map((tpl) => {
+                  const id = templateId(tpl);
+                  const slots = getTemplateAllowedSlots(tpl);
+                  return (
+                    <div key={id} className="pw-card pw-card--flat">
+                      <div className="pw-card__body space-y-2">
+                        <p className="text-xs font-semibold text-secondary-blue">{tpl.label ?? id}</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <Field label="Fonte">
+                            <input
+                              className="pw-input pw-input--sm"
+                              value={tpl.fontFamily ?? "Arial"}
+                              onChange={(e) => updateDynamicTemplate(id, { fontFamily: e.target.value })}
+                            />
+                          </Field>
+                          <Field label="Tamanho">
+                            <input
+                              type="number"
+                              className="pw-input pw-input--sm"
+                              value={tpl.fontSize ?? 32}
+                              onChange={(e) =>
+                                updateDynamicTemplate(id, { fontSize: Number(e.target.value) || 32 })
+                              }
+                            />
+                          </Field>
+                          <Field label="Alinhamento">
+                            <SegmentedControl
+                              ariaLabel="Alinhamento"
+                              size="sm"
+                              value={tpl.align ?? "left"}
+                              onChange={(v) => updateDynamicTemplate(id, { align: v })}
+                              options={ALIGN_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+                            />
+                          </Field>
+                          <Field label="Grupo">
+                            <input
+                              className="pw-input pw-input--sm"
+                              value={tpl.grupo ?? ""}
+                              onChange={(e) => updateDynamicTemplate(id, { grupo: e.target.value || undefined })}
+                            />
+                          </Field>
+                        </div>
+                        <p className="pw-group-label">Posições permitidas</p>
+                        <div className="pw-slot-grid">
+                          {PREVIEW_POSITION_SLOTS.map((s) => (
+                            <label key={s.id} className={cn("pw-slot", slots.includes(s.id) && "is-on")}>
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={slots.includes(s.id)}
+                                onChange={(e) => toggleTemplateSlot(id, s.id, e.target.checked)}
+                              />
+                              {s.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="pw-savebar">
+          <div className="min-w-0 flex-1 space-y-1">
+            {jsonSyncError ? (
+              <InlineMessage tone="warn">
+                JSON com erro de sintaxe — edição visual e prévia usam a última versão válida.
+              </InlineMessage>
+            ) : null}
+            {validateMsg ? <InlineMessage tone={validateMsg.tone}>{validateMsg.text}</InlineMessage> : null}
+            {localError ? <InlineMessage tone="error">{localError}</InlineMessage> : null}
+            {!jsonSyncError && !validateMsg && !localError ? (
+              <span className={dirty ? "pw-savebar__dirty" : "pw-savebar__clean"}>
+                {dirty ? "Alterações não salvas" : "Sem alterações pendentes"}
+              </span>
+            ) : null}
+          </div>
           <button
             type="button"
-            className="rounded border px-2 py-1 text-xs"
-            onClick={() => void applyExample()}
-          >
-            Aplicar exemplo
-          </button>
-          <button
-            type="button"
-            className="sagra-btn sagra-btn--secondary sagra-btn--md"
+            className="sagra-btn sagra-btn--save sagra-btn--sm"
             disabled={saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
           >
@@ -343,306 +697,90 @@ export function PapelariaModeloPreviewPanel({
             ) : (
               <Save className="size-3.5" aria-hidden />
             )}
-            Salvar
+            Salvar prévia
           </button>
         </div>
-        {jsonSyncError ? (
-          <p className="text-xs text-amber-700">
-            JSON com erro de sintaxe — ajuste fino e prévia usam a última versão válida.
-          </p>
-        ) : null}
-        {validateMsg ? <p className="text-xs text-slate-600">{validateMsg}</p> : null}
-        {localError ? <p className="text-xs text-red-600">{localError}</p> : null}
       </div>
 
-      <div className="papelaria-admin-col gap-2">
-        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Ajuste fino
-        </p>
-        {draftConfig && activeFace ? (
-          <>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <label className="text-[10px] font-semibold uppercase text-slate-500">Face</label>
-              <select
-                className="rounded border border-slate-300 px-2 py-1 text-xs"
-                value={activeFaceId}
+      <div className="pw-split__preview">
+        <div className="pw-preview-card">
+          <div className="pw-preview-card__title pw-preview-card__title--toolbar">
+            <span className="inline-flex items-center gap-1.5">
+              <Eye className="size-3.5" aria-hidden /> Pré-visualização
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {faces.length > 1 ? (
+                <select
+                  aria-label="Face"
+                  className="pw-input pw-input--sm w-auto"
+                  value={activeFaceId}
+                  onChange={(e) => {
+                    setPreviewFaceId(e.target.value);
+                    setBaseImageVersion((v) => v + 1);
+                  }}
+                >
+                  {faces.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome ?? f.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-[11px] font-medium normal-case text-slate-600">
+                  Face: {activeFace?.nome ?? activeFaceId}
+                </span>
+              )}
+              {activeFaceMeta ? (
+                <StatusPill tone={activeFaceHasBase ? "ok" : "warn"}>
+                  {activeFaceHasBase ? "Com imagem base" : "Sem imagem base"}
+                </StatusPill>
+              ) : null}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
                 onChange={(e) => {
-                  setPreviewFaceId(e.target.value);
-                  setBaseImageVersion((v) => v + 1);
+                  const file = e.target.files?.[0];
+                  if (file) uploadMutation.mutate(file);
+                  e.target.value = "";
                 }}
-              >
-                {draftConfig.faces.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nome ?? f.id}
-                  </option>
-                ))}
-              </select>
+              />
               <button
                 type="button"
-                className="rounded border px-2 py-0.5 text-[10px]"
-                onClick={() => addElement(activeFaceId)}
+                className="sagra-btn sagra-btn--outline sagra-btn--xs"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadMutation.isPending}
+                title={`PNG/JPG só com gráficos fixos (sem textos). Gravado em previews/${modelo.id}/ no servidor.`}
               >
-                + elemento
+                {uploadMutation.isPending ? (
+                  <Loader2 className="size-3 animate-spin" aria-hidden />
+                ) : (
+                  <ImageUp className="size-3" aria-hidden />
+                )}
+                {uploadMutation.isPending ? "Enviando…" : activeFaceHasBase ? "Trocar base" : "Enviar base"}
               </button>
             </div>
-
-            <div className="rounded border border-slate-200 bg-slate-50 p-2 text-[10px]">
-              <p className="font-semibold text-slate-700">
-                Templates de campos dinâmicos (pré-configuração)
-              </p>
-              <p className="mt-0.5 text-neutral-500">
-                O usuário adiciona estes campos na página Papelaria ao criar a prova.
-              </p>
-              <label className="mt-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={draftConfig.habilitarCamposDinamicos ?? false}
-                  onChange={(e) => {
-                    applyConfigDraft({
-                      ...draftConfig,
-                      habilitarCamposDinamicos: e.target.checked,
-                    });
-                  }}
-                />
-                Habilitar campos dinâmicos neste modelo
-              </label>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {COMMON_DYNAMIC_FIELD_TEMPLATES.filter(
-                  (p) =>
-                    !(draftConfig.camposDinamicos ?? []).some(
-                      (t) => templateId(t) === templateId(p),
-                    ),
-                ).map((preset) => (
-                  <button
-                    key={templateId(preset)}
-                    type="button"
-                    className="rounded border border-slate-300 bg-white px-2 py-0.5"
-                    onClick={() => addDynamicTemplateFromPreset(preset)}
-                  >
-                    + {preset.label ?? preset.variavel}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2 space-y-2">
-                {(draftConfig.camposDinamicos ?? []).map((tpl) => {
-                  const id = templateId(tpl);
-                  const slots = getTemplateAllowedSlots(tpl);
-                  return (
-                    <div key={id} className="rounded border border-slate-200 bg-white p-2">
-                      <p className="font-semibold text-secondary-blue">{tpl.label ?? id}</p>
-                      <div className="mt-1 grid grid-cols-2 gap-1">
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-neutral-500">fontFamily</span>
-                          <input
-                            className="rounded border px-1 py-0.5"
-                            value={tpl.fontFamily ?? "Arial"}
-                            onChange={(e) =>
-                              updateDynamicTemplate(id, { fontFamily: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-neutral-500">fontSize</span>
-                          <input
-                            type="number"
-                            className="rounded border px-1 py-0.5"
-                            value={tpl.fontSize ?? 32}
-                            onChange={(e) =>
-                              updateDynamicTemplate(id, {
-                                fontSize: Number(e.target.value) || 32,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-neutral-500">align</span>
-                          <select
-                            className="rounded border px-1 py-0.5"
-                            value={tpl.align ?? "left"}
-                            onChange={(e) =>
-                              updateDynamicTemplate(id, {
-                                align: e.target.value as PapelariaPreviewDynamicFieldTemplate["align"],
-                              })
-                            }
-                          >
-                            <option value="left">left</option>
-                            <option value="center">center</option>
-                            <option value="right">right</option>
-                          </select>
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-neutral-500">grupo</span>
-                          <input
-                            className="rounded border px-1 py-0.5"
-                            value={tpl.grupo ?? ""}
-                            onChange={(e) =>
-                              updateDynamicTemplate(id, {
-                                grupo: e.target.value || undefined,
-                              })
-                            }
-                          />
-                        </label>
-                      </div>
-                      <p className="mt-2 text-neutral-500">Posições permitidas</p>
-                      <div className="mt-1 grid grid-cols-3 gap-0.5">
-                        {PREVIEW_POSITION_SLOTS.map((s) => (
-                          <label key={s.id} className="flex items-center gap-1">
-                            <input
-                              type="checkbox"
-                              checked={slots.includes(s.id)}
-                              onChange={(e) => toggleTemplateSlot(id, s.id, e.target.checked)}
-                            />
-                            {s.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="papelaria-admin-tuning-scroll space-y-2 rounded border border-slate-200 p-2">
-              {activeFace.elementos.map((el) => (
-                <div key={el.id} className="rounded border border-slate-100 p-2 text-[10px]">
-                  <p className="font-semibold text-secondary-blue">{el.id}</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1">
-                    {(
-                      [
-                        ["template", "text"],
-                        ["x", "number"],
-                        ["y", "number"],
-                        ["width", "number"],
-                        ["height", "number"],
-                        ["fontSize", "number"],
-                        ["fontWeight", "number"],
-                        ["fontFamily", "text"],
-                        ["color", "text"],
-                        ["lineHeight", "number"],
-                        ["letterSpacing", "number"],
-                      ] as const
-                    ).map(([key, type]) => (
-                      <label key={key} className="flex flex-col gap-0.5">
-                        <span className="text-neutral-500">{key}</span>
-                        <input
-                          className="rounded border border-slate-200 px-1 py-0.5"
-                          type={type}
-                          value={String((el as Record<string, unknown>)[key] ?? "")}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const patch: Partial<PapelariaPreviewTextElement> = {
-                              [key]: type === "number" ? (raw === "" ? 0 : Number(raw)) : raw,
-                            } as Partial<PapelariaPreviewTextElement>;
-                            updateElement(activeFaceId, el.id, patch);
-                          }}
-                        />
-                      </label>
-                    ))}
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-neutral-500">align</span>
-                      <select
-                        className="rounded border border-slate-200 px-1 py-0.5"
-                        value={el.align ?? "left"}
-                        onChange={(e) =>
-                          updateElement(activeFaceId, el.id, {
-                            align: e.target.value as PapelariaPreviewTextElement["align"],
-                          })
-                        }
-                      >
-                        <option value="left">left</option>
-                        <option value="center">center</option>
-                        <option value="right">right</option>
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-neutral-500">anchor</span>
-                      <select
-                        className="rounded border border-slate-200 px-1 py-0.5"
-                        value={el.anchor ?? "start"}
-                        onChange={(e) =>
-                          updateElement(activeFaceId, el.id, {
-                            anchor: e.target.value as PapelariaPreviewTextElement["anchor"],
-                          })
-                        }
-                      >
-                        <option value="start">start</option>
-                        <option value="middle">middle</option>
-                        <option value="end">end</option>
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-neutral-500">posicaoSlot</span>
-                      <select
-                        className="rounded border border-slate-200 px-1 py-0.5"
-                        value={el.posicaoSlot ?? ""}
-                        onChange={(e) =>
-                          updateElement(activeFaceId, el.id, {
-                            posicaoSlot: (e.target.value ||
-                              undefined) as PreviewPositionSlotId | undefined,
-                          })
-                        }
-                      >
-                        <option value="">manual</option>
-                        {PREVIEW_POSITION_SLOTS.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-neutral-500">grupo</span>
-                      <input
-                        className="rounded border border-slate-200 px-1 py-0.5"
-                        value={el.grupo ?? ""}
-                        onChange={(e) =>
-                          updateElement(activeFaceId, el.id, {
-                            grupo: e.target.value || undefined,
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <p className="rounded border border-dashed border-slate-200 p-3 text-xs text-slate-500">
-            Informe um JSON válido para ajustar os campos.
+          </div>
+          <div className="pw-preview-card__stage pw-preview-card__stage--padded">
+            {draftConfig && activeFace ? (
+              <PapelariaLivePreview
+                previewConfig={draftConfig}
+                values={DEMO_VALUES}
+                modeloId={modelo.id}
+                faceId={activeFaceId}
+                mode="admin"
+                baseImageVersion={baseImageVersion}
+              />
+            ) : (
+              <EmptyState icon={<Eye className="size-6" />} title="Sem pré-visualização">
+                JSON inválido ou vazio — corrija para ver a prévia.
+              </EmptyState>
+            )}
+          </div>
+          <p className="pw-preview-card__foot">
+            Imagem base: PNG/JPG apenas com gráficos fixos, sem campos de texto. Valores de demonstração.
           </p>
-        )}
-      </div>
-
-      <div className="papelaria-admin-col overflow-hidden rounded border border-slate-200">
-        <p className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Pré-visualização
-          {activeFaceMeta ? (
-            <span
-              className={cn(
-                "ml-2 normal-case",
-                activeFaceHasBase ? "text-emerald-600" : "text-amber-700",
-              )}
-            >
-              {activeFaceHasBase ? `● ${activeFaceId} com base` : `● ${activeFaceId} sem base`}
-            </span>
-          ) : null}
-        </p>
-        <div className="papelaria-admin-preview-panel p-2">
-          {draftConfig && activeFace ? (
-            <PapelariaLivePreview
-              previewConfig={draftConfig}
-              values={DEMO_VALUES}
-              modeloId={modelo.id}
-              faceId={activeFaceId}
-              mode="admin"
-              baseImageVersion={baseImageVersion}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-center text-xs text-slate-500">
-              JSON inválido ou vazio — corrija para ver a prévia.
-            </div>
-          )}
         </div>
       </div>
     </div>

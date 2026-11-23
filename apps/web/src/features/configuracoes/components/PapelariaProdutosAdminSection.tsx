@@ -1,41 +1,83 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Box, Eye, FileText, LayoutGrid, Loader2, Plus, Printer, Tag } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  ChevronDown,
+  Eye,
+  FileText,
+  Layers,
+  LayoutGrid,
+  Loader2,
+  Package,
+  Plus,
+  Printer,
+  Search,
+  Tag,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { fetchPapelariaAdminModelos } from "@/api/adminSystem";
 import { fetchImposicaoStatus } from "@/api/imposicaoPerfil";
-import { groupPapelariaModelosByProduto } from "@/features/configuracoes/groupPapelariaModelosByProduto";
+import {
+  groupPapelariaModelosByProduto,
+  type PapelariaProdutoGroup,
+} from "@/features/configuracoes/groupPapelariaModelosByProduto";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
-import {
-  ConfigLoadingState,
-  ConfigSection,
-  ConfigSectionBody,
-  ConfigSectionHeader,
-} from "./ConfigSectionLayout";
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
 import { PapelariaModeloPreviewPanel } from "./PapelariaModeloPreviewPanel";
 import { PapelariaModeloProvaPdfPanel } from "./PapelariaModeloProvaPdfPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
+import {
+  EmptyState,
+  normalizeSearch,
+  SegmentedControl,
+  StatusPill,
+} from "./PapelariaWorkspaceUi";
 import { PerfilImposicaoPanel } from "./PerfilImposicaoPanel";
 
-type InnerTab = "dados" | "mockup" | "preview" | "prova-pdf" | "imposicao";
+type ModeloTab = "dados" | "mockup" | "preview" | "prova-pdf";
+type Scope = "modelos" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
 
-const INNER_TABS: { id: InnerTab; label: string; icon: typeof Tag }[] = [
-  { id: "dados", label: "Dados", icon: Tag },
-  { id: "mockup", label: "Mockup 3D", icon: Box },
-  { id: "preview", label: "Prévia", icon: Eye },
-  { id: "prova-pdf", label: "Prova PDF", icon: FileText },
-  { id: "imposicao", label: "Imposição (produto)", icon: LayoutGrid },
+type ImposicaoStatus = Partial<
+  Record<"digital" | "offset", { existe: boolean; ativo: boolean }>
+>;
+
+const MODELO_TABS: { id: ModeloTab; label: string; icon: typeof Tag; hint: string }[] = [
+  { id: "dados", label: "Dados gerais", icon: Tag, hint: "Nome, pasta de imposição e PDF de prova por e-mail" },
+  { id: "mockup", label: "Mockup 3D", icon: Box, hint: "Dobras, formato e visualização 3D da prova" },
+  { id: "preview", label: "Prévia ao vivo", icon: Eye, hint: "Imagem base e campos da prévia em tempo real" },
+  { id: "prova-pdf", label: "Prova PDF", icon: FileText, hint: "PDF do modelo e ligação dos textos aos campos" },
 ];
 
-function modeloChipLabel(modelo: PapelariaAdminModelRecord): string {
+const STORAGE_KEY = "sagra:config:papelaria-produtos";
+
+type StoredSelection = { produto?: string; modeloId?: number; tab?: ModeloTab; scope?: Scope };
+
+function readStored(): StoredSelection {
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredSelection) : {};
+  } catch {
+    return {};
+  }
+}
+
+function modeloLabel(modelo: PapelariaAdminModelRecord): string {
   const parts = [modelo.frente_versao, modelo.cores].filter((p) => p?.trim());
   if (parts.length) return parts.join(" · ");
   return modelo.nome_exibicao || modelo.arquivo_modelo;
+}
+
+function fileName(path: string): string {
+  return path.replace(/\\/g, "/").split("/").pop() || path;
+}
+
+function plural(n: number, um: string, varios: string): string {
+  return `${n} ${n === 1 ? um : varios}`;
 }
 
 export function PapelariaProdutosAdminSection() {
@@ -43,20 +85,34 @@ export function PapelariaProdutosAdminSection() {
     queryKey: ["admin", "papelaria-modelos"],
     queryFn: fetchPapelariaAdminModelos,
   });
-
-  const [selectedProduto, setSelectedProduto] = useState<string | null>(null);
-  const [selectedModeloId, setSelectedModeloId] = useState<number | null>(null);
-  const [innerTab, setInnerTab] = useState<InnerTab>("dados");
-  const [mode, setMode] = useState<WorkspaceMode>("browse");
   const imposicaoStatusQuery = useQuery({
     queryKey: ["admin", "imposicao-status"],
     queryFn: fetchImposicaoStatus,
     staleTime: 30_000,
   });
 
+  const [stored] = useState(readStored);
+  const [selectedProduto, setSelectedProduto] = useState<string | null>(stored.produto ?? null);
+  const [selectedModeloId, setSelectedModeloId] = useState<number | null>(stored.modeloId ?? null);
+  const [modeloTab, setModeloTab] = useState<ModeloTab>(stored.tab ?? "dados");
+  const [scope, setScope] = useState<Scope>(stored.scope ?? "modelos");
+  const [mode, setMode] = useState<WorkspaceMode>("browse");
+  const [busca, setBusca] = useState("");
+  const [navAberta, setNavAberta] = useState(false);
+
   const modelos = modelosQuery.data ?? [];
   const groups = useMemo(() => groupPapelariaModelosByProduto(modelos), [modelos]);
   const nomesProdutos = useMemo(() => groups.map((g) => g.produto), [groups]);
+
+  const gruposFiltrados = useMemo(() => {
+    const q = normalizeSearch(busca);
+    if (!q) return groups;
+    return groups.filter((g) =>
+      [g.produto, ...g.modelos.flatMap((m) => [m.nome_exibicao, m.arquivo_modelo, m.cores, m.frente_versao])]
+        .filter(Boolean)
+        .some((t) => normalizeSearch(String(t)).includes(q)),
+    );
+  }, [groups, busca]);
 
   const selectedGroup = useMemo(
     () => groups.find((g) => g.produto === selectedProduto) ?? null,
@@ -67,11 +123,14 @@ export function PapelariaProdutosAdminSection() {
     [selectedGroup, selectedModeloId],
   );
 
+  // Mantém uma seleção válida sempre que a lista muda (criação/exclusão/recarga).
   useEffect(() => {
     if (mode !== "browse") return;
     if (groups.length === 0) {
-      setSelectedProduto(null);
-      setSelectedModeloId(null);
+      if (!modelosQuery.isLoading) {
+        setSelectedProduto(null);
+        setSelectedModeloId(null);
+      }
       return;
     }
     const group = groups.find((g) => g.produto === selectedProduto) ?? groups[0];
@@ -82,10 +141,26 @@ export function PapelariaProdutosAdminSection() {
     if (!stillSelected) {
       setSelectedModeloId(group.modelos[0]?.id ?? null);
     }
-  }, [groups, mode, selectedProduto, selectedModeloId]);
+  }, [groups, mode, selectedProduto, selectedModeloId, modelosQuery.isLoading]);
+
+  useEffect(() => {
+    try {
+      const payload: StoredSelection = {
+        produto: selectedProduto ?? undefined,
+        modeloId: selectedModeloId ?? undefined,
+        tab: modeloTab,
+        scope,
+      };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      /* sessionStorage indisponível — ignora */
+    }
+  }, [selectedProduto, selectedModeloId, modeloTab, scope]);
 
   const selectProduto = (produto: string) => {
     setMode("browse");
+    setNavAberta(false);
+    if (produto === selectedProduto) return;
     setSelectedProduto(produto);
     const group = groups.find((g) => g.produto === produto);
     setSelectedModeloId(group?.modelos[0]?.id ?? null);
@@ -94,7 +169,8 @@ export function PapelariaProdutosAdminSection() {
   const handleCreated = (modelo: PapelariaAdminModelRecord) => {
     setSelectedProduto(modelo.produto);
     setSelectedModeloId(modelo.id);
-    setInnerTab("mockup");
+    setScope("modelos");
+    setModeloTab("mockup");
     setMode("browse");
   };
 
@@ -104,80 +180,127 @@ export function PapelariaProdutosAdminSection() {
     }
   };
 
-  return (
-    <ConfigSection variant="papelaria">
-      <ConfigSectionHeader
-        title="Produtos de papelaria"
-        description="Selecione um produto para configurar seus modelos Corel, o mockup 3D e a prévia em tempo real de cada variação."
-        icon={<Printer className="size-4" aria-hidden />}
-      />
+  const totalModelos = modelos.length;
+  const impStatus = imposicaoStatusQuery.data ?? {};
 
-      <ConfigSectionBody noPadding className="papelaria-produtos-layout min-h-0 flex-1">
-        <div className="papelaria-produtos-sidebar">
-          <p className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Produtos ({groups.length})
-          </p>
-          <div className="papelaria-admin-model-list">
-            {modelosQuery.isLoading ? (
-              <ConfigLoadingState className="px-3 py-4 text-xs">
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                Carregando produtos…
-              </ConfigLoadingState>
-            ) : groups.length === 0 ? (
-              <p className="p-3 text-xs text-slate-500">
-                Nenhum produto cadastrado. Crie o primeiro à direita.
-              </p>
-            ) : (
-              <ul>
-                {groups.map((g) => {
-                  const active = mode === "browse" && g.produto === selectedProduto;
-                  return (
-                    <li key={g.produto}>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full border-b border-slate-100 px-3 py-2 text-left text-xs transition hover:bg-slate-50",
-                          active && "bg-secondary-blue/5",
-                        )}
-                        onClick={() => selectProduto(g.produto)}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <span className="font-medium text-slate-800">{g.produto}</span>
-                          <ImposicaoBadges status={imposicaoStatusQuery.data?.[g.produto]} />
-                        </span>
-                        <span className="mt-0.5 block text-[10px] text-slate-500">
-                          {g.modelos.length} modelo{g.modelos.length === 1 ? "" : "s"}
-                          {g.comMockup > 0 ? ` · ${g.comMockup} mockup` : ""}
-                          {g.comPreview > 0 ? ` · ${g.comPreview} prévia` : ""}
-                          {g.comImposicao > 0 ? ` · ${g.comImposicao} imposição` : ""}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          <div className="shrink-0 border-t border-slate-200 p-2">
-            <button
-              type="button"
-              className={cn(
-                "inline-flex w-full items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold",
-                mode === "new-product"
-                  ? "bg-secondary-blue text-white"
-                  : "border border-slate-300 text-slate-700 hover:bg-slate-50",
-              )}
-              onClick={() => setMode("new-product")}
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Novo produto
-            </button>
+  return (
+    <section className="pw-workspace config-section" aria-labelledby="pw-produtos-title">
+      <header className="pw-workspace__header">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="pw-modo__icon" aria-hidden>
+            <Package className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="pw-produtos-title" className="text-sm font-bold text-slate-800">
+              Produtos de papelaria
+            </h2>
+            <p className="text-xs text-slate-500">
+              {modelosQuery.isLoading
+                ? "Carregando catálogo…"
+                : `${plural(groups.length, "produto", "produtos")} · ${plural(totalModelos, "modelo Corel", "modelos Corel")}`}
+            </p>
           </div>
         </div>
+        <button
+          type="button"
+          className="sagra-btn sagra-btn--add sagra-btn--sm"
+          aria-pressed={mode === "new-product"}
+          onClick={() => {
+            setMode("new-product");
+            setNavAberta(false);
+          }}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          Novo produto
+        </button>
+      </header>
 
-        <div className="papelaria-produtos-detail">
+      <div className="pw-workspace__body">
+        {/* Navegador de produtos */}
+        <aside className={cn("pw-nav", navAberta && "is-open")} aria-label="Produtos">
+          <button
+            type="button"
+            className="pw-nav__toggle"
+            aria-expanded={navAberta}
+            aria-controls="pw-nav-panel"
+            onClick={() => setNavAberta((v) => !v)}
+          >
+            <span className="min-w-0 text-left">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Produto
+              </span>
+              <span className="block truncate text-sm font-semibold text-slate-800">
+                {mode === "new-product" ? "Novo produto" : (selectedProduto ?? "Selecione")}
+              </span>
+            </span>
+            <ChevronDown
+              className={cn("size-4 shrink-0 text-slate-500 transition-transform", navAberta && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+
+          <div id="pw-nav-panel" className="pw-nav__panel">
+            <div className="pw-nav__search">
+              <Search className="pw-nav__search-icon size-3.5" aria-hidden />
+              <input
+                type="search"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar produto ou modelo…"
+                aria-label="Buscar produto ou modelo"
+                className="pw-input pw-input--search"
+              />
+              {busca ? (
+                <button
+                  type="button"
+                  className="pw-nav__search-clear"
+                  aria-label="Limpar busca"
+                  onClick={() => setBusca("")}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </button>
+              ) : null}
+            </div>
+
+            <div className="pw-nav__list pw-scroll">
+              {modelosQuery.isLoading ? (
+                <p className="flex items-center gap-2 px-3 py-4 text-xs text-slate-500">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Carregando produtos…
+                </p>
+              ) : modelosQuery.isError ? (
+                <p className="px-3 py-4 text-xs text-red-600">
+                  {(modelosQuery.error as Error).message || "Erro ao carregar produtos."}
+                </p>
+              ) : groups.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-slate-500">Nenhum produto cadastrado ainda.</p>
+              ) : gruposFiltrados.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-slate-500">
+                  Nada encontrado para “{busca}”.
+                </p>
+              ) : (
+                <ul className="space-y-1 p-2">
+                  {gruposFiltrados.map((g) => (
+                    <li key={g.produto}>
+                      <ProdutoNavItem
+                        group={g}
+                        status={impStatus[g.produto]}
+                        active={mode === "browse" && g.produto === selectedProduto}
+                        onSelect={() => selectProduto(g.produto)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Área de trabalho */}
+        <div className="pw-main">
           {mode === "new-product" ? (
             <PapelariaNovoModeloForm
+              produtosExistentes={nomesProdutos}
               onCreated={handleCreated}
               onCancel={() => setMode("browse")}
             />
@@ -188,164 +311,349 @@ export function PapelariaProdutosAdminSection() {
               onCancel={() => setMode("browse")}
             />
           ) : !selectedGroup ? (
-            <div className="flex flex-1 items-center justify-center p-6 text-xs text-slate-500">
-              {modelosQuery.isLoading
-                ? "Carregando…"
-                : "Crie um produto para começar o cadastro de modelos."}
-            </div>
-          ) : (
-            <>
-              <div className="shrink-0 border-b border-slate-200 px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">{selectedGroup.produto}</h3>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
-                      {selectedGroup.modelos.length} modelo
-                      {selectedGroup.modelos.length === 1 ? "" : "s"} neste produto
-                    </p>
-                  </div>
+            <EmptyState
+              className="flex-1"
+              icon={modelosQuery.isLoading ? <Loader2 className="size-6 animate-spin" /> : <Printer className="size-6" />}
+              title={modelosQuery.isLoading ? "Carregando…" : "Comece cadastrando um produto"}
+              action={
+                modelosQuery.isLoading ? null : (
                   <button
                     type="button"
-                    className="sagra-btn sagra-btn--outline sagra-btn--sm"
-                    onClick={() => setMode("new-model")}
+                    className="sagra-btn sagra-btn--add sagra-btn--sm"
+                    onClick={() => setMode("new-product")}
                   >
-                    <Plus className="size-3.5" aria-hidden />
-                    Novo modelo
+                    <Plus className="size-3.5" aria-hidden /> Novo produto
                   </button>
-                </div>
-                <div className="papelaria-modelo-chips mt-3">
-                  {selectedGroup.modelos.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={cn(
-                        "inline-flex max-w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold transition",
-                        selectedModeloId === m.id
-                          ? "bg-white text-secondary-blue shadow-sm ring-1 ring-slate-200/80"
-                          : "bg-slate-100 text-slate-600 hover:bg-white/80 hover:text-secondary-blue",
-                      )}
-                      onClick={() => setSelectedModeloId(m.id)}
-                    >
-                      <span className="truncate">{modeloChipLabel(m)}</span>
-                      {m.tem_mockup_config ? (
-                        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Mockup custom" />
-                      ) : null}
-                      {m.tem_preview_config ? (
-                        <span className="size-1.5 shrink-0 rounded-full bg-sky-500" title="Prévia configurada" />
-                      ) : null}
-                      {m.tem_imposicao_config ? (
-                        <span className="size-1.5 shrink-0 rounded-full bg-violet-500" title="Imposição configurada" />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                )
+              }
+            >
+              {modelosQuery.isLoading
+                ? null
+                : "Envie o template CorelDRAW (.cdr) e o sistema cria o modelo com mockup e prévia iniciais."}
+            </EmptyState>
+          ) : (
+            <>
+              <ProdutoHeader
+                group={selectedGroup}
+                status={impStatus[selectedGroup.produto]}
+                scope={scope}
+                onScopeChange={setScope}
+                onNovoModelo={() => setMode("new-model")}
+              />
 
-              {!selectedModelo ? (
-                <div className="flex flex-1 items-center justify-center p-6 text-xs text-slate-500">
-                  Selecione um modelo ou crie um novo.
+              {scope === "imposicao" ? (
+                <div className="pw-panel-host">
+                  {selectedGroup.modelos.length > 1 ? (
+                    <div className="pw-imposicao-ref">
+                      <label htmlFor="pw-imp-modelo" className="text-[11px] font-medium text-slate-600">
+                        Modelo de referência para a configuração antiga
+                      </label>
+                      <select
+                        id="pw-imp-modelo"
+                        className="pw-input pw-input--sm max-w-xs"
+                        value={selectedModeloId ?? ""}
+                        onChange={(e) => setSelectedModeloId(Number(e.target.value))}
+                      >
+                        {selectedGroup.modelos.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {modeloLabel(m)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                  <PerfilImposicaoPanel
+                    key={selectedGroup.produto}
+                    produto={selectedGroup.produto}
+                    modelo={selectedModelo}
+                    produtos={nomesProdutos}
+                  />
                 </div>
               ) : (
                 <>
-                  <div
-                    className="configuracoes-tab-list mx-4 mt-3 shrink-0"
-                    role="tablist"
-                    aria-label="Configuração do modelo"
-                  >
-                    {INNER_TABS.map((tab) => {
-                      const Icon = tab.icon;
-                      const active = innerTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                            active
-                              ? "bg-white text-secondary-blue shadow-sm ring-1 ring-slate-200/80"
-                              : "text-slate-600 hover:bg-white/60 hover:text-secondary-blue",
-                          )}
-                          onClick={() => setInnerTab(tab.id)}
-                        >
-                          <Icon className="size-3.5" aria-hidden />
-                          {tab.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ModeloStrip
+                    modelos={selectedGroup.modelos}
+                    selectedId={selectedModeloId}
+                    onSelect={setSelectedModeloId}
+                  />
 
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    {innerTab === "dados" ? (
-                      <PapelariaModeloDadosPanel
-                        key={selectedModelo.id}
+                  {!selectedModelo ? (
+                    <EmptyState className="flex-1" icon={<Layers className="size-6" />} title="Selecione um modelo">
+                      Escolha uma variação acima ou crie um novo modelo para este produto.
+                    </EmptyState>
+                  ) : (
+                    <>
+                      <ModeloTabs
                         modelo={selectedModelo}
-                        onDeleted={handleDeleted}
+                        active={modeloTab}
+                        onChange={setModeloTab}
                       />
-                    ) : null}
-                    {innerTab === "mockup" ? (
-                      <PapelariaModeloMockupPanel
-                        key={selectedModelo.id}
-                        modelo={selectedModelo}
-                      />
-                    ) : null}
-                    {innerTab === "preview" ? (
-                      <PapelariaModeloPreviewPanel
-                        key={selectedModelo.id}
-                        modelo={selectedModelo}
-                      />
-                    ) : null}
-                    {innerTab === "prova-pdf" ? (
-                      <PapelariaModeloProvaPdfPanel
-                        key={selectedModelo.id}
-                        modelo={selectedModelo}
-                      />
-                    ) : null}
-                    {innerTab === "imposicao" ? (
-                      <PerfilImposicaoPanel
-                        key={selectedGroup.produto}
-                        produto={selectedGroup.produto}
-                        modelo={selectedModelo}
-                        produtos={nomesProdutos}
-                      />
-                    ) : null}
-                  </div>
+                      <div
+                        className="pw-panel-host"
+                        role="tabpanel"
+                        id={`pw-modelo-panel-${modeloTab}`}
+                        aria-labelledby={`pw-modelo-tab-${modeloTab}`}
+                      >
+                        {modeloTab === "dados" ? (
+                          <PapelariaModeloDadosPanel
+                            key={selectedModelo.id}
+                            modelo={selectedModelo}
+                            onDeleted={handleDeleted}
+                          />
+                        ) : null}
+                        {modeloTab === "mockup" ? (
+                          <PapelariaModeloMockupPanel key={selectedModelo.id} modelo={selectedModelo} />
+                        ) : null}
+                        {modeloTab === "preview" ? (
+                          <PapelariaModeloPreviewPanel key={selectedModelo.id} modelo={selectedModelo} />
+                        ) : null}
+                        {modeloTab === "prova-pdf" ? (
+                          <PapelariaModeloProvaPdfPanel key={selectedModelo.id} modelo={selectedModelo} />
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </>
           )}
         </div>
-      </ConfigSectionBody>
-    </ConfigSection>
+      </div>
+    </section>
   );
 }
 
-function ImposicaoBadges({
+/* ------------------------------------------------------------------------ */
+
+function ProdutoNavItem({
+  group,
   status,
+  active,
+  onSelect,
 }: {
-  status?: Partial<Record<"digital" | "offset", { existe: boolean; ativo: boolean }>>;
+  group: PapelariaProdutoGroup;
+  status?: ImposicaoStatus;
+  active: boolean;
+  onSelect: () => void;
 }) {
+  const total = group.modelos.length;
+  return (
+    <button
+      type="button"
+      className={cn("pw-nav-item", active && "is-active")}
+      aria-current={active ? "true" : undefined}
+      onClick={onSelect}
+    >
+      <span className="flex items-start justify-between gap-2">
+        <span className="pw-nav-item__name">{group.produto}</span>
+        <span className="pw-nav-item__count" title={plural(total, "modelo", "modelos")}>
+          {total}
+        </span>
+      </span>
+      <span className="pw-nav-item__meta">
+        <Coverage icon={<Box className="size-3" aria-hidden />} n={group.comMockup} total={total} label="mockup custom" />
+        <Coverage icon={<Eye className="size-3" aria-hidden />} n={group.comPreview} total={total} label="prévia configurada" />
+        <ImposicaoBadges status={status} />
+      </span>
+    </button>
+  );
+}
+
+function Coverage({ icon, n, total, label }: { icon: ReactNode; n: number; total: number; label: string }) {
+  const full = total > 0 && n === total;
+  return (
+    <span
+      className={cn("pw-coverage", n === 0 && "is-none", full && "is-full")}
+      title={`${n} de ${total} com ${label}`}
+    >
+      {icon}
+      {n}/{total}
+    </span>
+  );
+}
+
+function ImposicaoBadges({ status, detailed = false }: { status?: ImposicaoStatus; detailed?: boolean }) {
   if (!status) return null;
   const items = (["digital", "offset"] as const).filter((v) => status[v]?.existe);
   if (!items.length) return null;
   return (
-    <span className="inline-flex gap-0.5">
+    <span className="inline-flex flex-wrap gap-1">
       {items.map((v) => {
         const ativo = Boolean(status[v]?.ativo);
+        const nome = v === "digital" ? "Digital" : "Offset";
         return (
-          <span
+          <StatusPill
             key={v}
-            className={cn(
-              "rounded px-1 text-[9px] font-bold leading-4",
-              ativo ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800",
-            )}
-            title={`Imposição ${v === "digital" ? "Digital" : "Offset"}: ${ativo ? "perfil em uso" : "rascunho"}`}
+            tone={ativo ? "ok" : "warn"}
+            title={`Imposição ${nome}: ${ativo ? "perfil em uso" : "rascunho"}`}
           >
-            {v === "digital" ? "D" : "O"}
-          </span>
+            {detailed ? `${nome} · ${ativo ? "em uso" : "rascunho"}` : nome.charAt(0)}
+          </StatusPill>
         );
       })}
     </span>
+  );
+}
+
+function ProdutoHeader({
+  group,
+  status,
+  scope,
+  onScopeChange,
+  onNovoModelo,
+}: {
+  group: PapelariaProdutoGroup;
+  status?: ImposicaoStatus;
+  scope: Scope;
+  onScopeChange: (s: Scope) => void;
+  onNovoModelo: () => void;
+}) {
+  return (
+    <div className="pw-produto-header">
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-base font-bold text-slate-800" title={group.produto}>
+          {group.produto}
+        </h3>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+          <span>{plural(group.modelos.length, "modelo", "modelos")}</span>
+          <span aria-hidden>·</span>
+          <span>{group.comMockup} com mockup custom</span>
+          <span aria-hidden>·</span>
+          <span>{group.comPreview} com prévia</span>
+          <ImposicaoBadges status={status} detailed />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl<Scope>
+          ariaLabel="Escopo da configuração"
+          size="sm"
+          value={scope}
+          onChange={onScopeChange}
+          options={[
+            {
+              id: "modelos",
+              label: "Modelos",
+              icon: <Layers className="size-3.5 shrink-0" aria-hidden />,
+              title: "Configurações de cada modelo Corel (variação)",
+            },
+            {
+              id: "imposicao",
+              label: "Imposição",
+              icon: <LayoutGrid className="size-3.5 shrink-0" aria-hidden />,
+              title: "Perfil de imposição Digital/Offset — vale para todo o produto",
+            },
+          ]}
+        />
+        <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={onNovoModelo}>
+          <Plus className="size-3.5" aria-hidden />
+          Novo modelo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModeloStrip({
+  modelos,
+  selectedId,
+  onSelect,
+}: {
+  modelos: PapelariaAdminModelRecord[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  return (
+    <div className="pw-modelos" role="group" aria-label="Modelos do produto">
+      <ul className="pw-modelos__list pw-scroll">
+        {modelos.map((m) => {
+          const active = m.id === selectedId;
+          return (
+            <li key={m.id}>
+              <button
+                type="button"
+                className={cn("pw-modelo-card", active && "is-active")}
+                aria-pressed={active}
+                onClick={() => onSelect(m.id)}
+                title={m.nome_exibicao || m.arquivo_modelo}
+              >
+                <span className="pw-modelo-card__label">{modeloLabel(m)}</span>
+                <span className="pw-modelo-card__file">{fileName(m.arquivo_modelo)}</span>
+                <span className="pw-modelo-card__flags">
+                  <Flag on={Boolean(m.tem_mockup_config)} label="Mockup" />
+                  <Flag on={Boolean(m.tem_preview_config)} label="Prévia" />
+                  {m.tem_imposicao_config ? <Flag on label="Imp. antiga" tone="violet" /> : null}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function Flag({ on, label, tone }: { on: boolean; label: string; tone?: "violet" }) {
+  return (
+    <span
+      className={cn("pw-flag", on ? (tone === "violet" ? "is-violet" : "is-on") : "is-off")}
+      title={`${label}: ${on ? "configurado" : "padrão automático"}`}
+    >
+      <span className="pw-flag__dot" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function ModeloTabs({
+  modelo,
+  active,
+  onChange,
+}: {
+  modelo: PapelariaAdminModelRecord;
+  active: ModeloTab;
+  onChange: (t: ModeloTab) => void;
+}) {
+  const badge = (id: ModeloTab): ReactNode => {
+    if (id === "mockup") {
+      return modelo.tem_mockup_config ? (
+        <span className="pw-tab__dot is-on" title="Mockup personalizado" />
+      ) : (
+        <span className="pw-tab__dot" title="Preset automático" />
+      );
+    }
+    if (id === "preview") {
+      return modelo.tem_preview_config ? (
+        <span className="pw-tab__dot is-on" title="Prévia configurada" />
+      ) : (
+        <span className="pw-tab__dot is-warn" title="Sem prévia configurada" />
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="pw-tabs pw-scroll" role="tablist" aria-label={`Configuração do modelo ${modeloLabel(modelo)}`}>
+      {MODELO_TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            id={`pw-modelo-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-controls={`pw-modelo-panel-${tab.id}`}
+            title={tab.hint}
+            className={cn("pw-tab", isActive && "is-active")}
+            onClick={() => onChange(tab.id)}
+          >
+            <Icon className="size-3.5 shrink-0" aria-hidden />
+            {tab.label}
+            {badge(tab.id)}
+          </button>
+        );
+      })}
+    </div>
   );
 }

@@ -170,3 +170,28 @@ def test_renderizar_composicao_pagina_sem_campos_sai_como_no_pdf(tmp_path, monke
         assert "VERSO FIXO" in doc[1].get_text().replace(" ", " ")
     finally:
         doc.close()
+
+
+def test_os_frente_e_verso_sem_modelo_combinado_lista_as_frentes():
+    from services import papelaria_models_service as models_svc
+
+    modelos = [
+        _modelo(1, "Somente Frente"),
+        _modelo(2, "Verso"),
+        _modelo(3, "Somente Frente", produto="Bloco A5"),
+    ]
+    lista, _avisos, _auto = models_svc.match_modelos_para_os(
+        "Ct Visita", "Policromia", "Frente e Verso", modelos
+    )
+    assert [m["id"] for m in lista] == [1]
+
+
+def test_os_frente_e_verso_com_combinado_mantem_so_combinados():
+    from services import papelaria_models_service as models_svc
+
+    modelos = [_modelo(1, "Somente Frente"), _modelo(2, "Verso"), _modelo(4, "Frente e Verso")]
+    lista, _avisos, auto = models_svc.match_modelos_para_os(
+        "Ct Visita", "Policromia", "Frente e Verso", modelos
+    )
+    assert [m["id"] for m in lista] == [4]
+    assert auto == 4

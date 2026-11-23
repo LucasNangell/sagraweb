@@ -1492,6 +1492,19 @@ def match_modelos_para_os(
             for m in filtrados
             if _normalizar_frente_verso_os(m["frente_versao"]) == fv_norm
         ]
+        if not por_fv and fv_norm == "frente e verso":
+            # Frentes e versos cadastrados separadamente: lista as frentes; o
+            # verso é escolhido na composição (modo Prova PDF).
+            por_fv = [
+                m
+                for m in filtrados
+                if _normalizar_frente_verso_os(m["frente_versao"]) == "somente frente"
+                and any(
+                    "verso" in str(o.get("frente_versao") or "").lower()
+                    and "frente" not in str(o.get("frente_versao") or "").lower()
+                    for o in filtrados
+                )
+            ]
         if por_fv:
             filtrados = por_fv
         else:

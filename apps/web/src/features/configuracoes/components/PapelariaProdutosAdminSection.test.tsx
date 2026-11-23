@@ -7,9 +7,13 @@ import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 const api = vi.hoisted(() => ({
   fetchPapelariaAdminModelos: vi.fn(),
   fetchImposicaoStatus: vi.fn(),
+  savePapelariaAdminModeloPadrao: vi.fn(),
 }));
 
-vi.mock("@/api/adminSystem", () => ({ fetchPapelariaAdminModelos: api.fetchPapelariaAdminModelos }));
+vi.mock("@/api/adminSystem", () => ({
+  fetchPapelariaAdminModelos: api.fetchPapelariaAdminModelos,
+  savePapelariaAdminModeloPadrao: api.savePapelariaAdminModeloPadrao,
+}));
 vi.mock("@/api/imposicaoPerfil", () => ({ fetchImposicaoStatus: api.fetchImposicaoStatus }));
 
 // Painéis pesados: só registramos qual foi montado e com qual modelo/produto.
@@ -34,8 +38,10 @@ vi.mock("./PerfilImposicaoPanel", () => ({
   ),
 }));
 vi.mock("./PapelariaNovoModeloForm", () => ({
-  PapelariaNovoModeloForm: ({ lockedProduto }: { lockedProduto?: string }) => (
-    <div data-testid="novo-modelo-form">{lockedProduto ?? "novo-produto"}</div>
+  PapelariaNovoModeloForm: ({ lockedProduto, faceInicial }: { lockedProduto?: string; faceInicial?: string }) => (
+    <div data-testid="novo-modelo-form">
+      {lockedProduto ?? "novo-produto"}|{faceInicial ?? "-"}
+    </div>
   ),
 }));
 
@@ -99,7 +105,12 @@ describe("PapelariaProdutosAdminSection", () => {
     renderSection();
     await screen.findByTestId("panel-dados");
 
-    fireEvent.click(screen.getByRole("button", { name: /Frente e Verso · Policromia/ }));
+    // O modelo frente e verso aparece nas duas colunas (frente e verso).
+    const frentes = screen.getByTestId("pw-face-col-frente");
+    const versos = screen.getByTestId("pw-face-col-verso");
+    expect(within(versos).getByText("Cartão de visita 2")).toBeInTheDocument();
+    expect(within(versos).queryByText("Cartão de visita 1")).not.toBeInTheDocument();
+    fireEvent.click(within(frentes).getByText("Cartão de visita 2"));
     fireEvent.click(screen.getByRole("tab", { name: /Mockup 3D/ }));
     expect(screen.getByTestId("panel-mockup")).toHaveTextContent("mockup:2");
 
@@ -126,10 +137,40 @@ describe("PapelariaProdutosAdminSection", () => {
     renderSection();
     await screen.findByTestId("panel-dados");
 
-    fireEvent.click(screen.getByRole("button", { name: /Novo modelo/ }));
-    expect(screen.getByTestId("novo-modelo-form")).toHaveTextContent("Cartão de visita");
+    fireEvent.click(screen.getByRole("button", { name: /Novo verso/ }));
+    expect(screen.getByTestId("novo-modelo-form")).toHaveTextContent("Cartão de visita|verso");
 
     fireEvent.click(screen.getAllByRole("button", { name: /Novo produto/ })[0]);
     expect(screen.getByTestId("novo-modelo-form")).toHaveTextContent("novo-produto");
+  });
+
+  it("separa frentes e versos por perfil de cores, cada um com seu padrão", async () => {
+    api.fetchPapelariaAdminModelos.mockResolvedValue([
+      modelo(1, "Cartão de visita", { cores: "Policromia" }),
+      modelo(4, "Cartão de visita", { cores: "Relev Seco", padrao_frente: true }),
+      modelo(5, "Cartão de visita", { cores: "Relev Seco", frente_versao: "Verso" }),
+    ]);
+    renderSection();
+    await screen.findByTestId("panel-dados");
+    const frentes = screen.getByTestId("pw-face-col-frente");
+    const versos = screen.getByTestId("pw-face-col-verso");
+    expect(within(frentes).getByText("Policromia")).toBeInTheDocument();
+    expect(within(frentes).getByText("Relev Seco")).toBeInTheDocument();
+    // Policromia ainda sem frente padrão; Relev Seco já tem.
+    expect(within(frentes).getAllByText("sem padrão")).toHaveLength(1);
+    expect(within(versos).getByText(/Nenhum verso em Policromia/)).toBeInTheDocument();
+    expect(within(versos).getByText("Cartão de visita 5")).toBeInTheDocument();
+    expect(screen.queryByText("Combinado")).not.toBeInTheDocument();
+  });
+
+  it("define a frente padrão pela estrela do card", async () => {
+    api.savePapelariaAdminModeloPadrao.mockResolvedValue({});
+    renderSection();
+    await screen.findByTestId("panel-dados");
+    const frentes = screen.getByTestId("pw-face-col-frente");
+    fireEvent.click(within(frentes).getByRole("button", { name: /Definir Cartão de visita 1 como frente padrão/ }));
+    await vi.waitFor(() =>
+      expect(api.savePapelariaAdminModeloPadrao).toHaveBeenCalledWith(1, "frente", true),
+    );
   });
 });

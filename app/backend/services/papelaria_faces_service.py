@@ -84,10 +84,8 @@ def _paginas_pdf(modelo_id: int) -> int:
 
 
 def _rotulo_fonte(modelo: dict[str, Any], face: str, pagina: int) -> str:
-    nome = (modelo.get("nome_exibicao") or modelo.get("arquivo_modelo") or f"Modelo {modelo.get('id')}").strip()
-    if papel_do_modelo(modelo.get("frente_versao")) == PAPEL_FRENTE_VERSO:
-        return f"{nome} — {'frente' if face == FACE_FRENTE else 'verso'} (pág. {pagina})"
-    return nome
+    # Frentes e versos são exibidos sempre separados: só o nome do modelo.
+    return (modelo.get("nome_exibicao") or modelo.get("arquivo_modelo") or f"Modelo {modelo.get('id')}").strip()
 
 
 def listar_fontes(produto: str, cores: str, modelos: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
@@ -161,10 +159,9 @@ def fontes_para_modelo(modelo_id: int) -> dict[str, Any]:
     modo_ok = get_modo() == MODO_PROVA_PDF
     dados["modo_prova_pdf"] = modo_ok
     dados["papel_modelo"] = papel_do_modelo(modelo.get("frente_versao"))
-    # Só faz sentido escolher frente e verso em produto frente e verso.
-    dados["disponivel"] = bool(
-        dados["disponivel"] and modo_ok and dados["papel_modelo"] == PAPEL_FRENTE_VERSO
-    )
+    # A página decide se a OS é frente e verso (modelo combinado ou OS F/V);
+    # aqui basta haver frente e verso com PDF no modo Prova PDF.
+    dados["disponivel"] = bool(dados["disponivel"] and modo_ok)
     return dados
 
 

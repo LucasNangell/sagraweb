@@ -26,6 +26,7 @@ import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
+import { PapelariaModelosPorFace, type Face } from "./PapelariaModelosPorFace";
 import { PapelariaModeloTextosPanel } from "./PapelariaModeloTextosPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
 import {
@@ -81,10 +82,6 @@ function modeloLabel(modelo: PapelariaAdminModelRecord): string {
   return modelo.nome_exibicao || modelo.arquivo_modelo;
 }
 
-function fileName(path: string): string {
-  return path.replace(/\\/g, "/").split("/").pop() || path;
-}
-
 function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
 }
@@ -106,6 +103,8 @@ export function PapelariaProdutosAdminSection() {
   const [modeloTab, setModeloTab] = useState<ModeloTab>(() => normalizarTab(stored.tab));
   const [scope, setScope] = useState<Scope>(stored.scope ?? "modelos");
   const [mode, setMode] = useState<WorkspaceMode>("browse");
+  /** Face do cadastro em «Nova frente» / «Novo verso». */
+  const [novaFace, setNovaFace] = useState<Face>("frente");
   const [busca, setBusca] = useState("");
   const [navAberta, setNavAberta] = useState(false);
 
@@ -315,7 +314,9 @@ export function PapelariaProdutosAdminSection() {
             />
           ) : mode === "new-model" && selectedProduto ? (
             <PapelariaNovoModeloForm
+              key={`novo-${novaFace}`}
               lockedProduto={selectedProduto}
+              faceInicial={novaFace}
               onCreated={handleCreated}
               onCancel={() => setMode("browse")}
             />
@@ -347,7 +348,6 @@ export function PapelariaProdutosAdminSection() {
                 status={impStatus[selectedGroup.produto]}
                 scope={scope}
                 onScopeChange={setScope}
-                onNovoModelo={() => setMode("new-model")}
               />
 
               {scope === "imposicao" ? (
@@ -380,15 +380,19 @@ export function PapelariaProdutosAdminSection() {
                 </div>
               ) : (
                 <>
-                  <ModeloStrip
+                  <PapelariaModelosPorFace
                     modelos={selectedGroup.modelos}
                     selectedId={selectedModeloId}
                     onSelect={setSelectedModeloId}
+                    onNovo={(face) => {
+                      setNovaFace(face);
+                      setMode("new-model");
+                    }}
                   />
 
                   {!selectedModelo ? (
                     <EmptyState className="flex-1" icon={<Layers className="size-6" />} title="Selecione um modelo">
-                      Escolha uma variação acima ou crie um novo modelo para este produto.
+                      Escolha uma frente ou um verso acima, ou cadastre um novo.
                     </EmptyState>
                   ) : (
                     <>
@@ -506,13 +510,11 @@ function ProdutoHeader({
   status,
   scope,
   onScopeChange,
-  onNovoModelo,
 }: {
   group: PapelariaProdutoGroup;
   status?: ImposicaoStatus;
   scope: Scope;
   onScopeChange: (s: Scope) => void;
-  onNovoModelo: () => void;
 }) {
   return (
     <div className="pw-produto-header">
@@ -550,67 +552,12 @@ function ProdutoHeader({
             },
           ]}
         />
-        <button type="button" className="sagra-btn sagra-btn--outline sagra-btn--sm" onClick={onNovoModelo}>
-          <Plus className="size-3.5" aria-hidden />
-          Novo modelo
-        </button>
+
       </div>
     </div>
   );
 }
 
-function ModeloStrip({
-  modelos,
-  selectedId,
-  onSelect,
-}: {
-  modelos: PapelariaAdminModelRecord[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
-}) {
-  return (
-    <div className="pw-modelos" role="group" aria-label="Modelos do produto">
-      <ul className="pw-modelos__list pw-scroll">
-        {modelos.map((m) => {
-          const active = m.id === selectedId;
-          return (
-            <li key={m.id}>
-              <button
-                type="button"
-                className={cn("pw-modelo-card", active && "is-active")}
-                aria-pressed={active}
-                onClick={() => onSelect(m.id)}
-                title={m.nome_exibicao || m.arquivo_modelo}
-              >
-                <span className="pw-modelo-card__label">{modeloLabel(m)}</span>
-                <span className="pw-modelo-card__file">{fileName(m.arquivo_modelo)}</span>
-                <span className="pw-modelo-card__flags">
-                  <Flag on={Boolean(m.tem_mockup_config)} label="Mockup" />
-                  <Flag on={Boolean(m.tem_prova_pdf)} label="PDF" />
-                  {m.padrao_frente ? <Flag on label="Frente padrão" /> : null}
-                  {m.padrao_verso ? <Flag on label="Verso padrão" /> : null}
-                  {m.tem_imposicao_config ? <Flag on label="Imp. antiga" tone="violet" /> : null}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function Flag({ on, label, tone }: { on: boolean; label: string; tone?: "violet" }) {
-  return (
-    <span
-      className={cn("pw-flag", on ? (tone === "violet" ? "is-violet" : "is-on") : "is-off")}
-      title={`${label}: ${on ? "configurado" : "padrão automático"}`}
-    >
-      <span className="pw-flag__dot" aria-hidden />
-      {label}
-    </span>
-  );
-}
 
 function ModeloTabs({
   modelo,

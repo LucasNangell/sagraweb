@@ -60,8 +60,12 @@ export function composicaoInicial(
 export function usePapelariaComposicao(
   selectedModelId: number | null,
   frenteVersaoModelo: string | null | undefined,
+  frenteVersoOs?: string | null,
 ) {
-  const habilitado = selectedModelId != null && ehFrenteVerso(frenteVersaoModelo);
+  // Produto frente e verso: o modelo é combinado ou a própria OS pede frente e verso
+  // (frentes e versos cadastrados separadamente).
+  const habilitado =
+    selectedModelId != null && (ehFrenteVerso(frenteVersaoModelo) || ehFrenteVerso(frenteVersoOs));
   const facesQuery = useQuery({
     queryKey: ["papelaria", "faces", selectedModelId],
     queryFn: () => fetchPapelariaFaces(selectedModelId!),

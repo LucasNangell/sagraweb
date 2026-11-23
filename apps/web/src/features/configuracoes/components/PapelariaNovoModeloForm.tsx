@@ -27,7 +27,12 @@ const PRESET_OPTIONS = [
   { id: "folha_simples", label: "Fallback genérico", hint: "Preset neutro para casos não previstos" },
 ] as const;
 
-const FRENTE_VERSO = ["Frente", "Frente e Verso", "Verso"] as const;
+// Frentes e versos são sempre cadastrados separadamente.
+const FRENTE_VERSO = ["Frente", "Verso"] as const;
+const FRENTE_VERSO_LABEL: Record<(typeof FRENTE_VERSO)[number], string> = {
+  Frente: "Frente",
+  Verso: "Verso",
+};
 const CORES_OPCOES = ["Policromia", "Relevo seco", "Port/Inglês"];
 
 const INSPECT_POLL_MS = 2000;
@@ -40,10 +45,13 @@ function isInspectPending(status: PapelariaCdrInspectResult["status"]): boolean 
 export function PapelariaNovoModeloForm({
   lockedProduto,
   produtosExistentes,
+  faceInicial,
   onCreated,
   onCancel,
 }: {
   lockedProduto?: string | null;
+  /** «Nova frente» / «Novo verso»: já abre como modelo só de frente ou só de verso. */
+  faceInicial?: "frente" | "verso";
   /** Nomes já cadastrados — avisa quando o "novo" produto já existe. */
   produtosExistentes?: string[];
   onCreated: (modelo: PapelariaAdminModelRecord) => void;
@@ -54,7 +62,7 @@ export function PapelariaNovoModeloForm({
   const pollTimerRef = useRef<number | null>(null);
 
   const [produtoNovo, setProdutoNovo] = useState("");
-  const [frenteVerso, setFrenteVerso] = useState("Frente");
+  const [frenteVerso, setFrenteVerso] = useState(faceInicial === "verso" ? "Verso" : "Frente");
   const [cores, setCores] = useState("Policromia");
   const [nomeExibicao, setNomeExibicao] = useState("");
   const [presetId, setPresetId] =
@@ -197,10 +205,6 @@ export function PapelariaNovoModeloForm({
       return;
     }
 
-    const name = file.name.toLowerCase();
-    if (name.includes("fv") || name.includes("frenteverso")) {
-      setFrenteVerso("Frente e Verso");
-    }
 
     setInspectLoading(true);
     try {
@@ -262,7 +266,9 @@ export function PapelariaNovoModeloForm({
           ) : null}
           <div className="min-w-0">
             <h3 className="text-base font-bold text-slate-800">
-              {lockedProduto ? `Novo modelo em ${lockedProduto}` : "Novo produto"}
+              {lockedProduto
+                ? `${frenteVerso === "Verso" ? "Novo verso" : "Nova frente"} em ${lockedProduto}`
+                : "Novo produto"}
             </h3>
             <p className="mt-0.5 text-xs text-slate-500">
               Envie o template CorelDRAW. O modelo é criado com mockup e prévia iniciais, que você
@@ -401,13 +407,16 @@ export function PapelariaNovoModeloForm({
                 placeholder="Ex.: Cartão visita clássico — frente e verso"
               />
             </Field>
-            <Field label="Frente / verso">
+            <Field
+              label="Face do modelo"
+              hint="Em produto frente e verso, a prova junta a frente e o verso escolhidos (modo Prova PDF)."
+            >
               <SegmentedControl
                 ariaLabel="Frente / verso"
                 size="sm"
                 value={frenteVerso as (typeof FRENTE_VERSO)[number]}
                 onChange={setFrenteVerso}
-                options={FRENTE_VERSO.map((v) => ({ id: v, label: v }))}
+                options={FRENTE_VERSO.map((v) => ({ id: v, label: FRENTE_VERSO_LABEL[v] }))}
               />
             </Field>
             <Field label="Cores">

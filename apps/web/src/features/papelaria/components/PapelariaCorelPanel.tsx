@@ -277,7 +277,11 @@ export function PapelariaCorelPanel({
     composicao,
     setComposicao,
     marcarEscolhaManual,
-  } = usePapelariaComposicao(selectedModelId, modelDetailQuery.data?.frente_versao);
+  } = usePapelariaComposicao(
+    selectedModelId,
+    modelDetailQuery.data?.frente_versao,
+    contextQuery.data?.os.frente_verso,
+  );
   const modelosExtrasIds = useMemo(() => {
     if (!composicao) return [];
     return [...new Set([composicao.frente.modelo_id, composicao.verso.modelo_id])].filter(

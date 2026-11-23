@@ -56,6 +56,25 @@ describe("PapelariaPdfLivePreview", () => {
     renderPreview({ nome_deputado: "ŵ" });
     expect(await screen.findByText(/A fonte não tem os caracteres/)).toBeInTheDocument();
   });
+
+  it("empilha frente e verso com títulos, sem abas", async () => {
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,FRENTE", "data:image/png;base64,VERSO"],
+      ms: 8,
+    });
+    renderPreview({ nome_deputado: "Ana" });
+    expect(await screen.findByText("Frente")).toBeInTheDocument();
+    expect(screen.getByText("Verso")).toBeInTheDocument();
+    expect(screen.getByAltText("Prévia da página 1")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,FRENTE",
+    );
+    expect(screen.getByAltText("Prévia da página 2")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,VERSO",
+    );
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  });
 });
 
 describe("PapelariaPdfLivePreview — edição de texto", () => {

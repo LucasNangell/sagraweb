@@ -1250,6 +1250,7 @@ def _aplicar_redes(
     *,
     exemplo: bool = False,
     estilo: Optional[str] = None,
+    regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
     """Bloco de redes sociais do modelo (se configurado) com a escolha do usuário."""
     bloco = carregar_config(int(modelo_id)).get("redes")
@@ -1259,7 +1260,9 @@ def _aplicar_redes(
 
     if selecao is None and exemplo:
         selecao = redes_svc.selecao_exemplo(bloco)
-    return redes_svc.aplicar_bloco(conteudo, bloco, selecao or [], avisos, estilo=estilo)
+    return redes_svc.aplicar_bloco(
+        conteudo, bloco, selecao or [], avisos, estilo=estilo, regioes=regioes
+    )
 
 
 def estilo_redes_dos_dados(dados: dict[str, Any]) -> Optional[str]:
@@ -1331,12 +1334,24 @@ def renderizar_composicao(
                 if campos
                 else pdf.read_bytes()
             )
+            saida = 0 if face == "frente" else 1
             if regioes is not None:
-                saida = 0 if face == "frente" else 1
                 for r in regioes_face:
                     if r["pagina"] == pagina:
                         regioes.append({**r, "modelo_id": mid, "pagina_saida": saida})
-            conteudo = _aplicar_redes(mid, conteudo, redes, avisos, estilo=estilo_redes)
+            regioes_redes: list[dict[str, Any]] = []
+            conteudo = _aplicar_redes(
+                mid,
+                conteudo,
+                redes,
+                avisos,
+                estilo=estilo_redes,
+                regioes=regioes_redes if regioes is not None else None,
+            )
+            if regioes is not None:
+                for r in regioes_redes:
+                    if r["pagina"] == pagina:
+                        regioes.append({**r, "modelo_id": mid, "pagina_saida": saida})
             src = fitz.open(stream=conteudo, filetype="pdf")
             try:
                 if pagina > src.page_count:
@@ -1422,7 +1437,24 @@ def previa_png(
         regioes = [
             {**r, "modelo_id": int(modelo_id), "pagina_saida": int(r["pagina"]) - 1} for r in regioes_modelo
         ]
-        saida = _aplicar_redes(modelo_id, saida, redes, avisos, exemplo=exemplo_redes, estilo=estilo_redes)
+        regioes_redes: list[dict[str, Any]] = []
+        saida = _aplicar_redes(
+            modelo_id,
+            saida,
+            redes,
+            avisos,
+            exemplo=exemplo_redes,
+            estilo=estilo_redes,
+            regioes=regioes_redes,
+        )
+        for r in regioes_redes:
+            regioes.append(
+                {
+                    **r,
+                    "modelo_id": int(modelo_id),
+                    "pagina_saida": int(r["pagina"]) - 1,
+                }
+            )
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:

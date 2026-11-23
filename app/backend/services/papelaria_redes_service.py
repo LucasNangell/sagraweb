@@ -623,8 +623,13 @@ def aplicar_bloco(
     selecao: Optional[list[dict[str, str]]],
     avisos: Optional[list[str]] = None,
     estilo: Optional[str] = None,
+    regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
-    """Apaga o exemplo da área do bloco e desenha as redes escolhidas."""
+    """Apaga o exemplo da área do bloco e desenha as redes escolhidas.
+
+    Se ``regioes`` for passado, acrescenta uma região clicável por texto de rede
+    (``tipo=\"rede\"``, ``rede_chave``) para a prévia ao vivo.
+    """
     import fitz
 
     from services import papelaria_prova_pdf_service as pdf_svc
@@ -798,6 +803,28 @@ def aplicar_bloco(
                 f"BT {cor} /{recurso} {m['t']:.4f} Tf {m['tc']:.4f} Tc "
                 f"1 0 0 1 {tx:.4f} {altura_pg - base_y:.4f} Tm <{fonte.codificar(valor)}> Tj ET"
             )
+            if regioes is not None:
+                tw = fonte.largura(valor, m["t"], m["tc"])
+                texto_box = fitz.Rect(
+                    tx,
+                    base_y - sobe * m["t"],
+                    tx + max(tw, 1.0),
+                    base_y + desce * m["t"],
+                )
+                regioes.append(
+                    {
+                        "pagina": int(bloco["pagina"]),
+                        "marcador": f"__rede:{rede['chave']}",
+                        "texto": valor,
+                        "negrito": [],
+                        "template": "",
+                        "valores": {},
+                        "editado": False,
+                        "tipo": "rede",
+                        "rede_chave": rede["chave"],
+                        "area": pdf_svc._area_relativa(texto_box, largura_pg, altura_pg),
+                    }
+                )
         ops.append("Q")
         page.wrap_contents()
         novo = doc.get_new_xref()

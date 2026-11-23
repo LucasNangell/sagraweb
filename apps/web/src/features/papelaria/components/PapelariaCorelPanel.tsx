@@ -1042,9 +1042,23 @@ export function PapelariaCorelPanel({
   /**
    * Texto editado na prévia: se a mudança é só numa variável (ex.: o nome),
    * atualiza o campo do formulário; senão o texto vale para aquele campo do PDF.
+   * Regiões de rede social atualizam o picker (`redesEscolha` → `__redes`).
    */
   const handleEditarTextoPrevia = useCallback(
     (regiao: ProvaPdfRegiao, texto: string) => {
+      if (regiao.tipo === "rede" && regiao.rede_chave) {
+        const chaveRede = regiao.rede_chave;
+        const valor = texto.trim();
+        setRedesEscolha((prev) => {
+          if (prev.some((r) => r.chave === chaveRede)) {
+            return prev.map((r) =>
+              r.chave === chaveRede ? { ...r, valor, ativo: Boolean(valor) } : r,
+            );
+          }
+          return [...prev, { chave: chaveRede, valor, ativo: Boolean(valor) }];
+        });
+        return;
+      }
       const edicao = interpretarEdicao(regiao, texto, camposEditaveisPrevia);
       if (edicao.tipo === "variavel") {
         removerTextoEditado(regiao.chave);
@@ -1054,6 +1068,20 @@ export function PapelariaCorelPanel({
       setTextosEditados((prev) => ({ ...prev, [regiao.chave]: edicao.texto }));
     },
     [camposEditaveisPrevia, removerTextoEditado],
+  );
+
+  const handleRestaurarTextoPrevia = useCallback(
+    (regiao: ProvaPdfRegiao) => {
+      if (regiao.tipo === "rede" && regiao.rede_chave) {
+        const chaveRede = regiao.rede_chave;
+        setRedesEscolha((prev) =>
+          prev.map((r) => (r.chave === chaveRede ? { ...r, valor: "", ativo: false } : r)),
+        );
+        return;
+      }
+      removerTextoEditado(regiao.chave);
+    },
+    [removerTextoEditado],
   );
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
@@ -1953,7 +1981,7 @@ export function PapelariaCorelPanel({
               setFieldValues((prev) => ({ ...prev, [key]: value }))
             }
             onEditarTextoPrevia={handleEditarTextoPrevia}
-            onRestaurarTextoPrevia={(regiao) => removerTextoEditado(regiao.chave)}
+            onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
           />
         </div>
       </div>

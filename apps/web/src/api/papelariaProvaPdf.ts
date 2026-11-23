@@ -145,6 +145,10 @@ export interface ProvaPdfRegiao {
   valores: Record<string, string>;
   /** O texto foi digitado na prévia (não vem mais do template). */
   editado: boolean;
+  /** Região de rede social (bloco `__redes`); ausente = campo PDF normal. */
+  tipo?: "campo" | "rede";
+  /** Chave do catálogo de redes (`instagram`, `x`, …). */
+  rede_chave?: string;
 }
 
 export interface ProvaPdfPrevia {

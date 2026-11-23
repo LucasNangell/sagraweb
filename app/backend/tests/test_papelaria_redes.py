@@ -183,6 +183,13 @@ def test_prova_pdf_com_bloco_de_redes(tmp_path, monkeypatch, catalogo):
     assert pdf_svc.tem_modelo_pdf(31) is True  # bloco de redes basta
     r = pdf_svc.previa_png(31, {"__redes": json.dumps([{"chave": "instagram", "valor": "@ana"}])}, dpi=40, modelo={})
     assert r["paginas"]
+    redes_reg = [x for x in (r.get("regioes") or []) if x.get("tipo") == "rede"]
+    assert len(redes_reg) == 1
+    assert redes_reg[0]["rede_chave"] == "instagram"
+    assert redes_reg[0]["texto"] == "@ana"
+    assert redes_reg[0]["chave"] == "31:1:__rede:instagram"
+    area = redes_reg[0]["area"]
+    assert len(area) == 4 and 0 <= area[0] < area[2] <= 1 and 0 <= area[1] < area[3] <= 1
     pdf_svc.salvar_bloco_redes(31, None)
     assert "redes" not in pdf_svc.carregar_config(31)
 

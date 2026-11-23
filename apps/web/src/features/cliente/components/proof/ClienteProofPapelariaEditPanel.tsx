@@ -41,31 +41,17 @@ export function ClienteProofPapelariaEditPanel(props: Props) {
 }
 
 function PdfEditLayout({
-  camposFormulario,
-  fieldValues,
   previaValues,
   modeloId,
   disabled = false,
-  onFieldChange,
   composicao = null,
   fetchPrevia,
   onEditarTextoPrevia,
   onRestaurarTextoPrevia,
 }: Props) {
+  // Só a prévia PDF: o cliente edita clicando nos textos (frente/verso).
   return (
     <div className="cliente-proof-edit cliente-proof-edit--pdf">
-      {camposFormulario.length > 0 ? (
-        <section className="cliente-proof-edit__general">
-          <p className="cliente-proof-edit__general-title">Informações do trabalho</p>
-          <ClienteProofPapelariaFields
-            fields={camposFormulario}
-            values={fieldValues}
-            disabled={disabled}
-            compact
-            onChange={onFieldChange}
-          />
-        </section>
-      ) : null}
       <div className="cliente-proof-edit__pdf-preview">
         <PapelariaPdfLivePreview
           modeloId={modeloId}

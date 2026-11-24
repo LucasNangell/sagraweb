@@ -879,18 +879,98 @@ def _arquivo_dentro_da_pasta(path: str, pasta: str) -> bool:
     return os.path.dirname(real_file) == real_dir
 
 
+def _fonte_marcas_pdf(
+    *,
+    perfil: Optional[dict[str, Any]],
+    produto: Optional[str],
+    variante: Optional[str],
+) -> Optional[tuple[str, bool]]:
+    """
+    PDF de marcas original (guardado no servidor ou caminho de rede) do perfil
+    de imposição: o do job e, se não servir, o perfil ativo do produto.
+    Devolve ``(caminho, carimbar_op)`` ou None.
+    """
+    from services import papelaria_imposicao_perfil_service as perfil_svc
+
+    candidatos: list[dict[str, Any]] = []
+    if isinstance(perfil, dict):
+        candidatos.append(perfil)
+    if produto and variante:
+        try:
+            from services import papelaria_imposicao_perfil_store as perfil_store
+
+            reg = perfil_store.get_perfil_ativo(produto, variante)
+            if reg and isinstance(reg.get("perfil"), dict):
+                candidatos.append(reg["perfil"])
+        except Exception as exc:  # noqa: BLE001 — sem banco: fica só com o do job
+            logger.info("Perfil de imposição %s/%s indisponível: %s", produto, variante, exc)
+    for p in candidatos:
+        try:
+            src = perfil_svc.marcas_pdf(p)
+        except Exception:  # noqa: BLE001
+            src = None
+        if src and os.path.isfile(src):
+            return src, bool((p.get("marcas") or {}).get("carimbar_op"))
+    return None
+
+
+def _recriar_marcas_pdf(
+    ausente: str,
+    *,
+    ano: int,
+    nro: int,
+    sefoc_dir: str,
+    perfil: Optional[dict[str, Any]],
+    produto: Optional[str],
+    variante: Optional[str],
+    nros: Optional[list[int]],
+) -> Optional[str]:
+    """
+    Recria na pasta da OS o PDF de marcas que sumiu (a limpeza pós-Apogee
+    apaga ``-Marcas.pdf``/``-Marcas-OP.pdf``): copia do original do perfil ou,
+    com carimbo de OP, carimba de novo. None quando não há original.
+    """
+    fonte = _fonte_marcas_pdf(perfil=perfil, produto=produto, variante=variante)
+    if not fonte:
+        return None
+    src, carimbar = fonte
+    from services import papelaria_jdf_service as jdf_svc
+
+    prefix = get_os_folder_basename(ano, nro)
+    os.makedirs(sefoc_dir, exist_ok=True)
+    if carimbar or os.path.basename(ausente).lower().endswith("-marcas-op.pdf"):
+        dest = jdf_svc.prepare_marcas_pdf_with_ops(
+            source_pdf_path=src,
+            output_pdf_path=os.path.join(sefoc_dir, f"{prefix}-Marcas-OP.pdf"),
+            nros=list(nros or [int(nro)]),
+        )
+    else:
+        dest = os.path.normpath(os.path.join(sefoc_dir, f"{prefix}-Marcas.pdf"))
+        tmp = f"{dest}.tmp"
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dest)
+    logger.info("PDF de marcas recriado na pasta da OS (%s ausente): %s", os.path.basename(ausente), dest)
+    return os.path.normpath(dest)
+
+
 def ensure_marcas_pdf_na_pasta_os(
     config: dict[str, Any],
     *,
     ano: int,
     nro: int,
     sefoc_dir: str,
+    perfil: Optional[dict[str, Any]] = None,
+    produto: Optional[str] = None,
+    variante: Optional[str] = None,
+    nros: Optional[list[int]] = None,
 ) -> dict[str, Any]:
     """
     O Apogee lê o PDF de marcas pelo caminho gravado no JDF; ele precisa estar
     na pasta da OS (rede). Se a configuração aponta para outro lugar (caminho de
     rede do modelo/produto, storage do servidor), copia como
     ``{prefixo}-Marcas.pdf`` na pasta Sefoc da OS e devolve a config ajustada.
+    Se o arquivo sumiu (ex.: limpeza depois do Apogee), recria a partir do
+    PDF de marcas do perfil de imposição.
     """
     if not config.get("marcas_corte"):
         return config
@@ -900,8 +980,26 @@ def ensure_marcas_pdf_na_pasta_os(
     if _arquivo_dentro_da_pasta(src, sefoc_dir) and os.path.isfile(src):
         return config
     if not os.path.isfile(src):
+        try:
+            recriado = _recriar_marcas_pdf(
+                src,
+                ano=ano,
+                nro=nro,
+                sefoc_dir=sefoc_dir,
+                perfil=perfil,
+                produto=produto,
+                variante=variante,
+                nros=nros,
+            )
+        except OSError as exc:
+            raise RuntimeError(
+                f"Não foi possível recriar o PDF de marcas na pasta da OS ({sefoc_dir}): {exc}"
+            ) from exc
+        if recriado:
+            return {**config, "marcas_pdf_path": recriado}
         raise FileNotFoundError(
-            f"PDF de marcas não encontrado pelo servidor: {src}. "
+            f"PDF de marcas não encontrado pelo servidor: {src}, e o perfil de imposição "
+            "do produto não tem um PDF de marcas para recriá-lo. "
             "Envie o PDF de marcas de novo na configuração de imposição."
         )
     prefix = get_os_folder_basename(ano, nro)
@@ -930,13 +1028,28 @@ def _build_imposicao_jdf_artifacts(
     descriptive_name: Optional[str] = None,
     jdf_dir: Optional[str] = None,
     sem_imposicao: bool = False,
+    dados: Optional[dict[str, Any]] = None,
 ) -> dict[str, str]:
-    """Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API)."""
+    """
+    Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API).
+    ``dados`` do job (reenvio): perfil/variante/OPs para recriar o PDF de marcas.
+    """
     from services import papelaria_jdf_service as jdf_svc
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     if not sem_imposicao:
-        config = ensure_marcas_pdf_na_pasta_os(config, ano=ano, nro=nro, sefoc_dir=sefoc_dir)
+        meta = (dados or {}).get("imposicao_v2")
+        meta = meta if isinstance(meta, dict) else {}
+        config = ensure_marcas_pdf_na_pasta_os(
+            config,
+            ano=ano,
+            nro=nro,
+            sefoc_dir=sefoc_dir,
+            perfil=meta.get("perfil") if isinstance(meta.get("perfil"), dict) else None,
+            produto=str(meta.get("produto") or produto or "") or None,
+            variante=str(meta.get("variante") or (dados or {}).get("imposicao_variante") or "") or None,
+            nros=_lote_nros_from_dados(dados, ano=ano, nro=nro) if dados else None,
+        )
     prefix = get_os_folder_basename(ano, nro)
     # Nome “humano” sem o Nr OS (já vai em JobPartID / nome do .jdf).
     label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
@@ -1559,6 +1672,7 @@ def resend_imposicao_jdf(
         base_pdf_path=base_pdf_path,
         jdf_dir=str(dados.get("jdf_import_root") or "") or None,
         sem_imposicao=sem_imposicao,
+        dados=dados,
     )
 
     dados_next = dict(dados)

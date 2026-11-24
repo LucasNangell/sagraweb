@@ -103,6 +103,71 @@ class TestMarcasNaPastaOs:
             )
 
 
+class TestMarcasRecriadas:
+    """A limpeza pós-Apogee apaga o PDF de marcas da OS: o reenvio recria."""
+
+    def test_recria_copiando_do_perfil_do_job(self, tmp_path: Path):
+        from services import papelaria_jobs_service as jobs
+
+        (tmp_path / "srv").mkdir()
+        original = _pdf(tmp_path / "srv" / "marcas.pdf")
+        sefoc = tmp_path / "Sefoc"
+        sumiu = sefoc / "05844-Teste-Marcas.pdf"
+        perfil = {"marcas": {"ativo": True, "pdf_path": str(original)}}
+        with patch.object(jobs, "get_os_folder_basename", return_value="05844-Teste"):
+            cfg = jobs.ensure_marcas_pdf_na_pasta_os(
+                {"marcas_corte": True, "marcas_pdf_path": str(sumiu)},
+                ano=2026,
+                nro=5844,
+                sefoc_dir=str(sefoc),
+                perfil=perfil,
+            )
+        assert Path(cfg["marcas_pdf_path"]) == sumiu
+        assert sumiu.read_bytes() == original.read_bytes()
+
+    def test_recria_com_carimbo_de_op_pelo_perfil_ativo(self, tmp_path: Path):
+        from services import papelaria_imposicao_perfil_store as store
+        from services import papelaria_jdf_service as jdf
+        from services import papelaria_jobs_service as jobs
+
+        (tmp_path / "srv").mkdir()
+        original = _pdf(tmp_path / "srv" / "marcas.pdf")
+        sefoc = tmp_path / "Sefoc"
+        perfil = {"marcas": {"ativo": True, "pdf_path": str(original), "carimbar_op": True}}
+        with patch.object(jobs, "get_os_folder_basename", return_value="05844-Teste"), patch.object(
+            store, "get_perfil_ativo", return_value={"perfil": perfil}
+        ) as ativo, patch.object(
+            jdf, "prepare_marcas_pdf_with_ops", side_effect=lambda **kw: kw["output_pdf_path"]
+        ) as carimbo:
+            cfg = jobs.ensure_marcas_pdf_na_pasta_os(
+                {"marcas_corte": True, "marcas_pdf_path": str(sefoc / "05844-Teste-Marcas-OP.pdf")},
+                ano=2026,
+                nro=5844,
+                sefoc_dir=str(sefoc),
+                produto="Ct de Cumprimento",
+                variante="padrao",
+                nros=[5844, 5845],
+            )
+        ativo.assert_called_once_with("Ct de Cumprimento", "padrao")
+        kw = carimbo.call_args.kwargs
+        assert kw["source_pdf_path"] == str(original)
+        assert kw["nros"] == [5844, 5845]
+        assert Path(cfg["marcas_pdf_path"]) == sefoc / "05844-Teste-Marcas-OP.pdf"
+
+    def test_sem_original_no_perfil_mantem_erro_claro(self, tmp_path: Path):
+        from services import papelaria_jobs_service as jobs
+
+        perfil = {"marcas": {"ativo": True, "pdf_path": str(tmp_path / "tambem-sumiu.pdf")}}
+        with pytest.raises(FileNotFoundError, match="recriá-lo"):
+            jobs.ensure_marcas_pdf_na_pasta_os(
+                {"marcas_corte": True, "marcas_pdf_path": str(tmp_path / "Sefoc" / "x-Marcas.pdf")},
+                ano=2026,
+                nro=5844,
+                sefoc_dir=str(tmp_path / "Sefoc"),
+                perfil=perfil,
+            )
+
+
 class TestLimpezaPosApogee:
     def test_remove_so_auxiliares_do_lote(self, tmp_path: Path):
         from services import papelaria_jobs_service as jobs

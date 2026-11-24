@@ -297,31 +297,258 @@ def detectar_molduras(doc: Any, alvo_mm: tuple[float, float], faces: int) -> lis
 # Montagem da base
 # ---------------------------------------------------------------------------
 
-_NUM = r"(-?\d+(?:\.\d+)?|-?\.\d+)"
-_RE_RET_CONTORNO = re.compile(_NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+re\s+[sS]\b")
+# Versão do processamento da base: bases e PDFs de imposição montados antes
+# desta versão são limpos (o contorno da moldura ia junto) ao serem usados.
+VERSAO_MONTAGEM = 2
+MARCA_MONTAGEM = f"sagra-base-repeticao v{VERSAO_MONTAGEM}"
+
+_SEPARADORES = " \t\r\n\f\x00()<>[]{}/%"
+_RE_FIM_IMAGEM = re.compile(r"\sEI(?=\s|$)")
+_PINTURAS = {"S", "s", "f", "F", "f*", "B", "B*", "b", "b*", "n"}
 
 
-def _apagar_contorno(doc: Any, page: Any, r: Any) -> bool:
-    """Tira a própria moldura («x y w h re S») do conteúdo da página."""
+def _tokens(texto: str):
+    """
+    Tokens de um content stream: ``(tipo, valor, inicio, fim)`` com tipo
+    ``num``, ``op`` ou ``outro`` (strings, nomes, arrays, imagens inline).
+    """
+    i, n = 0, len(texto)
+    while i < n:
+        ch = texto[i]
+        if ch in " \t\r\n\f\x00":
+            i += 1
+            continue
+        if ch == "%":
+            while i < n and texto[i] not in "\r\n":
+                i += 1
+            continue
+        if ch == "(":
+            j, prof = i + 1, 1
+            while j < n and prof:
+                c = texto[j]
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == "(":
+                    prof += 1
+                elif c == ")":
+                    prof -= 1
+                j += 1
+            yield "outro", None, i, j
+            i = j
+            continue
+        if ch == "<":
+            if texto.startswith("<<", i):
+                yield "outro", "<<", i, i + 2
+                i += 2
+                continue
+            j = texto.find(">", i)
+            j = n if j < 0 else j + 1
+            yield "outro", None, i, j
+            i = j
+            continue
+        if ch in ">[]{})":
+            j = i + (2 if texto.startswith(">>", i) else 1)
+            yield "outro", ch, i, j
+            i = j
+            continue
+        j = i + 1
+        while j < n and texto[j] not in _SEPARADORES:
+            j += 1
+        palavra = texto[i:j]
+        if ch == "/":
+            yield "outro", None, i, j
+        elif palavra == "ID":  # imagem inline: dados binários até «EI»
+            m = _RE_FIM_IMAGEM.search(texto, j + 1)
+            j = m.end() if m else n
+            yield "outro", None, i, j
+        else:
+            try:
+                yield "num", float(palavra), i, j
+            except ValueError:
+                yield "op", palavra, i, j
+        i = j
+
+
+def _no_contorno(p1: Any, p2: Any, alvo: tuple[float, float, float, float], tol: float) -> bool:
+    """Segmento reto sobre uma das bordas do retângulo ``alvo`` (coordenadas PDF)."""
+    x0, y0, x1, y1 = alvo
+    if abs(p1.y - p2.y) <= tol and min(abs(p1.y - y0), abs(p1.y - y1)) <= tol:
+        return min(p1.x, p2.x) >= x0 - tol and max(p1.x, p2.x) <= x1 + tol
+    if abs(p1.x - p2.x) <= tol and min(abs(p1.x - x0), abs(p1.x - x1)) <= tol:
+        return min(p1.y, p2.y) >= y0 - tol and max(p1.y, p2.y) <= y1 + tol
+    return False
+
+
+def _edicoes_do_contorno(
+    textos: list[str], alvo: tuple[float, float, float, float], tol: float
+) -> list[list[tuple[int, int, str]]]:
+    """
+    Acha nos content streams (em sequência, com a matriz de q/Q/cm) os traços
+    só de contorno cujos segmentos estão todos sobre as bordas de ``alvo`` —
+    em ``re``, em polilinha ou partida em vários caminhos — e devolve as
+    edições por stream: a pintura vira ``n`` (ou o subcaminho sai, quando o
+    mesmo traço desenha outras coisas). Nada mais é reescrito.
+    """
     import fitz
 
-    inv = ~page.transformation_matrix
-    a = fitz.Point(r.x0, r.y1) * inv  # canto inferior esquerdo em coordenadas PDF
-    tol = 0.8
-    for xref in page.get_contents():
-        bruto = doc.xref_stream(xref)
-        if not bruto:
+    lado = min(alvo[2] - alvo[0], alvo[3] - alvo[1])
+    ctm = fitz.Matrix(1, 0, 0, 1, 0, 0)
+    pilha: list[Any] = []
+    caminho: list[dict[str, Any]] = []
+    sub: Optional[dict[str, Any]] = None
+    ponto = None
+    operandos: list[tuple[Optional[float], int]] = []
+    edicoes: list[list[tuple[int, int, str]]] = [[] for _ in textos]
+
+    def novo_sub(si: int, ini: int, p: Any) -> dict[str, Any]:
+        d = {"stream": si, "ini": ini, "fim": ini, "segs": [], "inicio": p}
+        caminho.append(d)
+        return d
+
+    def classe(d: dict[str, Any]) -> str:
+        retos = [sg for sg in d["segs"] if sg == "curva" or abs(sg[0].x - sg[1].x) + abs(sg[0].y - sg[1].y) > 0.01]
+        if not retos:
+            return "vazio"
+        if all(sg != "curva" and _no_contorno(sg[0], sg[1], alvo, tol) for sg in retos):
+            return "moldura"
+        return "outro"
+
+    for si, texto in enumerate(textos):
+        for tipo, valor, ini, fim in _tokens(texto):
+            if tipo == "num":
+                operandos.append((valor, ini))
+                continue
+            if tipo == "outro":
+                operandos.append((None, ini))
+                continue
+            op = valor
+            args = [v for v, _ in operandos]
+            arg_ini = operandos[0][1] if operandos else ini
+            operandos = []
+            numeros = all(v is not None for v in args)
+            if op == "q":
+                pilha.append(ctm)
+            elif op == "Q":
+                ctm = pilha.pop() if pilha else ctm
+            elif op == "cm" and len(args) == 6 and numeros:
+                ctm = fitz.Matrix(*args) * ctm
+            elif op == "m" and len(args) == 2 and numeros:
+                ponto = fitz.Point(*args) * ctm
+                sub = novo_sub(si, arg_ini, ponto)
+                sub["fim"] = fim
+            elif op == "re" and len(args) == 4 and numeros:
+                x, y, w, h = args
+                cantos = [fitz.Point(a, b) * ctm for a, b in ((x, y), (x + w, y), (x + w, y + h), (x, y + h))]
+                sub = novo_sub(si, arg_ini, cantos[0])
+                sub["segs"] = [(cantos[k], cantos[(k + 1) % 4]) for k in range(4)]
+                sub["fim"] = fim
+                ponto = cantos[0]
+            elif op in ("l", "c", "v", "y", "h") and sub is not None and ponto is not None:
+                if op == "l" and len(args) == 2 and numeros:
+                    novo = fitz.Point(*args) * ctm
+                    sub["segs"].append((ponto, novo))
+                    ponto = novo
+                elif op == "h":
+                    sub["segs"].append((ponto, sub["inicio"]))
+                    ponto = sub["inicio"]
+                elif op in ("c", "v", "y") and len(args) >= 4 and numeros:
+                    sub["segs"].append("curva")
+                    ponto = fitz.Point(args[-2], args[-1]) * ctm
+                if sub["stream"] == si:
+                    sub["fim"] = fim
+                else:
+                    sub["stream"] = -1  # subcaminho atravessa streams: não remove em parte
+            elif op in _PINTURAS:
+                if op in ("S", "s") and caminho:
+                    if op == "s" and sub is not None and ponto is not None:
+                        sub["segs"].append((ponto, sub["inicio"]))
+                    classes = [classe(d) for d in caminho]
+                    maior = max(
+                        (abs(sg[0].x - sg[1].x) + abs(sg[0].y - sg[1].y)
+                         for d, c in zip(caminho, classes) if c == "moldura" for sg in d["segs"] if sg != "curva"),
+                        default=0.0,
+                    )
+                    if "moldura" in classes and maior >= 0.2 * lado:
+                        if all(c in ("moldura", "vazio") for c in classes):
+                            edicoes[si].append((ini, fim, "n"))
+                        elif all(d["stream"] >= 0 for d, c in zip(caminho, classes) if c == "moldura"):
+                            for d, c in zip(caminho, classes):
+                                if c == "moldura":
+                                    edicoes[d["stream"]].append((d["ini"], d["fim"], " "))
+                caminho, sub, ponto = [], None, None
+    return edicoes
+
+
+def _apagar_contorno(doc: Any, page: Any, r: Any, tol: float = 1.0) -> int:
+    """
+    Tira do conteúdo da página o contorno da moldura ``r`` (coordenadas da
+    página, origem no topo). Devolve quantos traços saíram.
+    """
+    import fitz
+
+    q = fitz.Rect(r) * ~page.transformation_matrix
+    alvo = (min(q.x0, q.x1), min(q.y0, q.y1), max(q.x0, q.x1), max(q.y0, q.y1))
+    xrefs = page.get_contents()
+    textos = [(doc.xref_stream(x) or b"").decode("latin-1") for x in xrefs]
+    total = 0
+    for xref, texto, eds in zip(xrefs, textos, _edicoes_do_contorno(textos, alvo, tol)):
+        if not eds:
             continue
-        texto = bruto.decode("latin-1")
-        for m in _RE_RET_CONTORNO.finditer(texto):
-            x, y, w, h = (float(v) for v in m.groups())
-            x0, y0 = min(x, x + w), min(y, y + h)
-            if (abs(x0 - a.x) <= tol and abs(y0 - a.y) <= tol
-                    and abs(abs(w) - r.width) <= tol and abs(abs(h) - r.height) <= tol):
-                novo = texto[: m.start()] + "n" + texto[m.end():]
-                doc.update_stream(xref, novo.encode("latin-1"))
-                return True
-    return False
+        for ini, fim, novo in sorted(eds, reverse=True):
+            texto = texto[:ini] + novo + texto[fim:]
+        doc.update_stream(xref, texto.encode("latin-1"))
+        total += len(eds)
+    return total
+
+
+def _marcar_montagem(doc: Any) -> None:
+    meta = dict(doc.metadata or {})
+    meta["keywords"] = MARCA_MONTAGEM
+    meta["creator"] = "SAGRA Papelaria"
+    doc.set_metadata({k: v for k, v in meta.items() if k not in ("format", "encryption")})
+
+
+def limpar_base_montada(pdf_bytes: bytes) -> tuple[bytes, int]:
+    """
+    Base já montada (páginas no formato do produto): tira traços de contorno
+    sobre as bordas da página (a moldura que ficou em montagens antigas) e
+    marca a versão. Devolve ``(pdf, traços removidos)``.
+    """
+    import fitz
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        total = sum(_apagar_contorno(doc, page, page.rect) for page in doc)
+        _marcar_montagem(doc)
+        return doc.tobytes(garbage=3, deflate=True), total
+    finally:
+        doc.close()
+
+
+def montagem_atual(caminho: str) -> bool:
+    """O PDF foi montado (ou limpo) por esta versão do processamento."""
+    import fitz
+
+    try:
+        with fitz.open(caminho) as doc:
+            return (doc.metadata or {}).get("keywords") == MARCA_MONTAGEM
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _montado_por_versao_antiga(caminho: str) -> bool:
+    """Base montada antes da versão atual (sem marca e sem produtor — não é do Corel/Distiller)."""
+    import fitz
+
+    try:
+        with fitz.open(caminho) as doc:
+            meta = doc.metadata or {}
+    except Exception:  # noqa: BLE001
+        return False
+    if meta.get("keywords") == MARCA_MONTAGEM:
+        return False
+    return not (meta.get("producer") or "").strip() and not (meta.get("creator") or "").strip()
 
 
 def _matriz(m: Moldura, x0: float, y0: float, x1: float, y1: float, s: float) -> tuple[float, ...]:
@@ -361,9 +588,11 @@ def montar_face(src: Any, m: Moldura, alvo_mm: tuple[float, float]) -> bytes:
                 graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
                 text=fitz.PDF_REDACT_TEXT_REMOVE,
             )
-            # 2) Tira o contorno da moldura; sem achar, recorta meia espessura para dentro.
-            if not _apagar_contorno(tmp, page, r) and m.espessura > 0:
-                r = r + (m.espessura, m.espessura, -m.espessura, -m.espessura)
+            # 2) Tira o contorno da moldura do conteúdo; sem achar, recorta
+            #    para dentro além da espessura do traço.
+            if not _apagar_contorno(tmp, page, r):
+                folga = max(m.espessura, 0.6)
+                r = r + (folga, folga, -folga, -folga)
         inv = ~page.transformation_matrix
         p0 = fitz.Point(r.x0, r.y1) * inv
         p1 = fitz.Point(r.x1, r.y0) * inv
@@ -416,6 +645,7 @@ def montar_base(pdf_bytes: bytes, alvo_mm: tuple[float, float], faces: int) -> t
                     out.insert_pdf(parte)
                 finally:
                     parte.close()
+            _marcar_montagem(out)
             return out.tobytes(garbage=3, deflate=True), molduras
         finally:
             out.close()
@@ -443,9 +673,30 @@ def carregar_config_base(ano: int, nro: int) -> dict[str, Any]:
     if not caminho.is_file():
         return {}
     try:
-        return json.loads(caminho.read_text(encoding="utf-8")) or {}
+        cfg = json.loads(caminho.read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
         return {}
+    if int(cfg.get("versao_montagem") or 1) < VERSAO_MONTAGEM:
+        cfg = _atualizar_base_antiga(ano, nro, cfg)
+    return cfg
+
+
+def _atualizar_base_antiga(ano: int, nro: int, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Base montada por versão antiga: tira a moldura que tinha ficado no PDF."""
+    pdf = caminho_base(ano, nro)
+    try:
+        if pdf.is_file():
+            limpo, n = limpar_base_montada(pdf.read_bytes())
+            pdf.write_bytes(limpo)
+            if n:
+                logger.info("Repetição %s/%s: %d traço(s) da moldura removido(s) da base", nro, ano, n)
+        cfg = {**cfg, "versao_montagem": VERSAO_MONTAGEM}
+        (_pasta_base(ano, nro) / "config.json").write_text(
+            json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:  # noqa: BLE001 — sem conseguir limpar, segue com a base como está
+        logger.warning("Repetição %s/%s: base antiga não atualizada: %s", nro, ano, exc)
+    return cfg
 
 
 def tem_base(ano: int, nro: int) -> bool:
@@ -568,6 +819,14 @@ def pdf_base_para_imposicao(ano: int, nro: int, existente: Optional[str]) -> Opt
     except RepeticaoError:
         return None
     if existente and no_formato_do_produto(existente, alvo):
+        if _montado_por_versao_antiga(existente):
+            # Montado por nós antes da correção: tira a moldura que tinha ficado.
+            with open(existente, "rb") as fh:
+                limpo, n = limpar_base_montada(fh.read())
+            if n:
+                with open(existente, "wb") as fh:
+                    fh.write(limpo)
+                logger.info("Imposição: moldura removida de %s", os.path.basename(existente))
         return existente
     prova = ultima_prova_da_os(ano, nro)
     if not prova:
@@ -587,7 +846,7 @@ def pdf_base_para_imposicao(ano: int, nro: int, existente: Optional[str]) -> Opt
     destino = os.path.join(sefoc, nome)
     # Já montado a partir desta prova (ou de uma mais nova): reaproveita.
     if os.path.isfile(destino) and os.path.getmtime(destino) >= os.path.getmtime(prova):
-        if no_formato_do_produto(destino, alvo):
+        if no_formato_do_produto(destino, alvo) and montagem_atual(destino):
             return destino
     with open(prova, "rb") as fh:
         base, _molduras = montar_base(fh.read(), alvo, faces)
@@ -637,6 +896,7 @@ def criar_base(
         "propria": bool(propria),
         "arquivo_origem": os.path.basename(caminho),
         "criado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "versao_montagem": VERSAO_MONTAGEM,
         "faces": [
             {"face": m.face, "metodo": m.metodo, "pagina_origem": m.pagina + 1, "escala": round(m.escala, 4), "rotacao": m.rotacao}
             for m in molduras

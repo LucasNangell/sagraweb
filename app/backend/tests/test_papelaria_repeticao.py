@@ -370,3 +370,138 @@ def test_alteracao_monta_base_editavel_da_propria_prova(tmp_path, monkeypatch):
     # Depois: a base própria vem no contexto (mesmo com «Repetição» na observação).
     ctx = models_svc._repeticao_da_sp(2026, 6242, "Repetição da OS 1234/25")
     assert ctx["propria"] is True and ctx["base"]["propria"] is True and ctx["origem_nro"] == 6242
+
+
+# --- Moldura não vai para a base nova (contorno em cm relativo, polilinha, partido) -------------
+
+_W, _H = 85 * MM, 50 * MM  # moldura do produto (pt)
+_X, _Y = 150.0, 500.0  # canto inferior esquerdo da moldura (coordenadas PDF)
+
+
+def _prova_com_conteudo(moldura: str) -> bytes:
+    """A4 com um texto dentro da moldura e a moldura desenhada pelo conteúdo cru dado."""
+    _fonte_ok()
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    # Texto dentro da moldura (coordenadas da página, origem no topo).
+    page.insert_text((_X + 20, 842 - _Y - 60), "Conteudo interno", fontname="F1", fontsize=10)
+    page.insert_text((_X, 842 - _Y - _H - 8), "Frente", fontname="F1", fontsize=9)
+    xref = doc.get_new_xref()
+    doc.update_object(xref, "<<>>")
+    doc.update_stream(xref, ("q 0 0 0 1 K .3 w " + moldura + " Q\n").encode("latin-1"))
+    atuais = page.get_contents()
+    doc.xref_set_key(page.xref, "Contents", "[" + " ".join(f"{x} 0 R" for x in [*atuais, xref]) + "]")
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _sem_moldura(base: bytes) -> None:
+    doc = fitz.open(stream=base, filetype="pdf")
+    try:
+        for page in doc:
+            pr = page.rect
+            for d in page.get_drawings():
+                r = d["rect"]
+                assert not (d.get("type") == "s" and r.width > pr.width * 0.9 and r.height > pr.height * 0.9), d
+            pix = page.get_pixmap(dpi=150)
+            w, h, n, s = pix.width, pix.height, pix.n, pix.samples
+            escuros = [
+                (x, y)
+                for y in range(h)
+                for x in range(w)
+                if (x < 3 or y < 3 or x >= w - 3 or y >= h - 3) and sum(s[(y * w + x) * n:(y * w + x) * n + 3]) < 600
+            ]
+            assert not escuros, escuros[:5]
+    finally:
+        doc.close()
+
+
+@pytest.mark.parametrize(
+    "moldura",
+    [
+        # Corel: «cm» de translação e «re» relativo; a segunda moldura com cm acumulado.
+        f"q 1 0 0 1 {_X} {_Y} cm 0 0 m 0 0 {_W:.3f} {_H:.3f} re S 1 0 0 1 0 -200 cm 0 0 m 0 0 {_W:.3f} {_H:.3f} re S Q",
+        # Polilinha m/l/l/l a partir do canto superior direito (como nas pastas).
+        f"q 1 0 0 1 {_X + _W:.3f} {_Y} cm 0 0 m 0 {_H:.3f} l {-_W:.3f} {_H:.3f} l {-_W:.3f} 0 l h S Q",
+        # Partida em dois caminhos.
+        f"{_X} {_Y + _H:.3f} m {_X + _W:.3f} {_Y + _H:.3f} l {_X + _W:.3f} {_Y} l S "
+        f"{_X + _W:.3f} {_Y} m {_X} {_Y} l {_X} {_Y + _H:.3f} l S",
+        # Escalada (unidades de 1/10 pt, estilo Illustrator).
+        f"q 0.1 0 0 0.1 0 0 cm {_X * 10} {_Y * 10} {_W * 10:.2f} {_H * 10:.2f} re S Q",
+    ],
+    ids=["cm-relativo", "polilinha", "partida", "escalada"],
+)
+def test_moldura_nao_vai_para_a_base(moldura):
+    from services import papelaria_repeticao_service as rep
+
+    prova = _prova_com_conteudo(moldura)
+    # O contorno é achado no conteúdo (não depende do recorte de reserva).
+    with fitz.open(stream=prova, filetype="pdf") as doc:
+        r = fitz.Rect(_X, 842 - _Y - _H, _X + _W, 842 - _Y)
+        assert rep._apagar_contorno(doc, doc[0], r) >= 1
+    base, molduras = rep.montar_base(prova, (85, 50), 1)
+    assert molduras[0].metodo == "tamanho do produto"
+    _sem_moldura(base)
+    assert _textos(base) == [["Conteudo interno"]]
+    with fitz.open(stream=base, filetype="pdf") as doc:
+        assert doc.metadata["keywords"] == rep.MARCA_MONTAGEM
+
+
+def test_moldura_no_mesmo_traco_de_outro_desenho_so_ela_sai():
+    from services import papelaria_repeticao_service as rep
+
+    moldura = (
+        f"{_X} {_Y} {_W:.3f} {_H:.3f} re "
+        f"{_X + 30} {_Y + 20} m {_X + 130} {_Y + 20} l S"  # linha interna no mesmo «S»
+    )
+    doc = fitz.open(stream=_prova_com_conteudo(moldura), filetype="pdf")
+    page = doc[0]
+    r = fitz.Rect(_X, 842 - _Y - _H, _X + _W, 842 - _Y)
+    assert rep._apagar_contorno(doc, page, r) == 1
+    linhas = [d["rect"] for d in page.get_drawings() if d.get("type") == "s"]
+    doc.close()
+    # A moldura saiu; a linha interna (100 pt) ficou.
+    assert not any(abs(x.width - _W) < 1 for x in linhas), linhas
+    assert any(abs(x.width - 100) < 1 and x.height < 1 for x in linhas), linhas
+
+
+def test_base_montada_antes_da_correcao_e_limpa_ao_ser_usada(tmp_path, monkeypatch):
+    """Base guardada por versão antiga (com a moldura): limpa ao carregar a config."""
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    # Simula a montagem antiga: página no formato com a moldura sobre as bordas.
+    doc = fitz.open()
+    page = doc.new_page(width=_W, height=_H)
+    page.draw_rect(page.rect, color=(0, 0, 0), width=0.3)
+    page.insert_text((20, 40), "Texto", fontsize=10)
+    antiga = doc.tobytes()
+    doc.close()
+    pasta = rep._pasta_base(2026, 7001)
+    pasta.mkdir(parents=True)
+    rep.caminho_base(2026, 7001).write_bytes(antiga)
+    (pasta / "config.json").write_text(json.dumps({"campos": []}), encoding="utf-8")
+
+    cfg = rep.carregar_config_base(2026, 7001)
+    assert cfg["versao_montagem"] == rep.VERSAO_MONTAGEM
+    _sem_moldura(rep.caminho_base(2026, 7001).read_bytes())
+    assert rep.montagem_atual(str(rep.caminho_base(2026, 7001)))
+    assert json.loads((pasta / "config.json").read_text(encoding="utf-8"))["versao_montagem"] == rep.VERSAO_MONTAGEM
+
+
+def test_imposicao_limpa_base_sefoc_montada_antes_da_correcao(tmp_path, monkeypatch):
+    from services import papelaria_jobs_service as jobs
+
+    sefoc, _prova = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    base = sefoc / "06242-Fulano-CtVisita-BaseSefoc.pdf"
+    doc = fitz.open()
+    for _ in range(2):
+        page = doc.new_page(width=_W, height=_H)
+        page.draw_rect(page.rect, color=(0, 0, 0), width=0.3)
+    base.write_bytes(doc.tobytes())
+    doc.close()
+    assert jobs.resolve_base_sefoc_pdf_path(2026, 6242) == os.path.normpath(str(base))
+    _sem_moldura(base.read_bytes())

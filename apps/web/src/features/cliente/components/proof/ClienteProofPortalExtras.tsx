@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@sagra/ui";
 
+/** Dois primeiros nomes, na ordem em que foram escritos. */
+export function primeirosDoisNomes(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  return partes.slice(0, 2).join(" ");
+}
+
 interface ClienteProofAlteracoesDescriptionFormProps {
   value: string;
   loading?: boolean;
@@ -12,6 +18,10 @@ interface ClienteProofAlteracoesDescriptionFormProps {
   onSubmit: () => void;
   onCancel: () => void;
   onExampleFile: () => void;
+  /** Omite o rótulo do campo quando o texto acima já explica o que escrever. */
+  hideFieldLabel?: boolean;
+  /** Frase imediatamente acima do botão de arquivo. */
+  fileLead?: string;
 }
 
 export function ClienteProofAlteracoesDescriptionForm({
@@ -23,11 +33,15 @@ export function ClienteProofAlteracoesDescriptionForm({
   onSubmit,
   onCancel,
   onExampleFile,
+  hideFieldLabel = false,
+  fileLead,
 }: ClienteProofAlteracoesDescriptionFormProps) {
   return (
     <>
-      <label className="mt-4 flex flex-col gap-1 text-sm" data-tour="proof-alteracoes-texto">
-        <span className="font-medium text-neutral-700">Descreva as alterações desejadas</span>
+      <label className="mt-3 flex flex-col gap-1 text-sm" data-tour="proof-alteracoes-texto">
+        {hideFieldLabel ? null : (
+          <span className="font-medium text-neutral-700">Descreva as alterações desejadas</span>
+        )}
         <textarea
           className="min-h-32 rounded-xl border border-sagra-border px-3 py-2 text-sm"
           value={value}
@@ -36,6 +50,7 @@ export function ClienteProofAlteracoesDescriptionForm({
           disabled={loading}
         />
       </label>
+      {fileLead ? <p className="mt-4 text-sm leading-relaxed text-neutral-700">{fileLead}</p> : null}
       <button
         type="button"
         data-tour="proof-example-file"
@@ -216,33 +231,8 @@ export function ClienteProofExampleFileModal({
   );
 }
 
-export function ClienteProofPortalInstructionBanner({
-  fiel = false,
-}: {
-  /** Prévia PDF ao vivo (mesmas fontes da prova). */
-  fiel?: boolean;
-}) {
-  return (
-    <div className="border-t border-amber-300 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-950 sm:px-5">
-      <p>
-        {fiel
-          ? "Clique nos textos da prévia para editá-los. A imagem usa o mesmo PDF e as mesmas fontes da prova."
-          : "Altere os dados do trabalho diretamente nos campos abaixo e veja uma prévia aproximada de como ficará o trabalho após as alterações."}
-      </p>
-      <p className="mt-3 rounded-lg border border-amber-300/80 bg-amber-100/80 px-3 py-2.5 font-semibold text-amber-950">
-        <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
-        {fiel
-          ? "Ao solicitar as alterações você receberá uma nova prova oficial para aprovação."
-          : "A prévia não constitui uma prova oficial. Ao solicitar as alterações você receberá uma nova prova para aprovação."}
-      </p>
-      <p className="mt-3">
-        {fiel
-          ? "Caso as alterações desejadas não possam ser feitas na prévia, descreva-as no campo da coluna esquerda."
-          : "Caso as alterações que você deseja não estejam disponíveis nos campos abaixo, descreva-as no campo da coluna esquerda."}
-      </p>
-    </div>
-  );
-}
+export const PORTAL_ALTERACAO_CONFIRMACAO =
+  "Em breve você receberá uma nova prova oficial para aprovação. O trabalho ficará pendente até que você aprove a prova enviada.";
 
 /** Detecta variante de cores de relevo seco (espelha o backend). */
 export function isRelevoSecoCores(cores?: string | null): boolean {
@@ -252,13 +242,16 @@ export function isRelevoSecoCores(cores?: string | null): boolean {
 export function ClienteProofRelevoSecoBanner() {
   return (
     <div
-      className="shrink-0 border-b border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950 sm:px-5"
+      className="shrink-0 border-b border-sagra-border bg-white px-4 py-2.5 text-sm leading-relaxed text-neutral-800 sm:px-5"
       role="status"
+      data-testid="cliente-proof-relevo-seco-banner"
     >
-      <p className="font-semibold text-amber-950">
-        <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
-        Os contornos e textos em vermelho não serão impressos. São apenas indicadores da posição do
-        relevo seco no produto.
+      <p>
+        O contorno em{" "}
+        <strong className="font-bold" style={{ color: "#A52B48" }}>
+          Vermelho
+        </strong>{" "}
+        indica aplicação de Relevo Seco
       </p>
     </div>
   );

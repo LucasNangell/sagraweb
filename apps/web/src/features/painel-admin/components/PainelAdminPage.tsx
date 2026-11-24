@@ -1,6 +1,7 @@
 import { cn } from "@sagra/ui";
 import {
   Columns3,
+  ExternalLink,
   Monitor,
   Palette,
   RefreshCw,
@@ -44,6 +45,7 @@ import {
   listenPreviewRequests,
   publishPreviewConfig,
 } from "@/features/painel-admin/previewChannel";
+import { openPainelMirrorWindow } from "@/lib/painel-standalone";
 import "@/features/configuracoes/components/configuracoesPage.css";
 
 const POLL_MS = 3000;
@@ -329,13 +331,17 @@ export function PainelAdminPage() {
               <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
                 {instances.map((row) => {
                   const active = row.clientId === selectedId;
+                  const title = instanceTitle(row);
                   return (
-                    <li key={row.clientId}>
+                    <li
+                      key={row.clientId}
+                      className={`flex items-stretch ${
+                        active ? "bg-sky-50" : "hover:bg-slate-50"
+                      }`}
+                    >
                       <button
                         type="button"
-                        className={`flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left ${
-                          active ? "bg-sky-50" : "hover:bg-slate-50"
-                        }`}
+                        className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2.5 text-left"
                         onClick={() => void selectInstance(row)}
                       >
                         <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -343,7 +349,7 @@ export function PainelAdminPage() {
                             className="inline-block size-2 rounded-full bg-emerald-500"
                             aria-hidden
                           />
-                          {instanceTitle(row)}
+                          {title}
                         </span>
                         <span className="text-xs text-slate-600">
                           {row.setor || "Sem setor"} ·{" "}
@@ -354,6 +360,17 @@ export function PainelAdminPage() {
                             {row.descricao}
                           </span>
                         ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="shrink-0 self-center rounded p-2 text-slate-500 hover:bg-slate-100 hover:text-secondary-blue"
+                        title={`Abrir ${title} em nova janela`}
+                        aria-label={`Abrir ${title} em nova janela`}
+                        onClick={() =>
+                          openPainelMirrorWindow(row.route, row.clientId)
+                        }
+                      >
+                        <ExternalLink className="size-3.5" />
                       </button>
                     </li>
                   );

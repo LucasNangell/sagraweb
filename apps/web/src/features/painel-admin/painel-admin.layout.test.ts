@@ -55,6 +55,24 @@ describe("layout do admin de painéis", () => {
     );
   });
 
+  it("abre cada painel listado em janela espelhada", () => {
+    expect(page).toContain("openPainelMirrorWindow");
+    expect(page).toContain("ExternalLink");
+    expect(page).toContain("Abrir ${title} em nova janela");
+    expect(
+      readFileSync(
+        resolve(here, "../../lib/painel-standalone.ts"),
+        "utf8",
+      ),
+    ).toContain('mirror: clientId.trim()');
+    expect(
+      readFileSync(
+        resolve(here, "../dashboard-setor/hooks/usePainelOsRemoteConfig.ts"),
+        "utf8",
+      ),
+    ).toContain("if (mirroring)");
+  });
+
   it("separa as configurações em abas Geral Colunas Visual Animação Fonte", () => {
     expect(page).toContain('aria-label="Configurações do painel"');
     expect(page).toContain("Geral");

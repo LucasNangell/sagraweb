@@ -8,8 +8,8 @@ import {
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { normalizeDashboardConfigFromRemote } from "../normalizeConfig";
 import {
-  getPainelClientId,
   isPainelConfigUpdateMessage,
+  resolvePainelRuntimeClientId,
 } from "../painelClientId";
 import { saveDashboardConfig } from "../configStorage";
 import { buildDashboardConfigSignature } from "../utils";
@@ -49,13 +49,15 @@ export function usePainelOsRemoteConfig({
   setConfig,
   fallbackSector,
 }: UsePainelOsRemoteConfigOptions): string {
-  const clientId = getPainelClientId();
+  const { clientId, mirroring } = resolvePainelRuntimeClientId();
   const configRef = useRef(config);
   configRef.current = config;
   const setConfigRef = useRef(setConfig);
   setConfigRef.current = setConfig;
   const fallbackRef = useRef(fallbackSector);
   fallbackRef.current = fallbackSector;
+  const mirroringRef = useRef(mirroring);
+  mirroringRef.current = mirroring;
 
   const applyRemote = useCallback((next: DashboardConfig) => {
     if (
@@ -69,7 +71,9 @@ export function usePainelOsRemoteConfig({
         return;
       }
     }
-    saveDashboardConfig(next);
+    if (!mirroringRef.current) {
+      saveDashboardConfig(next);
+    }
     setConfigRef.current(next);
   }, []);
 
@@ -127,6 +131,9 @@ export function usePainelOsRemoteConfig({
   }, [pullRemoteConfig]);
 
   useEffect(() => {
+    if (mirroring) {
+      return;
+    }
     const body = {
       clientId,
       route,
@@ -143,7 +150,7 @@ export function usePainelOsRemoteConfig({
         sector: config.sector,
       });
     }
-  }, [clientId, config.sector, route, send, status]);
+  }, [clientId, config.sector, mirroring, route, send, status]);
 
   useEffect(() => {
     if (status !== "connected") {

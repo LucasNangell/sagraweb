@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_DASHBOARD_CONFIG } from "../constants";
-import { isPainelConfigUpdateMessage } from "../painelClientId";
+import {
+  isPainelConfigUpdateMessage,
+  readPainelMirrorClientId,
+} from "../painelClientId";
 import { applyPainelConfigUpdate } from "./usePainelOsRemoteConfig";
 
 describe("applyPainelConfigUpdate", () => {
@@ -63,5 +66,13 @@ describe("applyPainelConfigUpdate", () => {
         "client-a-1234",
       ),
     ).toBe(true);
+  });
+
+  it("lê o clientId de espelho na query string", () => {
+    expect(readPainelMirrorClientId("?mirror=client-a-1234")).toBe(
+      "client-a-1234",
+    );
+    expect(readPainelMirrorClientId("?mirror=curto")).toBeNull();
+    expect(readPainelMirrorClientId("")).toBeNull();
   });
 });

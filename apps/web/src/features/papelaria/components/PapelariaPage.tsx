@@ -16,6 +16,7 @@ export function PapelariaPage() {
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
   const [listExpanded, setListExpanded] = useState(false);
   const [formHost, setFormHost] = useState<HTMLDivElement | null>(null);
+  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
 
@@ -94,11 +95,17 @@ export function PapelariaPage() {
             mobilePane !== "lista" && "max-md:hidden",
           )}
         >
+          {/* A lista mantém a metade de cima; os botões e o formulário dividem o resto. */}
           <PapelariaSpList
             selected={selected}
             expanded={listExpanded}
             onSelect={handleSelectFromList}
-            className="min-h-0 flex-1 basis-0"
+            className="min-h-0 flex-1 basis-0 md:h-[calc(50%-0.25rem)] md:flex-none"
+          />
+          <div
+            ref={setActionsHost}
+            className="flex shrink-0 empty:hidden"
+            data-testid="papelaria-actions-host"
           />
           <div
             ref={setFormHost}
@@ -117,6 +124,7 @@ export function PapelariaPage() {
             osId={osId}
             osAno={osAno}
             formHost={formHost}
+            actionsHost={actionsHost}
             dockForm
           />
         </div>

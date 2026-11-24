@@ -28,6 +28,8 @@ export type PapelariaActionBarProps = {
   onAbrirCorel: () => void;
   onFinalizarCorel: () => void;
   onImposicao: () => void;
+  /** «coluna» (padrão): barra vertical; «linha»: botões lado a lado (abaixo da lista de SPs). */
+  orientacao?: "coluna" | "linha";
   className?: string;
 };
 
@@ -38,6 +40,7 @@ function ActionButton({
   pending,
   tone = "default",
   title,
+  linha = false,
 }: {
   label: string;
   onClick: () => void;
@@ -45,6 +48,7 @@ function ActionButton({
   pending?: boolean;
   tone?: "default" | "primary" | "success" | "violet";
   title?: string;
+  linha?: boolean;
 }) {
   return (
     <button
@@ -53,7 +57,10 @@ function ActionButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex min-h-[4.25rem] w-full min-w-[4.75rem] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 py-2 text-center text-[10px] font-semibold leading-tight shadow-sm transition disabled:opacity-55",
+        "flex items-center justify-center rounded-lg border text-center font-semibold leading-tight shadow-sm transition disabled:opacity-55",
+        linha
+          ? "h-9 min-w-[4.5rem] flex-1 gap-1.5 whitespace-nowrap px-2.5 text-[11px]"
+          : "min-h-[4.25rem] w-full min-w-[4.75rem] flex-col gap-1 px-1.5 py-2 text-[10px]",
         tone === "primary" &&
           "border-secondary-blue bg-secondary-blue text-white hover:bg-secondary-blue/90",
         tone === "default" &&
@@ -95,8 +102,10 @@ export function PapelariaActionBar({
   onAbrirCorel,
   onFinalizarCorel,
   onImposicao,
+  orientacao = "coluna",
   className,
 }: PapelariaActionBarProps) {
+  const linha = orientacao === "linha";
   const baseDisabled =
     busy || folderCheckPending || modelLoading || !selectedModelId;
   const imposicaoDisabled =
@@ -113,14 +122,19 @@ export function PapelariaActionBar({
   return (
     <aside
       className={cn(
-        "flex w-[5.75rem] shrink-0 flex-col gap-2 overflow-y-auto rounded-lg border border-sagra-border bg-white p-1.5 shadow-sm",
+        "flex shrink-0 rounded-lg border border-sagra-border bg-white p-1.5 shadow-sm",
+        linha
+          ? "w-full flex-row items-center gap-1.5 overflow-x-auto"
+          : "w-[5.75rem] flex-col gap-2 overflow-y-auto",
         className,
       )}
       aria-label="Ações da papelaria"
       data-testid="papelaria-action-bar"
+      data-orientacao={orientacao}
     >
       {showAbrirPasta ? (
         <ActionButton
+          linha={linha}
           label="Abrir pasta"
           pending={abrirPastaPending}
           disabled={!hasOs || abrirPastaPending}
@@ -129,6 +143,7 @@ export function PapelariaActionBar({
         />
       ) : null}
       <ActionButton
+          linha={linha}
         label="Criar prova"
         tone="primary"
         pending={createJobPending}
@@ -147,6 +162,7 @@ export function PapelariaActionBar({
       />
       {showTimbradoA4Digital ? (
         <ActionButton
+          linha={linha}
           label="Timb A4 Digital"
           pending={createDigitalPending}
           disabled={
@@ -159,13 +175,19 @@ export function PapelariaActionBar({
         />
       ) : null}
       <p
-        className="mt-1 border-t border-dashed border-sagra-border pt-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-neutral-400 max-md:hidden"
+        className={cn(
+          "text-center text-[9px] font-bold uppercase tracking-wide text-neutral-400",
+          linha
+            ? "shrink-0 self-stretch border-l border-dashed border-sagra-border pl-2 leading-[2.25rem] max-lg:hidden"
+            : "mt-1 border-t border-dashed border-sagra-border pt-1.5 max-md:hidden",
+        )}
         title="Use só quando a prova precisar de ajuste manual no CorelDRAW"
       >
         Exceção · Corel
       </p>
       {onGerarCorel ? (
         <ActionButton
+          linha={linha}
           label="Gerar Corel"
           pending={false}
           title="Exceção: gerar o arquivo CorelDRAW (.cdr) desta OS a partir do PDF da prova, com os textos editáveis"
@@ -180,6 +202,7 @@ export function PapelariaActionBar({
         />
       ) : null}
       <ActionButton
+          linha={linha}
         label="Abrir Corel"
         pending={abrirCorelPending}
         disabled={
@@ -193,6 +216,7 @@ export function PapelariaActionBar({
       />
       {showFinalizar ? (
         <ActionButton
+          linha={linha}
           label="Finalizar"
           tone="success"
           pending={finalizeCorelPending}
@@ -202,6 +226,7 @@ export function PapelariaActionBar({
         />
       ) : null}
       <ActionButton
+          linha={linha}
         label="Imposição"
         pending={imposicaoPending}
         disabled={imposicaoDisabled}

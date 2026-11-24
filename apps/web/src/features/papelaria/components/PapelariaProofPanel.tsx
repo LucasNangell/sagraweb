@@ -6,7 +6,7 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@sagra/ui";
 
 import { apiUrl } from "@/api/client";
@@ -105,6 +105,8 @@ type Props = {
   /** Texto editado direto na prévia do PDF. */
   onEditarTextoPrevia?: (regiao: ProvaPdfRegiao, texto: string) => void;
   onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
+  /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
+  ladoEsquerdo?: ReactNode;
 };
 
 function resolvePreviewImageUrl(raw: string): string {
@@ -148,6 +150,7 @@ export function PapelariaProofPanel({
   onLivePreviewValueChange,
   onEditarTextoPrevia,
   onRestaurarTextoPrevia,
+  ladoEsquerdo,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -417,6 +420,18 @@ export function PapelariaProofPanel({
         </div>
         <PapelariaViewModeToggle value={viewMode} onChange={onViewModeChange} />
       </div>
+
+      <div className="flex min-h-0 flex-1 max-md:flex-col md:overflow-hidden">
+      {ladoEsquerdo ? (
+        <aside
+          className="flex min-h-0 shrink-0 flex-col border-sagra-border bg-white max-md:max-h-64 max-md:border-b md:w-48 md:border-r xl:w-52"
+          aria-label="Modelos disponíveis"
+          data-testid="papelaria-proof-lado-esquerdo"
+        >
+          {ladoEsquerdo}
+        </aside>
+      ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
 
       {viewMode === "imposicao" && showApogeeWaitingUi && activeJob ? (
         <div
@@ -922,6 +937,8 @@ export function PapelariaProofPanel({
           )}
         </div>
       )}
+      </div>
+      </div>
     </section>
   );
 }

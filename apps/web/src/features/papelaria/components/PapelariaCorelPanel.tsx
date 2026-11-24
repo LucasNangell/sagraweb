@@ -117,6 +117,8 @@ type Props = {
   formHost?: HTMLElement | null;
   /** Reserva o formulário para o host, mesmo antes do elemento existir. */
   dockForm?: boolean;
+  /** Quando informado, os botões de ação ficam em linha neste elemento (abaixo da lista de SPs). */
+  actionsHost?: HTMLElement | null;
 };
 
 function buildPreviaTextual(
@@ -182,6 +184,7 @@ export function PapelariaCorelPanel({
   osAno,
   formHost = null,
   dockForm = false,
+  actionsHost = null,
 }: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
@@ -1516,13 +1519,27 @@ export function PapelariaCorelPanel({
 
   const formSlot = (node: ReactNode) =>
     formHost ? createPortal(node, formHost) : null;
+  /** Linha de ações (abaixo da lista de SPs) enquanto não há OS carregada. */
+  const actionsPlaceholder = (texto: string) =>
+    actionsHost
+      ? createPortal(
+          <div
+            className="flex h-12 w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white px-3 text-[11px] text-neutral-400"
+            data-testid="papelaria-action-bar-placeholder"
+          >
+            {texto}
+          </div>,
+          actionsHost,
+        )
+      : null;
 
   if (!hasOs) {
     return (
       <>
+        {actionsPlaceholder("Selecione uma SP para habilitar as ações.")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-4 text-center text-xs text-neutral-500">
-            Selecione uma SP para ver os modelos e preencher os campos.
+            Selecione uma SP para preencher os campos.
           </div>,
         )}
         <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-8 text-center text-sm text-neutral-500">
@@ -1535,6 +1552,7 @@ export function PapelariaCorelPanel({
   if (contextQuery.isLoading) {
     return (
       <>
+        {actionsPlaceholder("Carregando…")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-2 rounded-lg border border-sagra-border bg-white text-xs text-neutral-600">
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -1556,6 +1574,7 @@ export function PapelariaCorelPanel({
         : "Erro desconhecido.";
     return (
       <>
+        {actionsPlaceholder("Ações indisponíveis — erro ao carregar a SP.")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-sagra-danger/30 bg-red-50 p-4 text-center text-xs text-sagra-danger">
             <div>
@@ -1594,6 +1613,9 @@ export function PapelariaCorelPanel({
         activeJob.status === "processing")) ||
     !!listInFlightJob;
   const cdrFiles = usableCdrFiles(cdrPathQuery.data);
+
+  const renderAcoes = (node: ReactNode) =>
+    actionsHost ? createPortal(node, actionsHost) : node;
 
   const mobilePanelClass = (panel: "form" | "preview") =>
     cn(
@@ -1692,24 +1714,22 @@ export function PapelariaCorelPanel({
                 className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm md:flex-row"
                 data-testid="papelaria-modelos-campos"
               >
-                <div className="flex min-h-0 min-w-0 flex-col md:w-[42%] md:shrink-0 md:border-r md:border-sagra-border">
+                <div
+                  className="flex min-h-0 min-w-0 flex-col max-md:h-32 md:w-[29.4%] md:shrink-0 md:border-r md:border-sagra-border"
+                  data-testid="papelaria-observacoes-os"
+                >
                   <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
-                    <h2 className="text-xs font-bold text-secondary-blue">
-                      Modelos disponíveis
-                    </h2>
-                    <p className="text-[10px] text-neutral-500">
-                      {resumoListaModelos(modelos, facesComposicao, composicao)}
-                    </p>
+                    <h2 className="text-xs font-bold text-secondary-blue">Observações</h2>
+                    <p className="text-[10px] text-neutral-500">Observações da OS</p>
                   </div>
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
-                    <PapelariaModelosLista
-                      modelos={modelos}
-                      selectedModelId={selectedModelId}
-                      onSelectModel={handleSelectModel}
-                      faces={facesComposicao}
-                      composicao={composicao}
-                      onSelectFrente={handleSelectFrente}
-                      onSelectVerso={handleSelectVerso}
+                  <div className="flex min-h-0 flex-1 flex-col p-2">
+                    <textarea
+                      readOnly
+                      disabled
+                      aria-label="Observações da OS"
+                      value={contextQuery.data?.os.observ ?? ""}
+                      className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
+                      placeholder="Sem observações na OS"
                     />
                   </div>
                 </div>
@@ -1727,7 +1747,7 @@ export function PapelariaCorelPanel({
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                     {selectedModelId == null ? (
                       <p className="p-4 text-center text-xs text-neutral-500">
-                        Selecione um modelo à esquerda para preencher os campos.
+                        Selecione um modelo na Visualização para preencher os campos.
                       </p>
                     ) : (
                       <>
@@ -1787,20 +1807,6 @@ export function PapelariaCorelPanel({
                       </>
                     )}
                   </div>
-                  {selectedModelId !== null ? (
-                    <div className="flex h-24 min-w-0 shrink-0 flex-col border-t border-sagra-border p-2">
-                      <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
-                        Observações
-                      </label>
-                      <textarea
-                        readOnly
-                        disabled
-                        value={contextQuery.data?.os.observ ?? ""}
-                        className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
-                        placeholder="Sem observações na OS"
-                      />
-                    </div>
-                  ) : null}
                 </div>
               </section>,
               formHost,
@@ -1814,30 +1820,17 @@ export function PapelariaCorelPanel({
         >
           <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
             <h2 className="text-xs font-bold text-secondary-blue">
-              Modelos disponíveis
+              Informações do cliente
             </h2>
             <p className="text-[10px] text-neutral-500">
-              {resumoListaModelos(modelos, facesComposicao, composicao)}
+              {selectedModelId == null ? "Selecione um modelo na Visualização" : "Campos do modelo selecionado"}
             </p>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-              <PapelariaModelosLista
-                modelos={modelos}
-                selectedModelId={selectedModelId}
-                onSelectModel={handleSelectModel}
-                faces={facesComposicao}
-                composicao={composicao}
-                onSelectFrente={handleSelectFrente}
-                onSelectVerso={handleSelectVerso}
-              />
-
               {selectedModelId !== null ? (
-                <div className="border-t border-neutral-200 pt-2">
-                  <h3 className="mb-2 text-xs font-bold text-neutral-700">
-                    Informações do cliente
-                  </h3>
+                <div>
                   {camposProduto ? (
                     <CamposProdutoAviso
                       arquivo={camposProduto.arquivo}
@@ -1913,8 +1906,14 @@ export function PapelariaCorelPanel({
         </section>
           )}
 
+        {renderAcoes(
         <PapelariaActionBar
-          className="max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
+          orientacao={actionsHost ? "linha" : "coluna"}
+          className={
+            actionsHost
+              ? undefined
+              : "max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
+          }
           showAbrirPasta={canOpenOsFolder}
           showTimbradoA4Digital={showTimbradoA4Digital}
           showFinalizar={corelEditMode}
@@ -1951,7 +1950,8 @@ export function PapelariaCorelPanel({
           onAbrirCorel={handleAbrirCorel}
           onFinalizarCorel={handleFinalizarCorel}
           onImposicao={handleImposicao}
-        />
+        />,
+        )}
 
         <div className={cn(mobilePanelClass("preview"), "max-md:order-3")}>
           <PapelariaProofPanel
@@ -1991,6 +1991,30 @@ export function PapelariaCorelPanel({
             }
             onEditarTextoPrevia={handleEditarTextoPrevia}
             onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
+            ladoEsquerdo={
+              <>
+                <div className="shrink-0 border-b border-sagra-border bg-slate-50/80 px-3 py-2">
+                  <h3 className="text-xs font-bold text-secondary-blue">Modelos disponíveis</h3>
+                  <p className="text-[10px] text-neutral-500">
+                    {resumoListaModelos(modelos, facesComposicao, composicao)}
+                  </p>
+                </div>
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+                  data-testid="papelaria-modelos-na-visualizacao"
+                >
+                  <PapelariaModelosLista
+                    modelos={modelos}
+                    selectedModelId={selectedModelId}
+                    onSelectModel={handleSelectModel}
+                    faces={facesComposicao}
+                    composicao={composicao}
+                    onSelectFrente={handleSelectFrente}
+                    onSelectVerso={handleSelectVerso}
+                  />
+                </div>
+              </>
+            }
           />
         </div>
       </div>

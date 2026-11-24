@@ -1715,7 +1715,7 @@ export function PapelariaCorelPanel({
                 data-testid="papelaria-modelos-campos"
               >
                 <div
-                  className="flex min-h-0 min-w-0 flex-col max-md:h-32 md:w-[29.4%] md:shrink-0 md:border-r md:border-sagra-border"
+                  className="flex min-h-0 min-w-0 flex-col max-md:h-32 md:w-[35.28%] md:shrink-0 md:border-r md:border-sagra-border"
                   data-testid="papelaria-observacoes-os"
                 >
                   <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">

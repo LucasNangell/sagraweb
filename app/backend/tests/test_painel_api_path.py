@@ -25,6 +25,8 @@ def test_modern_sector_panel_uses_sector_permissions():
 def test_painel_data_route_accepts_sagra_api_prefix():
     assert is_painel_data_api_route("/sagra/api/pcp/queue", "GET") is True
     assert is_painel_data_api_route("/sagra/api/os/search", "GET") is True
+    assert is_painel_data_api_route("/sagra/api/os/volume-mensal", "GET") is True
+    assert is_painel_data_api_route("/sagra/api/os/volume-mensal/drill", "GET") is True
     assert is_painel_data_api_route("/sagra/api/aux/setores", "GET") is True
 
 

@@ -12,18 +12,17 @@ import {
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { fetchPainelChartYearData } from "../painelGlobalApi";
 import {
-  getOpCategoryLabel,
-  painelDisplayLabel,
-  PAINEL_MONTH_NAMES,
-  parseOpDateMonth,
-} from "../painelGlobalUtils";
+  fetchPainelVolumeDrill,
+  fetchPainelVolumeMensal,
+  type PainelVolumeCategory,
+  type PainelVolumeDrillRow,
+} from "../painelGlobalApi";
+import { painelDisplayLabel, PAINEL_MONTH_NAMES } from "../painelGlobalUtils";
 import type {
   PainelColumnDetail,
   PainelDrillDownParams,
   PainelOpItem,
-  PainelRawOp,
   PainelTheme,
 } from "../types";
 
@@ -69,6 +68,26 @@ const PAINEL_CHART_CATEGORY_LABELS = [
   "Cancelado",
 ] as const;
 
+const PAINEL_CHART_CATEGORY_KEYS: PainelVolumeCategory[] = [
+  "em_andamento",
+  "entregue",
+  "cancelado",
+];
+
+function aggregateDrillCounts(
+  rows: PainelVolumeDrillRow[],
+  keyOf: (row: PainelVolumeDrillRow) => string,
+): { name: string; count: number }[] {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const key = keyOf(row);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 interface PainelGlobalChartsProps {
   theme: PainelTheme;
   availableYears: number[];
@@ -103,7 +122,12 @@ export function PainelGlobalCharts({
     category: null,
     sector: null,
   });
-  const allOpsForYearRef = useRef<PainelRawOp[]>([]);
+  const selectedYearRef = useRef(selectedYear);
+  selectedYearRef.current = selectedYear;
+  const includeOsRef = useRef(includeOs);
+  includeOsRef.current = includeOs;
+  const includeSpRef = useRef(includeSp);
+  includeSpRef.current = includeSp;
   const drillDownLevelRef = useRef(drillDownLevel);
   const drillDownParamsRef = useRef(drillDownParams);
   drillDownLevelRef.current = drillDownLevel;
@@ -134,46 +158,43 @@ export function PainelGlobalCharts({
     ((data: { name: string; count: number }[], indexAxis?: "x" | "y") => void) | null
   >(null);
 
-  const showDrillDownLevel3 = useCallback(
-    (sectorName: string) => {
-      const { month } = drillDownParamsRef.current;
-      if (month == null) {
-        return;
+  const showDrillDownLevel3 = useCallback((sectorName: string) => {
+    const { month, category } = drillDownParamsRef.current;
+    if (month == null || category == null) {
+      return;
+    }
+
+    const monthName = PAINEL_MONTH_NAMES[month];
+    setDrillDownLevel(3);
+    setDrillDownParams((prev) => ({ ...prev, sector: sectorName }));
+    setSelectedMonthForDrillDown(`${monthName} - ${sectorName} (por Andamento)`);
+
+    const categoryKey =
+      PAINEL_CHART_CATEGORY_KEYS[category] ?? "em_andamento";
+
+    void (async () => {
+      try {
+        const rows = await fetchPainelVolumeDrill(
+          selectedYearRef.current,
+          month + 1,
+          categoryKey,
+          {
+            includeOs: includeOsRef.current,
+            includeSp: includeSpRef.current,
+            setor: sectorName,
+          },
+        );
+        const sortedData = aggregateDrillCounts(rows, (row) => {
+          const st = (row.situacao ?? "").trim();
+          return st || "Desconhecido";
+        });
+        renderDrillDownChartRef.current?.(sortedData, "y");
+      } catch (err) {
+        console.warn("[Chart] Falha no drill-down nível 3", err);
+        renderDrillDownChartRef.current?.([], "y");
       }
-
-      const monthName = PAINEL_MONTH_NAMES[month];
-      setDrillDownLevel(3);
-      setDrillDownParams((prev) => ({ ...prev, sector: sectorName }));
-      setSelectedMonthForDrillDown(`${monthName} - ${sectorName} (por Andamento)`);
-
-      const sectorOps = allOpsForYearRef.current.filter((op) => {
-        const opMonth = parseOpDateMonth(op);
-        if (opMonth !== month) {
-          return false;
-        }
-        const situ = (op.situacao ?? op.SituacaoLink ?? "").trim();
-        const opSector = (op.setor ?? "N/I").trim();
-        const isEmAndamento =
-          situ !== "Entregue" &&
-          situ !== "Cancelado" &&
-          situ !== "Cancelada";
-        return isEmAndamento && opSector === sectorName;
-      });
-
-      const statusCounts: Record<string, number> = {};
-      for (const op of sectorOps) {
-        const st = (op.situacao ?? "Desconhecido").trim();
-        statusCounts[st] = (statusCounts[st] ?? 0) + 1;
-      }
-
-      const sortedData = Object.entries(statusCounts)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-
-      renderDrillDownChartRef.current?.(sortedData, "y");
-    },
-    [],
-  );
+    })();
+  }, []);
 
   const renderDrillDownChart = useCallback(
     (data: { name: string; count: number }[], indexAxis: "x" | "y" = "y") => {
@@ -291,6 +312,9 @@ export function PainelGlobalCharts({
       const monthName = PAINEL_MONTH_NAMES[monthIndex]!;
       const categoryLabel =
         PAINEL_CHART_CATEGORY_LABELS[datasetIndex] ?? "Em andamento";
+      const categoryKey =
+        PAINEL_CHART_CATEGORY_KEYS[datasetIndex] ?? "em_andamento";
+      const isEmAndamento = categoryLabel === "Em andamento";
 
       setDrillDownLevel(2);
       setDrillDownParams({
@@ -300,29 +324,31 @@ export function PainelGlobalCharts({
       });
       setSelectedMonthForDrillDown(`${monthName} - ${categoryLabel}`);
 
-      const monthOps = allOpsForYearRef.current.filter((op) => {
-        const opMonth = parseOpDateMonth(op);
-        if (opMonth !== monthIndex) {
-          return false;
+      void (async () => {
+        try {
+          const rows = await fetchPainelVolumeDrill(
+            selectedYearRef.current,
+            monthIndex + 1,
+            categoryKey,
+            {
+              includeOs: includeOsRef.current,
+              includeSp: includeSpRef.current,
+            },
+          );
+          const sortedData = aggregateDrillCounts(rows, (row) => {
+            if (isEmAndamento) {
+              const setor = (row.setor ?? "").trim();
+              return setor || "N/I";
+            }
+            const produto = (row.produto ?? "").trim();
+            return produto || "Não informado";
+          });
+          renderDrillDownChart(sortedData, isEmAndamento ? "x" : "y");
+        } catch (err) {
+          console.warn("[Chart] Falha no drill-down", err);
+          renderDrillDownChart([], isEmAndamento ? "x" : "y");
         }
-        return getOpCategoryLabel(op) === categoryLabel;
-      });
-
-      const counts: Record<string, number> = {};
-      const isEmAndamento = categoryLabel === "Em andamento";
-
-      for (const op of monthOps) {
-        const key = isEmAndamento
-          ? (op.setor ?? "N/I")
-          : (op.produto ?? op.Produto ?? "Não informado");
-        counts[key] = (counts[key] ?? 0) + 1;
-      }
-
-      const sortedData = Object.entries(counts)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-
-      renderDrillDownChart(sortedData, isEmAndamento ? "x" : "y");
+      })();
     },
     [renderDrillDownChart],
   );
@@ -355,39 +381,31 @@ export function PainelGlobalCharts({
     const dataCancelado = new Array<number>(12).fill(0);
 
     try {
-      const items = await fetchPainelChartYearData(selectedYear, {
+      const months = await fetchPainelVolumeMensal(selectedYear, {
         includeOs,
         includeSp,
       });
-      allOpsForYearRef.current = items;
-
-      for (const os of items) {
-        const month = parseOpDateMonth(os);
-        if (month == null) {
+      for (const bucket of months) {
+        const idx = bucket.month - 1;
+        if (idx < 0 || idx > 11) {
           continue;
         }
-        const category = getOpCategoryLabel(os);
-        if (category === "Entregue") {
-          dataEntregue[month]! += 1;
-        } else if (category === "Cancelado") {
-          dataCancelado[month]! += 1;
-        } else {
-          dataEmAndamento[month]! += 1;
-        }
+        dataEmAndamento[idx] = bucket.em_andamento;
+        dataEntregue[idx] = bucket.entregue;
+        dataCancelado[idx] = bucket.cancelado;
       }
     } catch (err) {
       console.warn("[Chart] Error fetching data for year", selectedYear, err);
+    }
+
+    if (!opsChartInstance.current) {
+      return;
     }
 
     opsChartInstance.current.data.datasets[0]!.data = dataEmAndamento;
     opsChartInstance.current.data.datasets[1]!.data = dataEntregue;
     opsChartInstance.current.data.datasets[2]!.data = dataCancelado;
     opsChartInstance.current.update();
-
-    const params = drillDownParamsRef.current;
-    if (params.month != null && params.category != null) {
-      showDrillDownRef.current(params.month, params.category);
-    }
   }, [includeOs, includeSp, selectedYear]);
 
   const updateChartDataRef = useRef(updateChartData);
@@ -614,16 +632,6 @@ export function PainelGlobalCharts({
       resizeObserver?.disconnect();
     };
   }, [destroyDrillChart, showDrillChart, theme]);
-
-  useEffect(() => {
-    if (!showMainChart) {
-      return;
-    }
-    const chartTimer = window.setInterval(() => {
-      void updateChartDataRef.current();
-    }, 60_000);
-    return () => window.clearInterval(chartTimer);
-  }, [includeOs, includeSp, showMainChart, selectedYear]);
 
   useEffect(() => {
     return () => {

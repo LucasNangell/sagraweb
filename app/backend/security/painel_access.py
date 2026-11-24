@@ -17,6 +17,7 @@ _PAINEL_SKIP_IP_ENV = "SAGRA_PAINEL_SKIP_IP_CHECK"
 _PAINEL_DATA_GET_PREFIXES = (
     "/api/pcp/queue",
     "/api/os/search",
+    "/api/os/volume-mensal",
 )
 
 # Modais de configuração dos painéis (setores, situações, andamentos)

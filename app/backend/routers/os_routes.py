@@ -38,6 +38,8 @@ from schemas.os import (
     OsFolderPlanResponse,
     OsPathResponse,
     OsSearchResponse,
+    OsVolumeMensalDrillResponse,
+    OsVolumeMensalResponse,
     OsVersionItem,
     OsVersionsResponse,
     PanelRow,
@@ -1235,6 +1237,112 @@ def _render_os_search(result: dict) -> dict:
     body = OsSearchResponse.model_validate(result).model_dump_json(by_alias=True).encode("utf-8")
     gz = gzip.compress(body, 6) if len(body) >= _OS_SEARCH_GZIP_MIN_BYTES else None
     return {"result": result, "json": body, "gzip": gz}
+
+
+@router.get("/os/volume-mensal", response_model=OsVolumeMensalResponse)
+def get_os_volume_mensal(
+    response: Response,
+    ano: int = Query(..., ge=2000, le=2100),
+    include_os: bool = True,
+    include_sp: bool = True,
+):
+    """Agregação mensal para o gráfico do painel global (sem baixar linhas de OS)."""
+    from services.os_search_cache import get_or_compute, make_key
+    from services.os_volume_mensal_service import execute_os_volume_mensal
+
+    kwargs = {
+        "kind": "os_volume_mensal",
+        "ano": ano,
+        "include_os": include_os,
+        "include_sp": include_sp,
+    }
+
+    def _compute():
+        return execute_os_volume_mensal(
+            ano=ano,
+            include_os=include_os,
+            include_sp=include_sp,
+        )
+
+    try:
+        payload, _etag, from_cache = get_or_compute(
+            make_key(kwargs),
+            _compute,
+            lambda _r: "",
+        )
+        response.headers["X-Sagra-Cache"] = "hit" if from_cache else "miss"
+        response.headers["Cache-Control"] = "private, max-age=15"
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        from resilience.http_errors import internal_server_error
+
+        internal_server_error("get_os_volume_mensal", e)
+
+
+@router.get("/os/volume-mensal/drill", response_model=OsVolumeMensalDrillResponse)
+def get_os_volume_mensal_drill(
+    response: Response,
+    ano: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12, description="Mês 1–12"),
+    category: str = Query(
+        ...,
+        pattern="^(em_andamento|entregue|cancelado)$",
+    ),
+    include_os: bool = True,
+    include_sp: bool = True,
+    setor: Optional[str] = None,
+):
+    """Linhas leves para drill-down do gráfico do painel global."""
+    from services.os_search_cache import get_or_compute, make_key
+    from services.os_volume_mensal_service import fetch_os_volume_mensal_drill_rows
+
+    setor_key = (setor or "").strip() or None
+    kwargs = {
+        "kind": "os_volume_mensal_drill",
+        "ano": ano,
+        "month": month,
+        "category": category,
+        "include_os": include_os,
+        "include_sp": include_sp,
+        "setor": setor_key,
+    }
+
+    def _compute():
+        rows = fetch_os_volume_mensal_drill_rows(
+            ano=ano,
+            month=month,
+            category=category,  # type: ignore[arg-type]
+            include_os=include_os,
+            include_sp=include_sp,
+            setor=setor_key,
+        )
+        return {
+            "ano": ano,
+            "month": month,
+            "category": category,
+            "setor": setor_key,
+            "rows": rows,
+        }
+
+    try:
+        payload, _etag, from_cache = get_or_compute(
+            make_key(kwargs),
+            _compute,
+            lambda _r: "",
+        )
+        response.headers["X-Sagra-Cache"] = "hit" if from_cache else "miss"
+        response.headers["Cache-Control"] = "private, max-age=15"
+        return payload
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        from resilience.http_errors import internal_server_error
+
+        internal_server_error("get_os_volume_mensal_drill", e)
 
 
 @router.get("/os/search", response_model=OsSearchResponse)

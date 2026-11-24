@@ -143,6 +143,32 @@ class OsSearchResponse(BaseModel):
     meta: dict[str, Any]
 
 
+class OsVolumeMensalMonth(BaseModel):
+    month: int
+    em_andamento: int = 0
+    entregue: int = 0
+    cancelado: int = 0
+
+
+class OsVolumeMensalResponse(BaseModel):
+    ano: int
+    months: List[OsVolumeMensalMonth]
+
+
+class OsVolumeMensalDrillRow(BaseModel):
+    setor: str = ""
+    produto: str = ""
+    situacao: str = ""
+
+
+class OsVolumeMensalDrillResponse(BaseModel):
+    ano: int
+    month: int
+    category: str
+    setor: Optional[str] = None
+    rows: List[OsVolumeMensalDrillRow]
+
+
 class OsDetailsResponse(BaseModel):
     model_config = {"extra": "allow"}
 

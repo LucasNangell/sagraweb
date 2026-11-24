@@ -16,11 +16,43 @@ interface OsSearchResponse {
   meta?: OsSearchMeta;
 }
 
+export type PainelVolumeCategory =
+  | "em_andamento"
+  | "entregue"
+  | "cancelado";
+
+export interface PainelVolumeMonth {
+  month: number;
+  em_andamento: number;
+  entregue: number;
+  cancelado: number;
+}
+
+interface PainelVolumeMensalResponse {
+  ano: number;
+  months: PainelVolumeMonth[];
+}
+
+export interface PainelVolumeDrillRow {
+  setor?: string;
+  produto?: string;
+  situacao?: string;
+}
+
+interface PainelVolumeDrillResponse {
+  ano: number;
+  month: number;
+  category: string;
+  setor?: string | null;
+  rows: PainelVolumeDrillRow[];
+}
+
 export async function fetchPainelQueueBySetor(
   setor: string,
 ): Promise<PainelRawOp[]> {
   const params = new URLSearchParams({
     setor,
+    painel: "1",
     _ts: String(Date.now()),
   });
   const result = await apiFetch<PcpQueueResponse>(`/pcp/queue?${params}`);
@@ -78,41 +110,45 @@ export async function fetchPainelBoardData(
   return results.flat();
 }
 
-export async function fetchPainelChartYearData(
+export async function fetchPainelVolumeMensal(
   year: number,
   options?: { includeOs?: boolean; includeSp?: boolean },
-): Promise<PainelRawOp[]> {
+): Promise<PainelVolumeMonth[]> {
   const includeOs = options?.includeOs ?? true;
   const includeSp = options?.includeSp ?? true;
-  const pageSize = 100;
-  const all: PainelRawOp[] = [];
-  let page = 1;
-  let hasNext = true;
+  const params = new URLSearchParams({
+    ano: String(year),
+    include_os: String(includeOs),
+    include_sp: String(includeSp),
+  });
+  const result = await apiFetch<PainelVolumeMensalResponse>(
+    `/os/volume-mensal?${params}`,
+  );
+  return Array.isArray(result.months) ? result.months : [];
+}
 
-  while (hasNext) {
-    const params = new URLSearchParams({
-      ano: String(year),
-      include_finished: "true",
-      limit: String(pageSize),
-      page: String(page),
-      include_os: String(includeOs),
-      include_sp: String(includeSp),
-    });
-    const result = await apiFetch<OsSearchResponse>(`/os/search?${params}`);
-    const batch = result.data ?? result.items ?? [];
-    all.push(...batch);
-    hasNext = result.meta?.has_next === true && batch.length > 0;
-    page += 1;
-
-    if (page > 60) {
-      console.warn(
-        `[Painel] Limite de páginas atingido ao carregar gráfico do ano ${year}`,
-      );
-      break;
-    }
+export async function fetchPainelVolumeDrill(
+  year: number,
+  month: number,
+  category: PainelVolumeCategory,
+  options?: { includeOs?: boolean; includeSp?: boolean; setor?: string },
+): Promise<PainelVolumeDrillRow[]> {
+  const includeOs = options?.includeOs ?? true;
+  const includeSp = options?.includeSp ?? true;
+  const params = new URLSearchParams({
+    ano: String(year),
+    month: String(month),
+    category,
+    include_os: String(includeOs),
+    include_sp: String(includeSp),
+  });
+  if (options?.setor) {
+    params.set("setor", options.setor);
   }
-
-  return all;
+  const result = await apiFetch<PainelVolumeDrillResponse>(
+    `/os/volume-mensal/drill?${params}`,
+  );
+  return Array.isArray(result.rows) ? result.rows : [];
 }
 
 export async function fetchRemotePainelConfig(): Promise<unknown> {

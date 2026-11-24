@@ -1,13 +1,14 @@
 import { RotateCcw } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 
 const MARGEM = 8;
 /** Largura mínima da caixa (px) — cabe a dica e os botões. */
 const LARGURA_MINIMA = 288;
-/** Folga da caixa: padding (2 × 8 px) + borda do campo (2 × 1 px) + cursor. */
-const FOLGA_CAIXA = 16 + 2 + 6;
+/** Folga da caixa em volta do campo: padding (2 × 8 px) + borda (2 × 1 px) + cursor. */
+const FOLGA_CAIXA = 16 + 2 + 4;
 
 /**
  * Aplica com Shift+Enter ou Ctrl+Enter (⌘+Enter no Mac); Enter sozinho
@@ -26,36 +27,59 @@ export function teclaAplica(e: { key: string; shiftKey: boolean; ctrlKey: boolea
  * automática — cada linha aqui é uma linha no PDF) e altura de todas as
  * linhas, crescendo conforme o usuário acrescenta linhas.
  */
+/** Onde está o campo na tela (px da janela). */
+export type AncoraEditor = { left: number; top: number; bottom: number };
+
 export function PapelariaTextoEditor({
   regiao,
-  posicao,
+  ancora,
   onAplicar,
   onRestaurar,
   onCancelar,
 }: {
   regiao: ProvaPdfRegiao;
-  /** Posição do campo na área da prévia (px). */
-  posicao: { left: number; top: number; bottom: number };
+  /**
+   * Posição atual do campo na janela. A caixa abre numa camada própria
+   * (fora da prévia), então a largura não fica presa à largura da prévia.
+   */
+  ancora: () => AncoraEditor | null;
   onAplicar: (texto: string) => void;
   onRestaurar?: () => void;
   onCancelar: () => void;
 }) {
   const [texto, setTexto] = useState(regiao.texto);
   const caixaRef = useRef<HTMLDivElement>(null);
-  const medidaRef = useRef<HTMLSpanElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
   const [larguraTexto, setLarguraTexto] = useState(0);
-  const [estilo, setEstilo] = useState<{ left: number; top: number }>({
-    left: Math.max(MARGEM, posicao.left),
-    top: posicao.bottom + 6,
-  });
+  const [estilo, setEstilo] = useState<{ left: number; top: number } | null>(null);
+  const ancoraRef = useRef(ancora);
+  ancoraRef.current = ancora;
 
-  // Largura da linha mais longa, medida com a mesma fonte do campo.
+  // A fonte da página pode terminar de carregar depois: mede de novo quando ficar pronta.
+  const [fontesProntas, setFontesProntas] = useState(0);
+  useEffect(() => {
+    let ativo = true;
+    void document.fonts?.ready.then(() => {
+      if (ativo) setFontesProntas((v) => v + 1);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  // Largura da linha mais longa, medida no próprio campo (mesma fonte): com
+  // largura zero, scrollWidth é a largura do conteúdo (+ padding da esquerda).
   useLayoutEffect(() => {
-    const medida = medidaRef.current;
-    if (!medida) return;
-    setLarguraTexto(Math.ceil(medida.getBoundingClientRect().width));
-  }, [texto]);
+    const campo = campoRef.current;
+    if (!campo) return;
+    const anterior = campo.style.width;
+    campo.style.width = "0px";
+    // scrollWidth do textarea não conta o padding da direita (Chrome/Edge).
+    const conteudo = campo.scrollWidth + (parseFloat(getComputedStyle(campo).paddingRight) || 0);
+    const bordas = campo.offsetWidth - campo.clientWidth;
+    campo.style.width = anterior;
+    setLarguraTexto(Math.ceil(conteudo + bordas));
+  }, [texto, fontesProntas]);
 
   // Altura acompanha o texto: todas as linhas à vista, crescendo a cada linha nova
   // (scrollHeight já conta a barra horizontal quando a linha não cabe).
@@ -63,46 +87,63 @@ export function PapelariaTextoEditor({
     const campo = campoRef.current;
     if (!campo) return;
     campo.style.height = "auto";
-    campo.style.height = `${campo.scrollHeight + 2}px`;
+    const extra = campo.offsetHeight - campo.clientHeight; // bordas + barra horizontal
+    campo.style.height = `${campo.scrollHeight + extra}px`;
   }, [texto, larguraTexto]);
 
-  // Mantém a caixa dentro da área da prévia (abre acima do campo se faltar espaço).
-  useLayoutEffect(() => {
+  // Fica perto do campo e dentro da janela (abre acima se faltar espaço embaixo).
+  const posicionar = useCallback(() => {
     const el = caixaRef.current;
-    const pai = el?.offsetParent as HTMLElement | null;
-    if (!el || !pai) return;
-    const largura = pai.clientWidth;
-    const altura = Math.max(pai.clientHeight, pai.scrollHeight);
-    const left = Math.min(Math.max(MARGEM, posicao.left), Math.max(MARGEM, largura - el.offsetWidth - MARGEM));
-    let top = posicao.bottom + 6;
-    if (top + el.offsetHeight > altura - MARGEM && posicao.top - el.offsetHeight - 6 >= MARGEM) {
-      top = posicao.top - el.offsetHeight - 6;
+    const a = ancoraRef.current();
+    if (!el || !a) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.min(Math.max(MARGEM, a.left), Math.max(MARGEM, vw - w - MARGEM));
+    let top = a.bottom + 6;
+    if (top + h > vh - MARGEM) {
+      top = a.top - h - 6 >= MARGEM ? a.top - h - 6 : Math.max(MARGEM, vh - h - MARGEM);
     }
-    setEstilo({ left, top });
-  }, [posicao.left, posicao.top, posicao.bottom, larguraTexto, texto]);
+    setEstilo((atual) =>
+      atual && Math.abs(atual.left - left) < 0.5 && Math.abs(atual.top - top) < 0.5
+        ? atual
+        : { left, top },
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    posicionar();
+  }, [posicionar, larguraTexto, texto]);
+
+  useEffect(() => {
+    window.addEventListener("resize", posicionar);
+    window.addEventListener("scroll", posicionar, true);
+    return () => {
+      window.removeEventListener("resize", posicionar);
+      window.removeEventListener("scroll", posicionar, true);
+    };
+  }, [posicionar]);
 
   const linhasTexto = texto.split("\n");
   const linhas = Math.max(1, linhasTexto.length);
   const larguraCaixa = Math.max(LARGURA_MINIMA, larguraTexto + FOLGA_CAIXA);
-  const classeTexto = "text-xs leading-snug";
 
-  return (
+  const caixa = (
     <div
       ref={caixaRef}
       role="dialog"
       aria-label="Editar texto da prévia"
-      className="absolute z-10 max-w-[calc(100%-16px)] rounded-lg border border-sagra-border bg-white p-2 shadow-lg"
-      style={{ ...estilo, width: larguraCaixa }}
+      className="fixed z-[200] rounded-lg border border-sagra-border bg-white p-2 shadow-xl"
+      style={{
+        left: estilo?.left ?? 0,
+        top: estilo?.top ?? 0,
+        visibility: estilo ? "visible" : "hidden",
+        width: larguraCaixa,
+        maxWidth: `calc(100vw - ${2 * MARGEM}px)`,
+      }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Régua invisível: mede a linha mais longa com a fonte do campo. */}
-      <span
-        ref={medidaRef}
-        aria-hidden
-        className={`pointer-events-none invisible absolute left-0 top-0 whitespace-pre px-2 ${classeTexto}`}
-      >
-        {linhasTexto.reduce((a, b) => (b.length > a.length ? b : a), "") || " "}
-      </span>
       <textarea
         ref={campoRef}
         autoFocus
@@ -123,7 +164,7 @@ export function PapelariaTextoEditor({
           }
           // Enter sozinho: quebra a linha (comportamento normal do campo).
         }}
-        className={`block w-full resize-none overflow-x-auto overflow-y-hidden whitespace-pre rounded-md border border-slate-300 px-2 py-1.5 text-neutral-800 focus:border-secondary-blue focus:outline-none focus:ring-1 focus:ring-secondary-blue/40 ${classeTexto}`}
+        className={`block w-full resize-none overflow-x-auto overflow-y-hidden whitespace-pre rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-snug text-neutral-800 focus:border-secondary-blue focus:outline-none focus:ring-1 focus:ring-secondary-blue/40`}
       />
       <p className="mt-1 text-[10px] leading-snug text-neutral-500">
         Enter quebra a linha · Shift+Enter ou Ctrl+Enter aplica · Esc cancela. Mantém a fonte e o
@@ -162,4 +203,7 @@ export function PapelariaTextoEditor({
       </div>
     </div>
   );
+
+  // Camada própria: a caixa não fica presa à largura (nem ao overflow) da prévia.
+  return typeof document !== "undefined" ? createPortal(caixa, document.body) : caixa;
 }

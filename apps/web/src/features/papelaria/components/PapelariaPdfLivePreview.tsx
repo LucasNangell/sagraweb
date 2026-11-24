@@ -480,10 +480,20 @@ export function PapelariaPdfLivePreview({
                       <PapelariaTextoEditor
                         key={regiaoEditada.chave}
                         regiao={regiaoEditada}
-                        posicao={{
-                          left: regiaoEditada.area[0] * caixaEditada.width,
-                          top: regiaoEditada.area[1] * caixaEditada.height,
-                          bottom: regiaoEditada.area[3] * caixaEditada.height,
+                        ancora={() => {
+                          // Campo na janela: caixa da imagem (sem a borda) × área da região.
+                          const img = imgRefs.current[i];
+                          if (!img) return null;
+                          const r = img.getBoundingClientRect();
+                          const x = r.left + img.clientLeft;
+                          const y = r.top + img.clientTop;
+                          const h = img.clientHeight || caixaEditada.height;
+                          const w = img.clientWidth || caixaEditada.width;
+                          return {
+                            left: x + regiaoEditada.area[0] * w,
+                            top: y + regiaoEditada.area[1] * h,
+                            bottom: y + regiaoEditada.area[3] * h,
+                          };
                         }}
                         onAplicar={(texto) => {
                           setEditando(null);

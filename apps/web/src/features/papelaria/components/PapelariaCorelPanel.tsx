@@ -1750,21 +1750,23 @@ export function PapelariaCorelPanel({
                 data-testid="papelaria-modelos-campos"
               >
                 <div
-                  className="flex min-h-0 min-w-0 shrink-0 flex-col border-b border-sagra-border md:h-[30%]"
+                  className="flex min-w-0 shrink-0 flex-col border-b border-sagra-border"
                   data-testid="papelaria-observacoes-os"
                 >
                   <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
                     <h2 className="text-xs font-bold text-secondary-blue">Observações</h2>
                   </div>
-                  <div className="flex min-h-0 flex-1 flex-col p-2">
-                    <textarea
-                      readOnly
-                      disabled
+                  <div className="p-2">
+                    <div
                       aria-label="Observações da OS"
-                      value={contextQuery.data?.os.observ ?? ""}
-                      className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
-                      placeholder="Sem observações na OS"
-                    />
+                      className="w-full whitespace-pre-wrap break-words rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs leading-relaxed text-neutral-800"
+                    >
+                      {(contextQuery.data?.os.observ ?? "").trim() ? (
+                        contextQuery.data?.os.observ
+                      ) : (
+                        <span className="text-neutral-400">Sem observações na OS</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1915,17 +1917,20 @@ export function PapelariaCorelPanel({
             </div>
 
             {selectedModelId !== null ? (
-              <div className="mt-2 flex h-28 min-w-0 shrink-0 flex-col">
-                <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
+              <div className="mt-2 min-w-0 shrink-0">
+                <label className="mb-0.5 block text-[11px] font-medium text-neutral-700">
                   Observações
                 </label>
-                <textarea
-                  readOnly
-                  disabled
-                  value={contextQuery.data?.os.observ ?? ""}
-                  className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
-                  placeholder="Sem observações na OS"
-                />
+                <div
+                  aria-label="Observações da OS"
+                  className="w-full whitespace-pre-wrap break-words rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs leading-relaxed text-neutral-800"
+                >
+                  {(contextQuery.data?.os.observ ?? "").trim() ? (
+                    contextQuery.data?.os.observ
+                  ) : (
+                    <span className="text-neutral-400">Sem observações na OS</span>
+                  )}
+                </div>
               </div>
             ) : null}
           </div>

@@ -209,13 +209,36 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     return { onEditarTexto, onRestaurarTexto };
   }
 
-  it("clicar no texto abre o editor e Enter aplica", async () => {
+  it("clicar no texto abre o editor; Enter quebra a linha e Shift+Enter aplica", async () => {
     const { onEditarTexto } = renderEditavel();
     fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
     const campo = screen.getByRole("textbox", { name: "Texto" });
     expect(campo).toHaveValue("Ana");
-    fireEvent.change(campo, { target: { value: "Ana Maria" } });
+    // Sem quebra automática: cada linha da caixa é uma linha do PDF.
+    expect(campo).toHaveAttribute("wrap", "off");
     fireEvent.keyDown(campo, { key: "Enter" });
+    expect(onEditarTexto).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.change(campo, { target: { value: "Ana Maria\nSegunda linha" } });
+    expect(campo).toHaveAttribute("rows", "2");
+    fireEvent.change(campo, { target: { value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14" } });
+    // Sem limite: todas as linhas à vista.
+    expect(campo).toHaveAttribute("rows", "14");
+    fireEvent.change(campo, { target: { value: "Ana Maria\nSegunda linha" } });
+    fireEvent.keyDown(campo, { key: "Enter", shiftKey: true });
+    expect(onEditarTexto).toHaveBeenCalledWith(
+      expect.objectContaining({ chave: "7:1:NOME" }),
+      "Ana Maria\nSegunda linha",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Ctrl+Enter também aplica", async () => {
+    const { onEditarTexto } = renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    const campo = screen.getByRole("textbox", { name: "Texto" });
+    fireEvent.change(campo, { target: { value: "Ana Maria" } });
+    fireEvent.keyDown(campo, { key: "Enter", ctrlKey: true });
     expect(onEditarTexto).toHaveBeenCalledWith(expect.objectContaining({ chave: "7:1:NOME" }), "Ana Maria");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

@@ -1835,6 +1835,103 @@ def _campos_produto_da_ultima_prova(
     return None, {}
 
 
+def _json_dict(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        val = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+    except (TypeError, ValueError):
+        return {}
+    return val if isinstance(val, dict) else {}
+
+
+def _textos_alterados_cliente(
+    campos_alt: dict[str, Any],
+    job_dados: dict[str, str],
+    modelo_id: Any,
+) -> list[dict[str, str]]:
+    """
+    Textos que o cliente editou na prévia do portal (``__textos``): marcador,
+    texto antes (edição anterior ou o que o template gerava) e depois.
+    """
+    novos = _json_dict(campos_alt.get("__textos"))
+    if not novos:
+        return []
+    anteriores = _json_dict(job_dados.get("__textos"))
+    out: list[dict[str, str]] = []
+    for chave, depois in novos.items():
+        depois_s = str(depois or "").strip()
+        antes = str(anteriores.get(chave) or "").strip()
+        partes = str(chave).split(":", 2)
+        marcador = partes[2] if len(partes) == 3 else str(chave)
+        if not antes and len(partes) == 3:
+            antes = _texto_padrao_do_campo(partes[0], partes[1], marcador, job_dados, modelo_id)
+        if antes == depois_s:
+            continue
+        out.append({"chave": str(chave), "marcador": marcador, "antes": antes, "depois": depois_s})
+    return out
+
+
+def _texto_padrao_do_campo(
+    modelo_txt: str, pagina_txt: str, marcador: str, job_dados: dict[str, str], modelo_id: Any
+) -> str:
+    """Texto que o campo do PDF gerava antes da edição (template + dados do job)."""
+    try:
+        from services import papelaria_prova_pdf_service as pdf_svc
+
+        mid = int(modelo_txt or modelo_id or 0)
+        pagina = int(pagina_txt or 0)
+        for campo in pdf_svc.carregar_config(mid).get("campos") or []:
+            if campo.get("marcador") != marcador:
+                continue
+            if campo.get("pagina") and int(campo["pagina"]) != pagina:
+                continue
+            dados = {k: v for k, v in job_dados.items() if not str(k).startswith("__")}
+            texto, _ranges = pdf_svc._texto_do_campo(str(campo.get("template") or ""), dados)
+            return texto.strip()
+    except Exception as exc:  # noqa: BLE001 — só deixa o «antes» em branco
+        logger.debug("Texto padrão do campo %s indisponível: %s", marcador, exc)
+    return ""
+
+
+def _redes_alteradas_cliente(
+    campos_alt: dict[str, Any], job_dados: dict[str, str]
+) -> list[dict[str, str]]:
+    """Redes sociais incluídas, alteradas ou retiradas pelo cliente (``__redes``)."""
+    if "__redes" not in campos_alt:
+        return []
+
+    def _lista(raw: Any) -> dict[str, str]:
+        try:
+            val = json.loads(raw) if isinstance(raw, str) and raw.strip() else raw
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(val, list):
+            return {}
+        return {
+            str(i.get("chave") or "").strip().lower(): str(i.get("valor") or "").strip()
+            for i in val
+            if isinstance(i, dict) and i.get("chave")
+        }
+
+    novas = _lista(campos_alt.get("__redes"))
+    antigas = _lista(job_dados.get("__redes"))
+    try:
+        from services import papelaria_redes_service as redes_svc
+
+        nomes = {str(r.get("chave")): str(r.get("nome") or r.get("chave")) for r in redes_svc.listar()}
+    except Exception:  # noqa: BLE001
+        nomes = {}
+    out: list[dict[str, str]] = []
+    for chave in [*novas.keys(), *[c for c in antigas if c not in novas]]:
+        antes = antigas.get(chave, "")
+        depois = novas.get(chave, "")
+        if antes == depois:
+            continue
+        out.append({"chave": chave, "rede": nomes.get(chave, chave), "antes": antes, "depois": depois})
+    return out
+
+
 def _estado_da_sp(ano: int, nro: int) -> dict[str, Any]:
     try:
         from services.papelaria_sp_status_service import estado_da_sp
@@ -1929,8 +2026,12 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
 
         obs_cli = (alt.get("observacao_cliente") or "").strip()
         campos_alterados: list[dict[str, str]] = []
+        textos_alterados = _textos_alterados_cliente(campos_alt, job_dados_base, alt.get("modelo_id"))
+        redes_alteradas = _redes_alteradas_cliente(campos_alt, job_dados_base)
         if campos_alt:
             for key, depois in campos_alt.items():
+                if str(key).startswith("__"):
+                    continue  # textos / redes / composição: listas próprias abaixo
                 antes = job_dados_base.get(str(key), "").strip()
                 depois_s = str(depois).strip()
                 if antes != depois_s:
@@ -1952,6 +2053,16 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
                     "job_id": alt.get("job_id"),
                     "campos": campos_alt if campos_alt else None,
                     "campos_alterados": campos_alterados or None,
+                    "textos_alterados": textos_alterados or None,
+                    "redes_alteradas": redes_alteradas or None,
+                    # Textos editados e redes da prova (com o que o cliente mudou por
+                    # cima): a prévia da Papelaria abre igual ao que o cliente pediu.
+                    "internos": {
+                        k: v
+                        for k, v in {**job_dados_base, **campos_alt}.items()
+                        if k in ("__textos", "__redes", "__redes_estilo") and str(v or "").strip()
+                    }
+                    or None,
                 }
 
     modelos, warnings, auto_id = match_modelos_para_os(

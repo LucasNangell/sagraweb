@@ -84,3 +84,53 @@ export function mergePapelariaFieldValues(
   }
   return { ...prefill, ...current };
 }
+
+/** Campos do cliente que vão para o formulário (sem as chaves internas `__*`). */
+export function camposClienteFormulario(
+  campos: Record<string, string> | null | undefined,
+): Record<string, string> | null {
+  if (!campos) return null;
+  const out = Object.fromEntries(Object.entries(campos).filter(([k]) => !k.startsWith("__")));
+  return Object.keys(out).length ? out : null;
+}
+
+export type InternosCliente = {
+  /** Textos editados na prévia (`modelo:pagina:marcador` → texto). */
+  textos: Record<string, string> | null;
+  /** Redes marcadas, na ordem. */
+  redes: Array<{ chave: string; valor: string }> | null;
+  redesEstilo: string | null;
+};
+
+function lerJson(raw: string | undefined): unknown {
+  if (!raw?.trim()) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** Lê `__textos`, `__redes` e `__redes_estilo` do pedido do cliente. */
+export function internosCliente(internos: Record<string, string> | null | undefined): InternosCliente {
+  const textosRaw = lerJson(internos?.["__textos"]);
+  const textos =
+    textosRaw && typeof textosRaw === "object" && !Array.isArray(textosRaw)
+      ? Object.fromEntries(
+          Object.entries(textosRaw as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "")]),
+        )
+      : null;
+  const redesRaw = lerJson(internos?.["__redes"]);
+  const redes = Array.isArray(redesRaw)
+    ? redesRaw
+        .filter((r): r is { chave: unknown; valor?: unknown } => Boolean(r) && typeof r === "object" && "chave" in r)
+        .map((r) => ({ chave: String(r.chave ?? "").toLowerCase(), valor: String(r.valor ?? "") }))
+        .filter((r) => r.chave)
+    : null;
+  const estilo = internos?.["__redes_estilo"]?.trim() || null;
+  return {
+    textos: textos && Object.keys(textos).length ? textos : null,
+    redes,
+    redesEstilo: estilo,
+  };
+}

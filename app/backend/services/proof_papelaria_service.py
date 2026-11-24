@@ -269,17 +269,20 @@ def _as_positive_int(value: Any) -> int:
 
 
 def load_cliente_alteracao_prova(ano: int, os_id: int) -> dict[str, Any] | None:
-    """Última solicitação de alteração de prova (token rejeitado com JSON de campos)."""
+    """
+    Última solicitação de alteração de prova (token recusado pelo cliente):
+    com os campos alterados (JSON) ou só com a observação do cliente.
+    """
     if os_id < 5000:
         return None
     rows = db.execute_query(
         """
-        SELECT ID, AlteracoesJson, Versao,
+        SELECT ID, AlteracoesJson, Versao, Observacao, JobIdPapelaria,
                COALESCE(DataResposta, DataEnvio) AS DataResposta
         FROM tabProofTokens
         WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
           AND Aprovado = 0
-          AND AlteracoesJson IS NOT NULL
+          AND (AlteracoesJson IS NOT NULL OR COALESCE(TRIM(Observacao), '') <> '')
         ORDER BY COALESCE(DataResposta, DataEnvio) DESC, ID DESC
         LIMIT 1
         """,
@@ -289,7 +292,19 @@ def load_cliente_alteracao_prova(ano: int, os_id: int) -> dict[str, Any] | None:
         return None
     raw = rows[0].get("AlteracoesJson")
     if raw is None:
-        return None
+        # Pedido só com texto livre: sem campos, mas com a observação do cliente.
+        observacao = str(rows[0].get("Observacao") or "").strip()
+        if not observacao:
+            return None
+        return {
+            "campos": {},
+            "observacao_cliente": observacao,
+            "versao": str(rows[0].get("Versao") or "").strip(),
+            "modelo_id": None,
+            "job_id": rows[0].get("JobIdPapelaria"),
+            "token_id": rows[0].get("ID"),
+            "data_resposta": rows[0].get("DataResposta"),
+        }
     if isinstance(raw, str):
         try:
             parsed = json.loads(raw)

@@ -40,7 +40,7 @@ import {
   type PapelariaCorelDadosEstado,
 } from "./PapelariaCorelDadosModal";
 import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
-import type { PapelariaFaceFonte, PapelariaRedeEstilo } from "@/features/papelaria/types";
+import type { PapelariaFaceFonte, PapelariaRedeEstilo, PapelariaRedesBloco } from "@/features/papelaria/types";
 import {
   COMPOSICAO_DADOS_KEY,
   usePapelariaComposicao,
@@ -77,7 +77,10 @@ import {
   clienteAlteracaoIdentity,
   isClienteAlteracaoPendente,
   mergePapelariaFieldValues,
+  camposClienteFormulario,
+  internosCliente,
 } from "../applyPapelariaPrefill";
+import { PapelariaAlteracoesCliente } from "./PapelariaAlteracoesCliente";
 import {
   applyCamaraCorelEnrichment,
   aplicarVariaveisFonte,
@@ -242,6 +245,8 @@ export function PapelariaCorelPanel({
   const prefillApplied = useRef(false);
   const camaraEnrichApplied = useRef(false);
   const appliedAlteracaoRef = useRef<string | null>(null);
+  /** Bloco de redes em vigor (lido pelo efeito que aplica o pedido do cliente). */
+  const redesBlocoAtualRef = useRef<PapelariaRedesBloco | null>(null);
   const [mobilePanel, setMobilePanel] = useState<"form" | "preview">("form");
   const [viewMode, setViewMode] = useState<PapelariaViewMode>("previa");
   const viewModeInitialized = useRef(false);
@@ -757,13 +762,31 @@ export function PapelariaCorelPanel({
   useEffect(() => {
     const ctx = contextQuery.data;
     if (!ctx) return;
-    const camposCliente = ctx.cliente_alteracao?.campos ?? null;
+    const camposCliente = camposClienteFormulario(ctx.cliente_alteracao?.campos);
     const alteracaoKey = clienteAlteracaoIdentity(ctx.cliente_alteracao);
 
     if (alteracaoKey && alteracaoKey !== appliedAlteracaoRef.current) {
       setFieldValues((prev) =>
         mergePapelariaFieldValues(prev, ctx.prefill, camposCliente),
       );
+      // Textos editados e redes do pedido do cliente: a prévia abre igual ao pedido.
+      const internos = internosCliente(ctx.cliente_alteracao?.internos);
+      if (internos.textos) setTextosEditados(internos.textos);
+      if (internos.redes) {
+        const doCliente = internos.redes.map((r) => ({ ...r, ativo: true }));
+        const chaves = new Set(doCliente.map((r) => r.chave));
+        redesMemoriaRef.current = [
+          ...doCliente,
+          ...redesMemoriaRef.current.filter((r) => !chaves.has(r.chave)).map((r) => ({ ...r, ativo: false })),
+        ];
+        if (redesBlocoAtualRef.current) {
+          setRedesEscolha(redesParaBloco(redesBlocoAtualRef.current, redesMemoriaRef.current));
+        }
+      }
+      if (internos.redesEstilo) {
+        redesEstiloEscolhidoRef.current = internos.redesEstilo as PapelariaRedeEstilo;
+        setRedesEstilo(internos.redesEstilo as PapelariaRedeEstilo);
+      }
       appliedAlteracaoRef.current = alteracaoKey;
       prefillApplied.current = true;
       return;
@@ -799,7 +822,7 @@ export function PapelariaCorelPanel({
       camaraEnrichApplied.current = true;
       return;
     }
-    const clienteCampos = contextQuery.data?.cliente_alteracao?.campos ?? null;
+    const clienteCampos = camposClienteFormulario(contextQuery.data?.cliente_alteracao?.campos);
     setFieldValues((prev) =>
       applyCamaraCorelEnrichment(prev, enrich, clienteCampos),
     );
@@ -855,7 +878,7 @@ export function PapelariaCorelPanel({
         ? (contextQuery.data?.campos_produto ?? null)
         : null,
     );
-    const clienteCampos = contextQuery.data?.cliente_alteracao?.campos ?? null;
+    const clienteCampos = camposClienteFormulario(contextQuery.data?.cliente_alteracao?.campos);
     const base = mergePapelariaFieldValues(
       {},
       contextQuery.data?.prefill,
@@ -898,6 +921,7 @@ export function PapelariaCorelPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelDetailQuery.data, composicao, extrasCamposKey]);
   const redesBlocoKey = redesBloco ? redesBloco.redes.map((r) => r.chave).join(",") : "";
+  redesBlocoAtualRef.current = redesBloco;
   const [redesEscolha, setRedesEscolha] = useState<RedeEscolha[]>([]);
   const [redesEstilo, setRedesEstilo] = useState<PapelariaRedeEstilo>("quadrado_policromia");
   // Memória da escolha de redes: sobrevive à troca de modelo (o detalhe do
@@ -2004,6 +2028,14 @@ export function PapelariaCorelPanel({
             onEditarTextoPrevia={handleEditarTextoPrevia}
             onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
             provaStatus={contextQuery.data?.prova_status ?? null}
+            topoPrevia={
+              clienteAlteracaoPendente ? (
+                <PapelariaAlteracoesCliente
+                  alteracao={clienteAlteracaoPendente}
+                  rotulos={Object.fromEntries((camposFormulario ?? []).map((f) => [f.key, f.label]))}
+                />
+              ) : null
+            }
             criarProva={{
               onClick: handleGerarArquivo,
               pending: createJobMutation.isPending,

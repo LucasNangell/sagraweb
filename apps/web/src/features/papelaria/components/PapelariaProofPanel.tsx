@@ -110,6 +110,8 @@ type Props = {
   onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
   /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
   ladoEsquerdo?: ReactNode;
+  /** Conteúdo fixo no topo da prévia (ex.: resumo do pedido de alteração do cliente). */
+  topoPrevia?: ReactNode;
   /** Fase da prova (aprovação do cliente) para os badges Aprovada / Pendente. */
   provaStatus?: PapelariaProvaStatus | null;
   /** «Criar prova» flutuante no canto inferior direito da prévia. */
@@ -165,6 +167,7 @@ export function PapelariaProofPanel({
   ladoEsquerdo,
   provaStatus = null,
   criarProva = null,
+  topoPrevia = null,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -458,6 +461,7 @@ export function PapelariaProofPanel({
         </aside>
       ) : null}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
+      {viewMode === "previa" && topoPrevia ? topoPrevia : null}
       {viewMode === "previa" && criarProva ? (
         <button
           type="button"

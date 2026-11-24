@@ -111,6 +111,26 @@ export interface PapelariaClienteAlteracao {
   job_id?: number | null;
   campos?: Record<string, string> | null;
   campos_alterados?: PapelariaClienteCampoAlterado[] | null;
+  /** Textos que o cliente editou na prévia do portal. */
+  textos_alterados?: PapelariaClienteTextoAlterado[] | null;
+  /** Redes sociais incluídas, alteradas ou retiradas pelo cliente. */
+  redes_alteradas?: PapelariaClienteRedeAlterada[] | null;
+  /** `__textos` / `__redes` / `__redes_estilo` da prova com o pedido do cliente por cima. */
+  internos?: Record<string, string> | null;
+}
+
+export interface PapelariaClienteTextoAlterado {
+  chave: string;
+  marcador: string;
+  antes: string;
+  depois: string;
+}
+
+export interface PapelariaClienteRedeAlterada {
+  chave: string;
+  rede: string;
+  antes: string;
+  depois: string;
 }
 
 export interface PapelariaCreateJobPayload {

@@ -1077,3 +1077,47 @@ class TestPastaImposicao:
             normalize_pasta_imposicao("Sefoc/Offset")
         with pytest.raises(ValueError, match="absoluto"):
             normalize_pasta_imposicao("pasta")
+
+
+def test_textos_e_redes_alterados_pelo_cliente_ficam_legiveis(monkeypatch):
+    """Pedido do portal: textos editados e redes viram listas «antes → depois»."""
+    import json
+
+    from services import papelaria_models_service as svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+
+    monkeypatch.setattr(
+        pdf_svc,
+        "carregar_config",
+        lambda mid: {"campos": [{"marcador": "NOME", "pagina": 1, "template": "Dep. {nome_deputado}"}]},
+    )
+    campos = {
+        "__textos": json.dumps({"7:1:NOME": "Deputada Ana Maria", "7:1:FONE": "3215"}),
+        "__redes": json.dumps([{"chave": "instagram", "valor": "@ana"}]),
+    }
+    job = {
+        "nome_deputado": "Ana",
+        "__textos": json.dumps({"7:1:FONE": "3215"}),
+        "__redes": json.dumps([{"chave": "x", "valor": "@velho"}]),
+    }
+    textos = svc._textos_alterados_cliente(campos, job, 7)
+    assert textos == [{"chave": "7:1:NOME", "marcador": "NOME", "antes": "Dep. Ana", "depois": "Deputada Ana Maria"}]
+    redes = svc._redes_alteradas_cliente(campos, job)
+    assert {r["chave"]: (r["antes"], r["depois"]) for r in redes} == {"instagram": ("", "@ana"), "x": ("@velho", "")}
+    assert svc._redes_alteradas_cliente({"nome": "x"}, job) == []
+
+
+def test_alteracao_so_com_observacao_do_cliente(monkeypatch):
+    """Cliente recusou só com texto livre (sem campos): o pedido não some."""
+    from services import proof_papelaria_service as svc
+
+    monkeypatch.setattr(
+        svc.db,
+        "execute_query",
+        lambda sql, params=None: [
+            {"ID": 9, "AlteracoesJson": None, "Versao": 2, "Observacao": "Trocar a cor", "JobIdPapelaria": 55, "DataResposta": None}
+        ],
+    )
+    alt = svc.load_cliente_alteracao_prova(2026, 6195)
+    assert alt["campos"] == {} and alt["observacao_cliente"] == "Trocar a cor"
+    assert alt["versao"] == "2" and alt["job_id"] == 55

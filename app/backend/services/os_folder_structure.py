@@ -25,18 +25,25 @@ OS_FOLDER_SUBFOLDERS = (
 )
 
 
+def _title_words(text: str) -> str:
+    """Inicial maiúscula em cada palavra, sem juntar antes (Ct Visita permanece Ct Visita)."""
+    return " ".join(part.title() for part in re.split(r"\s+", text) if part)
+
+
 def normalize_text_custom(text: str, *, is_product: bool = False) -> str:
     if not text:
         return ""
     s = str(text).strip()
     s = unicodedata.normalize("NFD", s)
     s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = _title_words(s)
     if is_product:
+        # Nome cadastrado, só sem o que não pode entrar no nome da pasta: Ct Visita → CtVisita.
         s = re.sub(r"[^A-Za-z0-9]", "", s)
     else:
         s = s.replace(".", "")
         s = re.sub(r"\s+", "", s)
-    return s.title()
+    return s
 
 
 def compute_os_folder_name(

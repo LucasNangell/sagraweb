@@ -95,48 +95,53 @@ def test_fetch_os_meta_outra_categoria_ignora_sigla(monkeypatch):
 
 
 def test_compute_os_folder_name_com_sigla():
-    assert compute_os_folder_name(123, "SECOM", "Cartão de Visita") == "00123-Secom-Cartaodevisita"
+    assert compute_os_folder_name(123, "SECOM", "Cartão de Visita") == "00123-Secom-CartaoDeVisita"
+
+
+def test_compute_os_folder_name_produto_cadastrado_preserva_iniciais():
+    assert compute_os_folder_name(5024, "Maria Rosas", "Ct Visita") == "05024-MariaRosas-CtVisita"
+    assert compute_os_folder_name(5024, "maria rosas", "ct visita") == "05024-MariaRosas-CtVisita"
 
 
 def test_compute_os_folder_name_nao_duplica_numero_os():
     assert (
         compute_os_folder_name(6227, "06227-AirtonFaleiro", "Bloco A5")
-        == "06227-Airtonfaleiro-Blocoa5"
+        == "06227-Airtonfaleiro-BlocoA5"
     )
     assert (
         compute_os_folder_name(6227, "6227-AirtonFaleiro", "Bloco A5")
-        == "06227-Airtonfaleiro-Blocoa5"
+        == "06227-Airtonfaleiro-BlocoA5"
     )
     assert (
         compute_os_folder_name(6227, "Airton Faleiro", "Bloco A5")
-        == "06227-Airtonfaleiro-Blocoa5"
+        == "06227-AirtonFaleiro-BlocoA5"
     )
 
 
 def test_compute_os_folder_name_com_titulo():
     assert (
         compute_os_folder_name(123, "SECOM", "Cartão de Visita", "Título X")
-        == "00123-Secom-Cartaodevisita_Titul"
+        == "00123-Secom-CartaoDeVisita_Titul"
     )
 
 
 def test_compute_os_folder_name_sp_ignora_titulo():
     assert (
         compute_os_folder_name(5024, "SECOM", "Cartão de Visita", "Título X")
-        == "05024-Secom-Cartaodevisita"
+        == "05024-Secom-CartaoDeVisita"
     )
     assert (
         compute_os_folder_name(5000, "SECOM", "Cartão de Visita", "Título X")
-        == "05000-Secom-Cartaodevisita"
+        == "05000-Secom-CartaoDeVisita"
     )
 
 
 def test_compute_os_folder_name_titulo_vazio_sem_sufixo():
     assert (
         compute_os_folder_name(123, "SECOM", "Cartão de Visita", "")
-        == "00123-Secom-Cartaodevisita"
+        == "00123-Secom-CartaoDeVisita"
     )
     assert (
         compute_os_folder_name(123, "SECOM", "Cartão de Visita", "   ")
-        == "00123-Secom-Cartaodevisita"
+        == "00123-Secom-CartaoDeVisita"
     )

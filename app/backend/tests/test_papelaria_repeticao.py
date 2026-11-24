@@ -195,3 +195,38 @@ def test_create_job_repeticao_exige_base_da_propria_os(monkeypatch, tmp_path):
     )
     with pytest.raises(ValueError, match="base da repetição"):
         _run_create(monkeypatch, modo="prova_pdf", tem_pdf=False)
+
+
+def test_os_antiga_so_frente_recebe_verso_do_modelo(tmp_path, monkeypatch):
+    """OS nova frente e verso, OS antiga só frente: verso vem do modelo escolhido."""
+    from services import papelaria_models_service as models_svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+    from tests.test_papelaria_prova_pdf import _pdf_modelo
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    base, molduras = rep.montar_base(_prova_a4(verso=False), (85, 50), 2)
+    assert [m.face for m in molduras] == ["frente"]
+    campos, _ = rep.campos_editaveis(base)
+    pasta = rep._pasta_base(2026, 6300)
+    pasta.mkdir(parents=True)
+    rep.caminho_base(2026, 6300).write_bytes(base)
+    (pasta / "config.json").write_text(json.dumps({"campos": campos}), encoding="utf-8")
+    # Modelo do verso com um campo do formulário.
+    pdf_svc.salvar_pdf_modelo(9, filename="verso.pdf", content=_pdf_modelo())
+    pdf_svc.salvar_campos(9, [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_assessor}"}])
+    monkeypatch.setattr(models_svc, "get_modelo_by_id", lambda mid: {"id": mid, "campos": {}})
+
+    comp = {"frente": {"modelo_id": 9, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}}
+    dados = {"__repeticao": "2026-6300", "__composicao": json.dumps(comp), "nome_assessor": "Joelson"}
+    final, _ = pdf_svc.renderizar_pdf_final(1, dados, {})
+    textos = _textos(final)
+    assert len(textos) == 2
+    assert textos[0] == ["Texto da Frente"]
+    assert "Joelson" in textos[1] and "NOMETITULAR" not in str(textos[1])
+
+    previa = pdf_svc.previa_repeticao(2026, 6300, dados, dpi=30)
+    assert {(r["modelo_id"], r["pagina_saida"]) for r in previa["regioes"]} == {(0, 0), (9, 1)}
+    # Sem verso escolhido: só a frente.
+    so_frente, _ = pdf_svc.renderizar_pdf_final(1, {"__repeticao": "2026-6300"}, {})
+    assert len(_textos(so_frente)) == 1

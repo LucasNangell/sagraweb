@@ -76,6 +76,7 @@ export function PapelariaModelosLista({
   composicao,
   onSelectFrente,
   onSelectVerso,
+  repeticao = null,
 }: {
   modelos: PapelariaCorelModelSummary[];
   selectedModelId: number | null;
@@ -84,18 +85,39 @@ export function PapelariaModelosLista({
   composicao?: PapelariaComposicao | null;
   onSelectFrente?: (fonte: PapelariaFaceFonte) => void;
   onSelectVerso?: (fonte: PapelariaFaceFonte) => void;
+  /** Repetição de SP: base recortada da prova antiga, no topo da lista. */
+  repeticao?: {
+    rotulo: string;
+    ativo: boolean;
+    onSelect: () => void;
+    /** OS antiga só frente: o verso continua escolhível (modelo) junto com a repetição. */
+    versoLivre?: boolean;
+  } | null;
 }) {
+  // Com a repetição escolhida, nenhum modelo aparece selecionado.
+  const outrosAtivos = !repeticao?.ativo;
+  const cardRepeticao = repeticao ? (
+    <Secao titulo="Repetição">
+      <CardModelo
+        nome={`Repetição da SP ${repeticao.rotulo}`.trim()}
+        ativo={repeticao.ativo}
+        onClick={repeticao.onSelect}
+        testId="papelaria-modelo-repeticao"
+      />
+    </Secao>
+  ) : null;
   if (faces && composicao) {
     const frentes = faces.frente.filter((f) => f.tem_pdf);
     const versos = faces.verso.filter((f) => f.tem_pdf);
     return (
       <div className="space-y-3" data-testid="papelaria-lista-frentes-versos">
+        {cardRepeticao}
         <Secao titulo="Frentes">
           {frentes.map((f) => (
             <CardModelo
               key={`f-${f.modelo_id}-${f.pagina}`}
               nome={f.rotulo}
-              ativo={mesma(composicao.frente, f)}
+              ativo={outrosAtivos && mesma(composicao.frente, f)}
               onClick={() => onSelectFrente?.(f)}
               testId={`papelaria-frente-${f.modelo_id}`}
             />
@@ -106,7 +128,7 @@ export function PapelariaModelosLista({
             <CardModelo
               key={`v-${f.modelo_id}-${f.pagina}`}
               nome={f.rotulo}
-              ativo={mesma(composicao.verso, f)}
+              ativo={(outrosAtivos || Boolean(repeticao?.versoLivre)) && mesma(composicao.verso, f)}
               onClick={() => onSelectVerso?.(f)}
               testId={`papelaria-verso-${f.modelo_id}`}
             />
@@ -116,7 +138,7 @@ export function PapelariaModelosLista({
     );
   }
 
-  if (modelos.length === 0) {
+  if (modelos.length === 0 && !cardRepeticao) {
     return (
       <p className="p-4 text-center text-xs text-neutral-500">
         Importe a planilha de modelos ou verifique o produto da OS.
@@ -125,11 +147,12 @@ export function PapelariaModelosLista({
   }
   return (
     <div className="space-y-1.5">
+      {cardRepeticao}
       {modelos.map((m) => (
         <CardModelo
           key={m.id}
           nome={m.nome_exibicao || m.arquivo_modelo}
-          ativo={selectedModelId === m.id}
+          ativo={outrosAtivos && selectedModelId === m.id}
           onClick={() => onSelectModel(m)}
           testId={`papelaria-modelo-${m.id}`}
         />

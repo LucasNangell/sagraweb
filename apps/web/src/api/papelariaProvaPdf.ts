@@ -224,3 +224,37 @@ export function salvarBlocoRedes(
     body: JSON.stringify({ bloco }),
   });
 }
+
+/** Repetição de SP: monta a base da nova prova a partir da prova da OS repetida. */
+export function replicarSp(
+  ano: number,
+  nro: number,
+  origem?: { ano: number; nro: number } | null,
+): Promise<import("@/features/papelaria/types").PapelariaRepeticaoBase> {
+  return apiFetch(`/papelaria/os/${ano}/${nro}/repeticao`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(origem ? { origem_ano: origem.ano, origem_nro: origem.nro } : {}),
+  });
+}
+
+/** Prévia ao vivo da base da repetição (textos editados em `__textos`, chave `0:pagina:marcador`). */
+export function previaRepeticao(
+  ano: number,
+  nro: number,
+  dados: Record<string, string>,
+  signal?: AbortSignal,
+  /** OS antiga só frente: o verso escolhido (modelo) completa a base. */
+  composicao?: import("@/features/papelaria/types").PapelariaComposicao | null,
+): Promise<ProvaPdfPrevia> {
+  return apiFetch<ProvaPdfPrevia>(`/papelaria/os/${ano}/${nro}/repeticao/previa`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(composicao ? { dados, composicao } : { dados }),
+    signal,
+  });
+}
+
+export function descartarRepeticao(ano: number, nro: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/papelaria/os/${ano}/${nro}/repeticao`, { method: "DELETE" });
+}

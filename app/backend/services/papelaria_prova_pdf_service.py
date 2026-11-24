@@ -1818,25 +1818,86 @@ def renderizar_base_repeticao(
     avisos: Optional[list[str]] = None,
     regioes: Optional[list[dict[str, Any]]] = None,
 ) -> tuple[bytes, int]:
-    """Base da repetição com os textos editados na prévia (os demais intactos)."""
-    from services import papelaria_repeticao_service as rep_svc
+    """
+    Base da repetição com os textos editados na prévia (os demais intactos).
 
+    OS antiga só frente e OS nova frente e verso: a base é a Frente e o Verso
+    vem do modelo escolhido (verso de ``__composicao``), com os dados do
+    formulário — como na composição frente/verso independente.
+    ``regioes`` recebe ``modelo_id`` e ``pagina_saida`` já definidos.
+    """
+    import fitz
+
+    from services import papelaria_repeticao_service as rep_svc
+    from services.papelaria_faces_service import composicao_do_job
+
+    brutos = dados_brutos or {}
     pdf = rep_svc.caminho_base(ano, nro)
     if not pdf.is_file():
         raise ProvaPdfError("A base da repetição desta SP não existe mais — replique a SP de novo.")
     campos = [c for c in rep_svc.carregar_config_base(ano, nro).get("campos") or [] if c.get("template")]
     try:
-        textos = normalizar_textos((dados_brutos or {}).get(TEXTOS_DADOS_KEY))
+        textos = normalizar_textos(brutos.get(TEXTOS_DADOS_KEY))
     except ProvaPdfError:
         textos = {}
     prefixo = f"{MODELO_ID_REPETICAO}:"
     locais = {k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)}
+    regioes_base: list[dict[str, Any]] = []
     conteudo = (
-        renderizar(pdf, campos, {}, avisos=avisos, exigir_campos=False, textos=locais, regioes=regioes)
+        renderizar(pdf, campos, {}, avisos=avisos, exigir_campos=False, textos=locais, regioes=regioes_base)
         if campos
         else pdf.read_bytes()
     )
-    return conteudo, len(locais)
+    if regioes is not None:
+        for r in regioes_base:
+            regioes.append({**r, "modelo_id": MODELO_ID_REPETICAO, "pagina_saida": int(r["pagina"]) - 1})
+    editados = len(locais)
+
+    composicao = composicao_do_job({"dados": brutos})
+    with fitz.open(stream=conteudo, filetype="pdf") as doc_base:
+        so_frente = doc_base.page_count == 1
+    if not (so_frente and composicao):
+        return conteudo, editados
+
+    # Verso do modelo escolhido (a OS antiga não tinha verso).
+    from services.papelaria_corel_dados_service import preparar_dados
+    from services import papelaria_models_service as models_svc
+
+    vm, vp = int(composicao["verso"]["modelo_id"]), int(composicao["verso"]["pagina"])
+    pdf_v = caminho_pdf(vm)
+    if not pdf_v.is_file():
+        raise ProvaPdfError("O modelo do verso não tem PDF configurado.")
+    modelo_v = models_svc.get_modelo_by_id(vm) or {}
+    dados_v = preparar_dados({k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo_v)
+    campos_v = [
+        c
+        for c in carregar_config(vm).get("campos") or []
+        if c.get("template") and int(c.get("pagina") or 0) in (0, vp)
+    ]
+    prefixo_v = f"{vm}:"
+    textos_v = {k[len(prefixo_v):]: v for k, v in textos.items() if k.startswith(prefixo_v)}
+    regioes_v: list[dict[str, Any]] = []
+    verso = (
+        renderizar(pdf_v, campos_v, dados_v, avisos=avisos, exigir_campos=False, textos=textos_v, regioes=regioes_v)
+        if campos_v
+        else pdf_v.read_bytes()
+    )
+    verso = _aplicar_redes(
+        vm, verso, selecao_redes_dos_dados(brutos), avisos, estilo=estilo_redes_dos_dados(brutos)
+    )
+    final = fitz.open(stream=conteudo, filetype="pdf")
+    try:
+        with fitz.open(stream=verso, filetype="pdf") as src:
+            if vp > src.page_count:
+                raise ProvaPdfError(f"O PDF do modelo do verso não tem a página {vp}.")
+            final.insert_pdf(src, from_page=vp - 1, to_page=vp - 1)
+        if regioes is not None:
+            for r in regioes_v:
+                if int(r["pagina"]) == vp:
+                    regioes.append({**r, "modelo_id": vm, "pagina_saida": 1})
+        return final.tobytes(garbage=3, deflate=True), editados + len(textos_v)
+    finally:
+        final.close()
 
 
 def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: int = 110) -> dict[str, Any]:
@@ -1857,9 +1918,7 @@ def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: int = 110) 
     finally:
         doc.close()
     for r in regioes:
-        r["modelo_id"] = MODELO_ID_REPETICAO
-        r["pagina_saida"] = int(r["pagina"]) - 1
-        r["chave"] = f"{MODELO_ID_REPETICAO}:{r['pagina']}:{r['marcador']}"
+        r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
     return {"paginas": paginas, "ms": ms, "avisos": avisos, "regioes": regioes}
 
 

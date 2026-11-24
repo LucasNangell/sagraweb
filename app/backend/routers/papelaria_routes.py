@@ -1215,10 +1215,18 @@ def previa_repeticao(
     payload: PapelariaProvaPdfPreviaPayload,
     _session: SessionData = Depends(_require_papelaria_access),
 ):
-    """Prévia ao vivo da base da repetição (textos editados na prévia)."""
+    """Prévia ao vivo da base da repetição (textos editados; verso de modelo, se escolhido)."""
+    import json as _json
+
     from services import papelaria_prova_pdf_service as svc
 
-    dados = {k: v for k, v in (payload.dados or {}).items() if k == svc.TEXTOS_DADOS_KEY}
+    dados = {
+        k: v
+        for k, v in (payload.dados or {}).items()
+        if not str(k).startswith("__") or k in (svc.TEXTOS_DADOS_KEY, "__redes", "__redes_estilo")
+    }
+    if payload.composicao:
+        dados["__composicao"] = _json.dumps(payload.composicao)
     try:
         return svc.previa_repeticao(ano, nro, dados)
     except svc.ProvaPdfError as e:

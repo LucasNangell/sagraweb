@@ -55,7 +55,7 @@ import {
 } from "../preview";
 import type { PapelariaJob, PapelariaProvaStatus } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
-import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
+import { previaRepeticao, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 
 import {
   deveUsarPreviaPdfAoVivo,
@@ -112,6 +112,8 @@ type Props = {
   ladoEsquerdo?: ReactNode;
   /** Conteúdo fixo no topo da prévia (ex.: resumo do pedido de alteração do cliente). */
   topoPrevia?: ReactNode;
+  /** Repetição de SP: a prévia mostra a base recortada da prova antiga. */
+  previaRepeticao?: { ano: number; nro: number } | null;
   /** Fase da prova (aprovação do cliente) para os badges Aprovada / Pendente. */
   provaStatus?: PapelariaProvaStatus | null;
   /** «Criar prova» flutuante no canto inferior direito da prévia. */
@@ -168,6 +170,7 @@ export function PapelariaProofPanel({
   provaStatus = null,
   criarProva = null,
   topoPrevia = null,
+  previaRepeticao: repeticaoPrevia = null,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -899,9 +902,20 @@ export function PapelariaProofPanel({
             </div>
           ) : hasPdfLivePreview && selectedModelId !== null ? (
             <PapelariaPdfLivePreview
-              modeloId={composicao?.frente.modelo_id ?? selectedModelId}
+              modeloId={repeticaoPrevia ? 0 : (composicao?.frente.modelo_id ?? selectedModelId)}
               values={livePreviewValues ?? {}}
               composicao={composicao}
+              {...(repeticaoPrevia
+                ? {
+                    fetchPrevia: (
+                      _id: number,
+                      dados: Record<string, string>,
+                      signal?: AbortSignal,
+                      comp?: PapelariaComposicao | null,
+                    ) => previaRepeticao(repeticaoPrevia.ano, repeticaoPrevia.nro, dados, signal, comp),
+                    queryKeyPrefix: "papelaria-repeticao",
+                  }
+                : {})}
               onEditarTexto={onEditarTextoPrevia}
               onRestaurarTexto={onRestaurarTextoPrevia}
               className="min-h-0 flex-1"

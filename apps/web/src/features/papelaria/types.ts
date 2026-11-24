@@ -227,6 +227,24 @@ export interface PapelariaOsContext {
   andamento?: PapelariaAndamentoAtual | null;
   /** Fase da prova (mesma regra dos ícones da lista de SPs). */
   prova_status?: PapelariaProvaStatus | null;
+  /** «Repetição da OS 1234/25» na observação e a base já montada (se houver). */
+  repeticao?: PapelariaRepeticao | null;
+}
+
+export interface PapelariaRepeticaoBase {
+  origem?: { ano: number; nro: number } | null;
+  arquivo_origem?: string | null;
+  criado_em?: string | null;
+  faces?: Array<{ face: string; metodo: string; pagina_origem: number; escala: number; rotacao: number }> | null;
+  avisos?: string[];
+}
+
+export interface PapelariaRepeticao {
+  origem_nro: number | null;
+  origem_ano: number | null;
+  /** «1234/25» */
+  rotulo: string | null;
+  base: PapelariaRepeticaoBase | null;
 }
 
 export interface PapelariaAndamentoAtual {

@@ -270,7 +270,9 @@ def detectar_molduras(doc: Any, alvo_mm: tuple[float, float], faces: int) -> lis
                 )
             )
     if not candidatas:
-        return []
+        for m, nome in zip(inteiras, ("frente", "verso")):
+            m.face = nome
+        return inteiras[:faces]
     # Tamanho real antes de reduzido; dentro de cada grupo, rótulos e ordem de leitura.
     melhor = min(abs(c.escala - 1) for c in candidatas)
     candidatas = [c for c in candidatas if abs(abs(c.escala - 1) - melhor) < 0.05]
@@ -397,7 +399,10 @@ def montar_base(pdf_bytes: bytes, alvo_mm: tuple[float, float], faces: int) -> t
     src = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         molduras = detectar_molduras(src, alvo_mm, faces)
-        if len(molduras) < faces:
+        # OS antiga só frente: a base fica com a Frente e o verso sai de um modelo.
+        if faces == 2 and len(molduras) == 1 and molduras[0].face == "frente":
+            pass
+        elif len(molduras) < faces:
             achadas = ", ".join(m.face or "?" for m in molduras) or "nenhuma"
             raise RepeticaoError(
                 f"Não encontrei na prova antiga a moldura do produto ({alvo_mm[0]:g} × {alvo_mm[1]:g} mm) "
@@ -506,6 +511,11 @@ def criar_base(
         conteudo = fh.read()  # só em memória: a prova antiga não é copiada para esta OS
     base, molduras = montar_base(conteudo, alvo_mm, faces)
     campos, avisos = campos_editaveis(base)
+    if faces == 2 and len(molduras) == 1:
+        avisos.insert(
+            0,
+            "A OS repetida era só frente: escolha o verso na lista de Versos (os campos dele aparecem no formulário).",
+        )
     pasta = _pasta_base(ano, nro)
     pasta.mkdir(parents=True, exist_ok=True)
     caminho_base(ano, nro).write_bytes(base)
@@ -575,7 +585,9 @@ def formato_do_produto(ano: int, nro: int) -> tuple[tuple[float, float], int, Op
             continue
         with fitz.open(pdf) as doc:
             r = doc[0].rect
-        faces = 2 if "verso" in _sem_acento(frente_verso) else 1
+        # Mesma leitura do resto do sistema («1»/«0», «Frente e Verso»…).
+        fv = models_svc._normalizar_frente_verso_os(frente_verso)
+        faces = 2 if fv == "frente e verso" else 1
         return (round(r.width / MM, 2), round(r.height / MM, 2)), faces, int(auto_id or mid)
     raise RepeticaoError(
         f"O produto «{produto or '?'}» não tem modelo com PDF configurado — preciso do tamanho do produto."

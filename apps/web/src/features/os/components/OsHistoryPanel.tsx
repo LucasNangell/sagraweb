@@ -31,8 +31,8 @@ import { useAuthStore } from "@/features/auth/authStore";
 import { formatDateBr } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
 import {
-  isHistorySelectionAdditive,
   nextHistorySelectionRows,
+  resolveHistorySelectionMode,
 } from "../osHistoryMultiselect";
 import {
   applyOsHistoryDraftOrder,
@@ -205,6 +205,7 @@ export function OsHistoryPanel({
   const frozen = isOsFrozen(selected);
 
   const lastAutoKeyRef = useRef<string | null>(null);
+  const selectionAnchorKeyRef = useRef<string | null>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -213,6 +214,7 @@ export function OsHistoryPanel({
     setTourSaved(false);
     setDraftOrder(null);
     lastAutoKeyRef.current = null;
+    selectionAnchorKeyRef.current = null;
   }, [ano, id, isSubOs, subOsId]);
 
   useEffect(() => {
@@ -231,11 +233,15 @@ export function OsHistoryPanel({
     }
     lastAutoKeyRef.current = key;
     if (isSubOs) {
-      setSelectedSubHistoryRows([last as SubOsHistoryRow]);
+      const subLast = last as SubOsHistoryRow;
+      setSelectedSubHistoryRows([subLast]);
       setSelectedHistoryRows([]);
+      selectionAnchorKeyRef.current = String(subLast.id);
     } else {
-      setSelectedHistoryRows([last as OsHistoryRow]);
+      const mainLast = last as OsHistoryRow;
+      setSelectedHistoryRows([mainLast]);
       setSelectedSubHistoryRows([]);
+      selectionAnchorKeyRef.current = mainLast.CodStatus;
     }
   }, [rows, selected, editing, ano, id, isSubOs]);
 
@@ -351,7 +357,7 @@ export function OsHistoryPanel({
               collisionDetection={closestCenter}
               onDragEnd={handleHistoryDragEnd}
             >
-              <table className="w-full min-w-0 table-fixed border-collapse text-xs">
+              <table className="w-full min-w-0 table-fixed border-collapse text-xs select-none">
                 <thead className="sticky top-0 z-[1] bg-slate-100">
                   <tr>
                     <th className="min-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold">
@@ -411,14 +417,22 @@ export function OsHistoryPanel({
                                 if (editing) {
                                   return;
                                 }
-                                setSelectedSubHistoryRows((current) =>
-                                  nextHistorySelectionRows(
+                                const mode = resolveHistorySelectionMode(event);
+                                setSelectedSubHistoryRows((current) => {
+                                  const result = nextHistorySelectionRows(
                                     current,
                                     subRow,
                                     (item) => String(item.id),
-                                    isHistorySelectionAdditive(event),
-                                  ),
-                                );
+                                    mode,
+                                    {
+                                      allRows: rows as SubOsHistoryRow[],
+                                      anchorKey: selectionAnchorKeyRef.current,
+                                    },
+                                  );
+                                  selectionAnchorKeyRef.current =
+                                    result.nextAnchorKey;
+                                  return result.rows;
+                                });
                               }}
                               className={cn(
                                 "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
@@ -481,14 +495,22 @@ export function OsHistoryPanel({
                               if (editing) {
                                 return;
                               }
-                              setSelectedHistoryRows((current) =>
-                                nextHistorySelectionRows(
+                              const mode = resolveHistorySelectionMode(event);
+                              setSelectedHistoryRows((current) => {
+                                const result = nextHistorySelectionRows(
                                   current,
                                   mainRow,
                                   (item) => item.CodStatus,
-                                  isHistorySelectionAdditive(event),
-                                ),
-                              );
+                                  mode,
+                                  {
+                                    allRows: rows as OsHistoryRow[],
+                                    anchorKey: selectionAnchorKeyRef.current,
+                                  },
+                                );
+                                selectionAnchorKeyRef.current =
+                                  result.nextAnchorKey;
+                                return result.rows;
+                              });
                             }}
                             dataCell={
                               <td
@@ -526,14 +548,31 @@ export function OsHistoryPanel({
             }
             draftOrder={draftOrder}
             onDraftOrderClear={clearDraftOrder}
-            onHistoryRowChange={(row) =>
-              setSelectedHistoryRows(row ? [row] : [])
-            }
-            onSubHistoryRowChange={(row) =>
-              setSelectedSubHistoryRows(row ? [row] : [])
-            }
-            onSelectedHistoryRowsChange={setSelectedHistoryRows}
-            onSelectedSubHistoryRowsChange={setSelectedSubHistoryRows}
+            onHistoryRowChange={(row) => {
+              setSelectedHistoryRows(row ? [row] : []);
+              selectionAnchorKeyRef.current = row?.CodStatus ?? null;
+            }}
+            onSubHistoryRowChange={(row) => {
+              setSelectedSubHistoryRows(row ? [row] : []);
+              selectionAnchorKeyRef.current =
+                row != null ? String(row.id) : null;
+            }}
+            onSelectedHistoryRowsChange={(next) => {
+              setSelectedHistoryRows(next);
+              if (next.length === 1) {
+                selectionAnchorKeyRef.current = next[0]!.CodStatus;
+              } else if (next.length === 0) {
+                selectionAnchorKeyRef.current = null;
+              }
+            }}
+            onSelectedSubHistoryRowsChange={(next) => {
+              setSelectedSubHistoryRows(next);
+              if (next.length === 1) {
+                selectionAnchorKeyRef.current = String(next[0]!.id);
+              } else if (next.length === 0) {
+                selectionAnchorKeyRef.current = null;
+              }
+            }}
             compact={compactList}
             presentation="panel"
             onEditingChange={handleEditingChange}

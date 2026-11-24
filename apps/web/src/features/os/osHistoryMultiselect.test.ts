@@ -4,8 +4,46 @@ import {
   isHistorySelectionAdditive,
   nextHistorySelectionKeys,
   nextHistorySelectionRows,
+  rangeHistorySelectionKeys,
+  resolveHistorySelectionMode,
   sortHistoryRowsNewestFirst,
 } from "./osHistoryMultiselect";
+
+describe("resolveHistorySelectionMode", () => {
+  it("prioriza Shift sobre Ctrl", () => {
+    expect(
+      resolveHistorySelectionMode({
+        ctrlKey: true,
+        metaKey: false,
+        shiftKey: true,
+      }),
+    ).toBe("range");
+  });
+
+  it("usa toggle com Ctrl/Meta e replace sem modificador", () => {
+    expect(
+      resolveHistorySelectionMode({
+        ctrlKey: true,
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toBe("toggle");
+    expect(
+      resolveHistorySelectionMode({
+        ctrlKey: false,
+        metaKey: true,
+        shiftKey: false,
+      }),
+    ).toBe("toggle");
+    expect(
+      resolveHistorySelectionMode({
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toBe("replace");
+  });
+});
 
 describe("nextHistorySelectionKeys", () => {
   it("substitui a seleção sem modificador", () => {
@@ -25,27 +63,48 @@ describe("nextHistorySelectionKeys", () => {
   });
 });
 
-describe("nextHistorySelectionRows", () => {
-  const getKey = (row: { id: string }) => row.id;
+describe("rangeHistorySelectionKeys", () => {
+  const all = ["a", "b", "c", "d", "e"];
 
-  it("substitui as linhas sem modificador", () => {
-    expect(
-      nextHistorySelectionRows([{ id: "a" }], { id: "b" }, getKey, false),
-    ).toEqual([{ id: "b" }]);
+  it("seleciona o intervalo inclusivo entre âncora e clique", () => {
+    expect(rangeHistorySelectionKeys(all, "b", "d")).toEqual(["b", "c", "d"]);
+    expect(rangeHistorySelectionKeys(all, "d", "b")).toEqual(["b", "c", "d"]);
   });
 
-  it("adiciona ou remove com Ctrl", () => {
+  it("usa só o clique quando não há âncora válida", () => {
+    expect(rangeHistorySelectionKeys(all, null, "c")).toEqual(["c"]);
+    expect(rangeHistorySelectionKeys(all, "missing", "c")).toEqual(["c"]);
+  });
+});
+
+describe("nextHistorySelectionRows", () => {
+  const getKey = (row: { id: string }) => row.id;
+  const all = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+
+  it("substitui as linhas no modo replace e atualiza a âncora", () => {
     expect(
-      nextHistorySelectionRows([{ id: "a" }], { id: "b" }, getKey, true),
-    ).toEqual([{ id: "a" }, { id: "b" }]);
+      nextHistorySelectionRows([{ id: "a" }], { id: "b" }, getKey, "replace"),
+    ).toEqual({ rows: [{ id: "b" }], nextAnchorKey: "b" });
+  });
+
+  it("adiciona ou remove no modo toggle sem mover a âncora", () => {
     expect(
-      nextHistorySelectionRows(
-        [{ id: "a" }, { id: "b" }],
-        { id: "a" },
-        getKey,
-        true,
-      ),
-    ).toEqual([{ id: "b" }]);
+      nextHistorySelectionRows([{ id: "a" }], { id: "b" }, getKey, "toggle", {
+        anchorKey: "a",
+      }),
+    ).toEqual({ rows: [{ id: "a" }, { id: "b" }], nextAnchorKey: "a" });
+  });
+
+  it("seleciona o intervalo no modo range", () => {
+    expect(
+      nextHistorySelectionRows([{ id: "a" }], { id: "c" }, getKey, "range", {
+        allRows: all,
+        anchorKey: "a",
+      }),
+    ).toEqual({
+      rows: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      nextAnchorKey: "a",
+    });
   });
 });
 

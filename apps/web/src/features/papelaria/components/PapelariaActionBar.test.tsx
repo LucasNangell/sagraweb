@@ -48,4 +48,10 @@ describe("PapelariaActionBar", () => {
     expect(barra).toHaveAttribute("data-orientacao", "coluna");
     expect(barra.className).toContain("flex-col");
   });
+
+  it("ocultarCriarProva tira «Criar prova» da linha (fica flutuante na prévia)", () => {
+    render(<PapelariaActionBar {...props({ orientacao: "linha", ocultarCriarProva: true })} />);
+    const rotulos = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(rotulos).toEqual(["Abrir pasta", "Gerar Corel", "Abrir Corel", "Imposição"]);
+  });
 });

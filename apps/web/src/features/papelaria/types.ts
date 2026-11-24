@@ -203,6 +203,22 @@ export interface PapelariaOsContext {
   prova_pdf_modelos?: number[];
   /** Campos do produto real da última prova (Corel da pasta), se houver. */
   campos_produto?: PapelariaCamposProduto | null;
+  /** Andamento atual da SP (situação decide a visualização inicial). */
+  andamento?: PapelariaAndamentoAtual | null;
+  /** Fase da prova (mesma regra dos ícones da lista de SPs). */
+  prova_status?: PapelariaProvaStatus | null;
+}
+
+export interface PapelariaAndamentoAtual {
+  situacao: string;
+  observacao: string;
+  data: string | null;
+}
+
+/** Fase da prova — `approved` = aprovada pelo cliente. */
+export interface PapelariaProvaStatus {
+  phase: string | null;
+  versao: number | null;
 }
 
 export type PapelariaJobStatus =

@@ -1835,6 +1835,16 @@ def _campos_produto_da_ultima_prova(
     return None, {}
 
 
+def _estado_da_sp(ano: int, nro: int) -> dict[str, Any]:
+    try:
+        from services.papelaria_sp_status_service import estado_da_sp
+
+        return estado_da_sp(ano, nro)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Papelaria: estado da SP %s/%s indisponível: %s", nro, ano, exc)
+        return {"andamento": None, "prova_status": None}
+
+
 def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     rows = db.execute_query(
         """
@@ -2037,6 +2047,9 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "ultima_prova": ultima_prova,
         "prova_modo": get_modo(),
         "prova_pdf_modelos": _prova_pdf_modelos(modelos),
+        # Situação atual e fase da prova (aprovada pelo cliente, pendente…):
+        # decidem a visualização inicial e os badges da prova.
+        **_estado_da_sp(ano, nro),
         # Variável → fonte (o front reaplica após enriquecer com a Câmara).
         "variaveis_fonte": {
             v["chave"]: v["fonte"] for v in variaveis_svc.mapa().values() if v.get("fonte")

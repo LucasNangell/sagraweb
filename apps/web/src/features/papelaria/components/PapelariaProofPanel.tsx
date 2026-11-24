@@ -1,6 +1,7 @@
 import {
   Check,
   ExternalLink,
+  FilePlus2,
   FileText,
   Loader2,
   RefreshCw,
@@ -52,7 +53,7 @@ import {
   templateId,
   type ActiveDynamicFieldPlacement,
 } from "../preview";
-import type { PapelariaJob } from "../types";
+import type { PapelariaJob, PapelariaProvaStatus } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 
@@ -109,6 +110,15 @@ type Props = {
   onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
   /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
   ladoEsquerdo?: ReactNode;
+  /** Fase da prova (aprovação do cliente) para os badges Aprovada / Pendente. */
+  provaStatus?: PapelariaProvaStatus | null;
+  /** «Criar prova» flutuante no canto inferior direito da prévia. */
+  criarProva?: {
+    onClick: () => void;
+    disabled: boolean;
+    pending: boolean;
+    title?: string;
+  } | null;
 };
 
 function resolvePreviewImageUrl(raw: string): string {
@@ -153,6 +163,8 @@ export function PapelariaProofPanel({
   onEditarTextoPrevia,
   onRestaurarTextoPrevia,
   ladoEsquerdo,
+  provaStatus = null,
+  criarProva = null,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -286,6 +298,13 @@ export function PapelariaProofPanel({
     (folderProvaVersao != null ? `Prova ${folderProvaVersao}` : null);
   const displayedProvaFile =
     provaDisplay?.fileLabel ?? folderProofLabel ?? null;
+  // Aprovação do cliente vale para a versão aprovada; prova mais nova volta a pendente.
+  const versaoExibida =
+    (displayedProvaFile ? extractProvaVersionFromFilename(displayedProvaFile) : null) ??
+    folderProvaVersao;
+  const provaAprovada =
+    provaStatus?.phase === "approved" &&
+    (provaStatus.versao == null || versaoExibida == null || provaStatus.versao === versaoExibida);
   const jobImposicaoPdfUrl =
     readyImposicaoPdf && activeJob
       ? papelariaJobFileUrl(activeJob.id, "pdf")
@@ -438,7 +457,24 @@ export function PapelariaProofPanel({
           {ladoEsquerdo}
         </aside>
       ) : null}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
+      {viewMode === "previa" && criarProva ? (
+        <button
+          type="button"
+          className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-secondary-blue px-4 py-2.5 text-xs font-semibold text-white shadow-lg ring-1 ring-black/5 transition hover:bg-secondary-blue/90 disabled:cursor-not-allowed disabled:opacity-55"
+          onClick={criarProva.onClick}
+          disabled={criarProva.disabled}
+          title={criarProva.title ?? "Criar a prova a partir da prévia"}
+          data-testid="papelaria-criar-prova-flutuante"
+        >
+          {criarProva.pending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <FilePlus2 className="size-3.5" aria-hidden />
+          )}
+          Criar prova
+        </button>
+      ) : null}
 
       {viewMode === "imposicao" && showApogeeWaitingUi && activeJob ? (
         <div
@@ -738,6 +774,20 @@ export function PapelariaProofPanel({
                       {provaAjuste === "FitH" ? "ajuste à largura" : "ajuste à altura"}
                     </span>
                   )}
+                  {displayedProvaLabel ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal",
+                        provaAprovada
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-900",
+                      )}
+                      data-testid="papelaria-prova-aprovacao-badge"
+                      data-aprovada={provaAprovada ? "true" : "false"}
+                    >
+                      {provaAprovada ? "Aprovada" : "Pendente de aprovação"}
+                    </span>
+                  ) : null}
                 </h3>
                 {displayedProvaFile ? (
                   <p

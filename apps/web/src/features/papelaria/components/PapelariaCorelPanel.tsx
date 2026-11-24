@@ -98,7 +98,7 @@ import {
   semValoresDoProduto,
 } from "../papelariaCamposProduto";
 import {
-  resolveDefaultPapelariaViewMode,
+  resolverVisualizacaoInicial,
   type PapelariaViewMode,
 } from "../papelariaViewMode";
 import type {
@@ -1472,11 +1472,19 @@ export function PapelariaCorelPanel({
     }
     if (viewModeInitialized.current) return;
     viewModeInitialized.current = true;
+    const jobEmAndamento = (jobsQuery.data ?? []).some(
+      (j) => j.status === "pending" || j.status === "processing",
+    );
+    // Situação da SP decide: «Saída p/» (trabalho novo / alteração) → prévia;
+    // demais → última prova. Trabalho em andamento abre o acompanhamento.
     setViewMode(
-      resolveDefaultPapelariaViewMode({
-        hasImposicao: hasImposicaoPdf,
+      resolverVisualizacaoInicial({
+        situacao: contextQuery.data?.andamento?.situacao,
+        faseProva: contextQuery.data?.prova_status?.phase,
         hasProof: hasFolderProof || hasJobProof,
+        hasImposicao: hasImposicaoPdf,
         waitingApogee,
+        jobEmAndamento,
       }),
     );
   }, [
@@ -1484,6 +1492,9 @@ export function PapelariaCorelPanel({
     contextReady,
     proofFilesQuery.isFetched,
     jobsQuery.isLoading,
+    jobsQuery.data,
+    contextQuery.data?.andamento?.situacao,
+    contextQuery.data?.prova_status?.phase,
     hasFolderProof,
     hasJobProof,
     hasImposicaoPdf,
@@ -1909,6 +1920,7 @@ export function PapelariaCorelPanel({
         {renderAcoes(
         <PapelariaActionBar
           orientacao={actionsHost ? "linha" : "coluna"}
+          ocultarCriarProva
           className={
             actionsHost
               ? undefined
@@ -1991,6 +2003,24 @@ export function PapelariaCorelPanel({
             }
             onEditarTextoPrevia={handleEditarTextoPrevia}
             onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
+            provaStatus={contextQuery.data?.prova_status ?? null}
+            criarProva={{
+              onClick: handleGerarArquivo,
+              pending: createJobMutation.isPending,
+              // Mesmas regras do botão que ficava na linha de ações.
+              disabled:
+                createJobMutation.isPending ||
+                createDigitalJobMutation.isPending ||
+                imposicaoMutation.isPending ||
+                abrirCorelMutation.isPending ||
+                folderCheckPending ||
+                modelDetailQuery.isLoading ||
+                !selectedModelId,
+              title:
+                cdrFiles[0]?.filename && !temProvaPdfModelo
+                  ? `Criar prova a partir do Corel da pasta (${cdrFiles[0].filename}), aplicando os campos do formulário`
+                  : "Criar a prova (Prova PDF, gerada no servidor a partir da prévia)",
+            }}
             ladoEsquerdo={
               <>
                 <div className="shrink-0 border-b border-sagra-border bg-slate-50/80 px-3 py-2">

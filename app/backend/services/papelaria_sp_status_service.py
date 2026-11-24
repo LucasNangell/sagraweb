@@ -832,3 +832,30 @@ def build_sp_status_resumo(items: list[Any]) -> dict[str, Any]:
             }
         )
     return {"items": result}
+
+
+def estado_da_sp(ano: int, nro: int) -> dict[str, Any]:
+    """
+    Situação atual e fase da prova de uma SP (página Papelaria): o mesmo
+    cálculo dos ícones da lista. Nunca levanta — falha vira ``None``.
+    """
+    out: dict[str, Any] = {"andamento": None, "prova_status": None}
+    try:
+        andamento = _fetch_andamentos_for_pairs([(int(ano), int(nro))]).get(_sp_key(int(ano), int(nro)))
+        if andamento:
+            data = andamento.get("data")
+            out["andamento"] = {
+                "situacao": andamento.get("situacao") or "",
+                "observacao": andamento.get("observacao") or "",
+                "data": data.isoformat() if hasattr(data, "isoformat") else (str(data) if data else None),
+            }
+    except Exception as exc:  # noqa: BLE001 — o contexto da SP não pode quebrar por isso
+        logger.warning("Papelaria: andamento da SP %s/%s indisponível: %s", nro, ano, exc)
+    try:
+        itens = build_sp_status_resumo([{"ano": int(ano), "nro": int(nro)}]).get("items") or []
+        prova = (itens[0] or {}).get("prova") if itens else None
+        if isinstance(prova, dict):
+            out["prova_status"] = {"phase": prova.get("phase"), "versao": prova.get("versao")}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Papelaria: fase da prova da SP %s/%s indisponível: %s", nro, ano, exc)
+    return out

@@ -504,3 +504,42 @@ def test_list_proof_files_suggested_ultima_prova(tmp_path, monkeypatch):
     monkeypatch.setattr(svc, "_sefoc_dir", lambda ano, os_id: str(sefoc))
     out = svc.list_proof_pdf_files(2026, 1)
     assert out["suggested"] == "a-Prova 3.pdf"
+
+
+def test_estado_da_sp_junta_andamento_e_fase(monkeypatch):
+    """Página Papelaria: situação atual e fase da prova de uma SP (nunca levanta)."""
+    from datetime import datetime
+
+    from services import papelaria_sp_status_service as svc
+
+    monkeypatch.setattr(
+        svc,
+        "_fetch_andamentos_for_pairs",
+        lambda pairs: {
+            svc._sp_key(2026, 5954): {
+                "situacao": "Saída p/",
+                "observacao": "Alterar Prova 2",
+                "data": datetime(2026, 11, 20, 10, 0),
+            }
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "build_sp_status_resumo",
+        lambda items: {"items": [{"ano": 2026, "nro": 5954, "prova": {"phase": "alteracao", "versao": 2}}]},
+    )
+    r = svc.estado_da_sp(2026, 5954)
+    assert r["andamento"]["situacao"] == "Saída p/"
+    assert r["andamento"]["data"].startswith("2026-11-20")
+    assert r["prova_status"] == {"phase": "alteracao", "versao": 2}
+
+
+def test_estado_da_sp_falha_vira_none(monkeypatch):
+    from services import papelaria_sp_status_service as svc
+
+    def _erro(*_a, **_k):
+        raise RuntimeError("banco fora")
+
+    monkeypatch.setattr(svc, "_fetch_andamentos_for_pairs", _erro)
+    monkeypatch.setattr(svc, "build_sp_status_resumo", _erro)
+    assert svc.estado_da_sp(2026, 5954) == {"andamento": None, "prova_status": None}

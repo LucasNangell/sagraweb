@@ -28,6 +28,8 @@ export type PapelariaActionBarProps = {
   onAbrirCorel: () => void;
   onFinalizarCorel: () => void;
   onImposicao: () => void;
+  /** «Criar prova» fica no botão flutuante da prévia (fora desta barra). */
+  ocultarCriarProva?: boolean;
   /** «coluna» (padrão): barra vertical; «linha»: botões lado a lado (abaixo da lista de SPs). */
   orientacao?: "coluna" | "linha";
   className?: string;
@@ -102,6 +104,7 @@ export function PapelariaActionBar({
   onAbrirCorel,
   onFinalizarCorel,
   onImposicao,
+  ocultarCriarProva = false,
   orientacao = "coluna",
   className,
 }: PapelariaActionBarProps) {
@@ -142,6 +145,7 @@ export function PapelariaActionBar({
           onClick={onAbrirPasta}
         />
       ) : null}
+      {ocultarCriarProva ? null : (
       <ActionButton
           linha={linha}
         label="Criar prova"
@@ -160,6 +164,7 @@ export function PapelariaActionBar({
         }
         onClick={onGerarArquivo}
       />
+      )}
       {showTimbradoA4Digital ? (
         <ActionButton
           linha={linha}

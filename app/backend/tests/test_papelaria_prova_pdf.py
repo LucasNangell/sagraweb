@@ -791,3 +791,17 @@ def test_salvar_campos_tira_campo_proprio_do_texto_juntado(tmp_path, monkeypatch
     )
     assert [c["marcador"] for c in r["campos"]] == ["RODAPELINHAUM"]
     assert r["campos"][0]["juntar"] == ["RODAPELINHADOIS"]
+
+
+def test_dpi_da_previa_adapta_ao_tamanho():
+    """Prévia nítida: maior lado ~2400 px, entre 150 e 600 dpi."""
+    from services import papelaria_prova_pdf_service as svc
+
+    doc = fitz.open()
+    doc.new_page(width=85 * 72 / 25.4, height=50 * 72 / 25.4)
+    doc.new_page(width=595, height=842)
+    doc.new_page(width=3000, height=3000)
+    assert svc.dpi_da_previa(doc[0]) == svc.PREVIA_DPI_MAX
+    assert svc.dpi_da_previa(doc[1]) == pytest.approx(205, abs=1)
+    assert svc.dpi_da_previa(doc[2]) == svc.PREVIA_DPI_MIN
+    doc.close()

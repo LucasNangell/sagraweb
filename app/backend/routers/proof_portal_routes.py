@@ -923,7 +923,6 @@ def previa_pdf_portal(
         return svc.previa_png(
             modelo_id,
             dados,
-            dpi=110,
             modelo=modelo,
             composicao=composicao,
         )

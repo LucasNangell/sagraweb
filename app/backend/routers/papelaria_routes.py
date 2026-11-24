@@ -1274,7 +1274,7 @@ def previa_pdf_ao_vivo(
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None
-        return svc.previa_png(modelo_id, dados, dpi=110, modelo=modelo, composicao=composicao)
+        return svc.previa_png(modelo_id, dados, modelo=modelo, composicao=composicao)
     except (svc.ProvaPdfError, ComposicaoError) as e:
         raise HTTPException(400, str(e))
     except Exception as e:

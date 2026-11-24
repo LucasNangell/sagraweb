@@ -1691,10 +1691,31 @@ def renderizar_composicao(
         final.close()
 
 
+# Prévia: maior lado da página com ~2400 px (zoom e telas de alta densidade),
+# entre 150 e 600 dpi. Rasterizar custa pouco perto de montar o PDF
+# (A4 ≈ 80 ms; cartão 85×50 a 600 dpi ≈ 70 ms).
+PREVIA_LADO_PX = 2400
+PREVIA_DPI_MIN = 150
+PREVIA_DPI_MAX = 600
+
+
+def dpi_da_previa(page: Any) -> int:
+    """Resolução da prévia para a página (adapta ao tamanho do produto)."""
+    lado_pol = max(page.rect.width, page.rect.height) / 72.0
+    if lado_pol <= 0:
+        return PREVIA_DPI_MIN
+    return int(max(PREVIA_DPI_MIN, min(PREVIA_DPI_MAX, PREVIA_LADO_PX / lado_pol)))
+
+
+def _png_da_pagina(page: Any, dpi: Optional[int]) -> str:
+    resolucao = dpi or dpi_da_previa(page)
+    return "data:image/png;base64," + base64.b64encode(page.get_pixmap(dpi=resolucao).tobytes("png")).decode()
+
+
 def previa_png(
     modelo_id: int,
     dados: dict[str, Any],
-    dpi: int = 150,
+    dpi: Optional[int] = None,
     *,
     modelo: Optional[dict[str, Any]] = None,
     composicao: Optional[dict[str, dict[str, int]]] = None,
@@ -1783,10 +1804,7 @@ def previa_png(
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
-        paginas = [
-            "data:image/png;base64," + base64.b64encode(p.get_pixmap(dpi=dpi).tobytes("png")).decode()
-            for p in doc
-        ]
+        paginas = [_png_da_pagina(p, dpi) for p in doc]
     finally:
         doc.close()
     for r in regioes:
@@ -1927,7 +1945,7 @@ def renderizar_base_repeticao(
         final.close()
 
 
-def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: int = 110) -> dict[str, Any]:
+def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: Optional[int] = None) -> dict[str, Any]:
     """Prévia ao vivo da base da repetição (mesma resposta de ``previa_png``)."""
     import fitz
 
@@ -1938,10 +1956,7 @@ def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: int = 110) 
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
-        paginas = [
-            "data:image/png;base64," + base64.b64encode(p.get_pixmap(dpi=dpi).tobytes("png")).decode()
-            for p in doc
-        ]
+        paginas = [_png_da_pagina(p, dpi) for p in doc]
     finally:
         doc.close()
     for r in regioes:

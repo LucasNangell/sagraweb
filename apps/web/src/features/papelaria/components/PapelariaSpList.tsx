@@ -34,12 +34,9 @@ import {
   loadPapelariaSpSituacoes,
   savePapelariaSpSituacoes,
 } from "../papelariaSpSituacoesPrefs";
-import { PapelariaSpTramitacao } from "./PapelariaSpTramitacao";
 
 type Props = {
   selected: OsSearchRow | null;
-  /** Lista de andamentos aberta no item selecionado. */
-  expanded?: boolean;
   onSelect: (row: OsSearchRow) => void;
   className?: string;
 };
@@ -150,7 +147,6 @@ function PipelineIcon({
 
 export function PapelariaSpList({
   selected,
-  expanded = true,
   onSelect,
   className,
 }: Props) {
@@ -168,8 +164,6 @@ export function PapelariaSpList({
   const searchEnabled = situacoes.length > 0;
   const searchQuery = useOsSearch(filters, searchEnabled);
   const rows = searchQuery.data?.data ?? [];
-  const headerRef = useRef<HTMLDivElement>(null);
-  const [headerOffset, setHeaderOffset] = useState(0);
 
   const statusItems = useMemo(
     () => rows.map((row) => ({ ano: row.ano, nro: row.nr_os })),
@@ -269,21 +263,6 @@ export function PapelariaSpList({
     setSettingsOpen(false);
   };
 
-  useEffect(() => {
-    const node = headerRef.current;
-    if (!node) {
-      return;
-    }
-    const measure = () => setHeaderOffset(node.offsetHeight);
-    measure();
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [rows.length]);
-
   return (
     <section
       className={cn(
@@ -345,7 +324,6 @@ export function PapelariaSpList({
         ) : (
           <div className="w-full text-[11px]" role="table">
             <div
-              ref={headerRef}
               className={cn(
                 LIST_COLUMNS,
                 "sticky top-0 z-30 bg-slate-100 text-left",
@@ -371,7 +349,6 @@ export function PapelariaSpList({
             </div>
               {rows.map((row) => {
                 const isSelected = sameOsRow(selected, row);
-                const isExpanded = isSelected && expanded;
                 const key = papelariaSpStatusKey(row.ano, row.nr_os);
                 const resumo = statusBySp[key];
                 // Sem resumo do servidor ainda: não inventar "pendente".
@@ -382,23 +359,20 @@ export function PapelariaSpList({
                   ? resolveSpImposicaoCell(resumo.imposicao)
                   : null;
                 return (
-                  <div key={`${row.ano}-${row.nr_os}`}>
-                    <div
-                      className={cn(
-                        LIST_COLUMNS,
-                        "cursor-pointer border-b border-neutral-100 transition",
-                        isExpanded
-                          ? "sticky z-20 bg-[color-mix(in_srgb,var(--secondary-blue)_12%,white)] shadow-[0_2px_4px_rgba(15,23,42,0.12)]"
-                          : isSelected
-                            ? "bg-secondary-blue/10"
-                            : "hover:bg-slate-50",
-                      )}
-                      style={isExpanded ? { top: headerOffset } : undefined}
-                      onClick={() => onSelect(row)}
-                      aria-selected={isSelected}
-                      role="row"
-                      data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
-                    >
+                  <div
+                    key={`${row.ano}-${row.nr_os}`}
+                    className={cn(
+                      LIST_COLUMNS,
+                      "cursor-pointer border-b border-neutral-100 transition",
+                      isSelected
+                        ? "bg-secondary-blue/10"
+                        : "hover:bg-slate-50",
+                    )}
+                    onClick={() => onSelect(row)}
+                    aria-selected={isSelected}
+                    role="row"
+                    data-testid={`papelaria-sp-row-${row.nr_os}-${row.ano}`}
+                  >
                     <div className="px-1 py-1.5 text-center font-mono font-semibold tabular-nums text-secondary-blue" role="cell">
                       {row.nr_os}
                     </div>
@@ -480,12 +454,6 @@ export function PapelariaSpList({
                         </span>
                       ) : null}
                     </div>
-                    </div>
-                    {isExpanded ? (
-                      <div className="border-b border-neutral-100 bg-secondary-blue/5">
-                        <PapelariaSpTramitacao row={row} />
-                      </div>
-                    ) : null}
                   </div>
                 );
               })}

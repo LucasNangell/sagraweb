@@ -2,33 +2,16 @@ import { cn } from "@sagra/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useOsHistory } from "@/api/hooks/useOsHistory";
-import { OsAndamentoEditor, formatUsuarioPontoLabel } from "@/features/os/components/OsAndamentoEditor";
+import { OsAndamentoEditor } from "@/features/os/components/OsAndamentoEditor";
 import type { OsHistoryRow, OsSearchRow } from "@/features/os/types";
-import { formatDateBr } from "@/lib/format";
 
 type Props = {
-  row: OsSearchRow;
+  row: OsSearchRow | null;
+  className?: string;
 };
 
-function revealActionsInList(target: HTMLElement) {
-  const scroller = target.closest("[data-papelaria-sp-scroll]");
-  if (!(scroller instanceof HTMLElement) || typeof scroller.scrollBy !== "function") {
-    return;
-  }
-  const margin = 8;
-  const targetRect = target.getBoundingClientRect();
-  const scrollerRect = scroller.getBoundingClientRect();
-  const below = targetRect.bottom - (scrollerRect.bottom - margin);
-  const above = scrollerRect.top + margin - targetRect.top;
-  if (below > 1) {
-    scroller.scrollBy({ top: below, behavior: "smooth" });
-  } else if (above > 1) {
-    scroller.scrollBy({ top: -above, behavior: "smooth" });
-  }
-}
-
-export function PapelariaSpTramitacao({ row }: Props) {
-  const historyQuery = useOsHistory(row.ano, row.nr_os);
+export function PapelariaSpTramitacao({ row, className }: Props) {
+  const historyQuery = useOsHistory(row?.ano ?? null, row?.nr_os ?? null);
   const rows = useMemo(
     () => historyQuery.data ?? [],
     [historyQuery.data],
@@ -36,16 +19,15 @@ export function PapelariaSpTramitacao({ row }: Props) {
   const [selectedHistory, setSelectedHistory] = useState<OsHistoryRow | null>(null);
   const [editing, setEditing] = useState(false);
   const lastAutoKeyRef = useRef<string | null>(null);
-  const actionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSelectedHistory(null);
     setEditing(false);
     lastAutoKeyRef.current = null;
-  }, [row.ano, row.nr_os]);
+  }, [row?.ano, row?.nr_os]);
 
   useEffect(() => {
-    if (editing || rows.length === 0) {
+    if (!row || editing || rows.length === 0) {
       return;
     }
     const last = rows[rows.length - 1];
@@ -58,7 +40,7 @@ export function PapelariaSpTramitacao({ row }: Props) {
     }
     lastAutoKeyRef.current = key;
     setSelectedHistory(last);
-  }, [editing, rows, row.ano, row.nr_os, selectedHistory]);
+  }, [editing, rows, row, selectedHistory]);
 
   useEffect(() => {
     if (!selectedHistory) {
@@ -81,88 +63,137 @@ export function PapelariaSpTramitacao({ row }: Props) {
     setSelectedHistory(fresh);
   }, [rows, selectedHistory]);
 
-  const loading = historyQuery.isPending && rows.length === 0;
-
-  useEffect(() => {
-    const el = actionsRef.current;
-    if (!el) return;
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => revealActionsInList(el));
-    });
-    return () => {
-      cancelAnimationFrame(outer);
-      cancelAnimationFrame(inner);
-    };
-  }, [loading, rows.length, editing]);
+  const loading = Boolean(row) && historyQuery.isPending && rows.length === 0;
+  const testId = row
+    ? `papelaria-sp-tramitacao-${row.nr_os}`
+    : "papelaria-sp-tramitacao-empty";
 
   return (
-    <div
-      className="min-w-0 max-w-full border-t border-neutral-200 bg-slate-50/70 px-2 py-2"
-      data-testid={`papelaria-sp-tramitacao-${row.nr_os}`}
-      onClick={(event) => event.stopPropagation()}
+    <section
+      className={cn(
+        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
+        className,
+      )}
+      aria-label="Andamentos da SP"
+      data-testid={testId}
     >
-      {loading ? (
-        <p className="py-2 text-center text-[11px] text-neutral-500">
-          Carregando andamentos…
-        </p>
-      ) : rows.length === 0 ? (
-        <p className="py-2 text-center text-[11px] text-neutral-500">
-          Nenhum andamento.
+      <div className="shrink-0 border-b border-sagra-border bg-slate-50/80 px-3 py-1.5">
+        <h3 className="text-xs font-bold tracking-wide text-secondary-blue">
+          Andamentos
+        </h3>
+      </div>
+
+      {!row ? (
+        <p className="flex flex-1 items-center justify-center p-4 text-sm text-neutral-500">
+          Selecione uma SP na lista para ver o histórico.
         </p>
       ) : (
-        <ul className="mb-2 min-w-0 overflow-hidden rounded border border-sagra-border bg-white">
-          {rows.map((item) => {
-            const active = selectedHistory?.CodStatus === item.CodStatus;
-            const ponto = formatUsuarioPontoLabel(item.Ponto, item.usuario_nome);
-            return (
-              <li key={item.CodStatus}>
-                <button
-                  type="button"
-                  className={cn(
-                    "grid w-full min-w-0 grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_5.25rem_minmax(0,1.2fr)] items-start gap-x-2 border-b border-neutral-100 px-2 py-1.5 text-left text-[11px] leading-snug last:border-b-0",
-                    active ? "bg-[var(--highlight-yellow)]" : "hover:bg-slate-50",
-                  )}
-                  data-testid={`papelaria-sp-andamento-${row.nr_os}-${item.CodStatus}`}
-                  onClick={() => setSelectedHistory(item)}
-                >
-                  <span className="min-w-0 break-words font-semibold text-neutral-800">
-                    {item.SituacaoLink ?? "—"}
-                  </span>
-                  <span className="min-w-0 break-words text-neutral-700">
-                    {item.SetorLink ?? "—"}
-                  </span>
-                  <span className="tabular-nums text-neutral-700">
-                    {formatDateBr(item.Data) || "—"}
-                  </span>
-                  <span className="min-w-0 break-words text-neutral-700">
-                    {ponto || "—"}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+          <div
+            className={cn(
+              "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[44%] sm:border-r sm:border-b-0",
+              editing && "cursor-not-allowed",
+            )}
+          >
+            {editing ? (
+              <div
+                className="absolute inset-0 z-10 cursor-not-allowed bg-white/40"
+                aria-hidden
+              />
+            ) : null}
+            <table
+              className={cn(
+                "w-full min-w-0 table-fixed border-collapse text-xs",
+                editing && "pointer-events-none opacity-60",
+              )}
+            >
+              <thead className="sticky top-0 bg-slate-100">
+                <tr>
+                  <th className="min-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold">
+                    Situação
+                  </th>
+                  <th
+                    className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
+                    style={{ width: "5.5rem" }}
+                  >
+                    Setor
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={2}
+                      className="px-2 py-4 text-center text-neutral-500"
+                    >
+                      Carregando andamentos…
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={2}
+                      className="px-2 py-4 text-center text-neutral-500"
+                    >
+                      Nenhum andamento.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((item) => {
+                    const active =
+                      selectedHistory?.CodStatus === item.CodStatus;
+                    return (
+                      <tr
+                        key={item.CodStatus}
+                        data-testid={`papelaria-sp-andamento-${row.nr_os}-${item.CodStatus}`}
+                        onClick={() => {
+                          if (!editing) {
+                            setSelectedHistory(item);
+                          }
+                        }}
+                        className={cn(
+                          "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
+                          active && "bg-[var(--highlight-yellow)]",
+                        )}
+                      >
+                        <td className="min-w-0 overflow-hidden px-2 py-1">
+                          <span
+                            className="block truncate"
+                            title={item.SituacaoLink ?? undefined}
+                          >
+                            {item.SituacaoLink ?? "—"}
+                          </span>
+                        </td>
+                        <td
+                          className="overflow-hidden px-1.5 py-1"
+                          style={{ width: "5.5rem" }}
+                        >
+                          <span
+                            className="block truncate"
+                            title={item.SetorLink ?? undefined}
+                          >
+                            {item.SetorLink ?? "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <OsAndamentoEditor
+            selected={row}
+            historyRow={selectedHistory}
+            onHistoryRowChange={setSelectedHistory}
+            onEditingChange={setEditing}
+            compact
+            presentation="panel"
+          />
+        </div>
       )}
-
-      {selectedHistory ? (
-        <p
-          className="mb-2 whitespace-pre-wrap rounded border border-sagra-border bg-white px-2 py-1.5 text-[11px] text-neutral-700"
-          data-testid={`papelaria-sp-obs-${row.nr_os}`}
-        >
-          {selectedHistory.Observaçao?.trim() || "Sem observação."}
-        </p>
-      ) : null}
-
-      <OsAndamentoEditor
-        selected={row}
-        historyRow={selectedHistory}
-        onHistoryRowChange={setSelectedHistory}
-        onEditingChange={setEditing}
-        actionsRef={actionsRef}
-        compact
-        presentation="inline"
-      />
-    </div>
+    </section>
   );
 }

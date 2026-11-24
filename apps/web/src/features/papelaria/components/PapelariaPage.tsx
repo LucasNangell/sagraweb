@@ -8,13 +8,13 @@ import { sameOsRow } from "../papelariaSelection";
 import { setPapelariaNavigationContext } from "../papelariaSession";
 import { PapelariaCorelPanel } from "./PapelariaCorelPanel";
 import { PapelariaSpList } from "./PapelariaSpList";
+import { PapelariaSpTramitacao } from "./PapelariaSpTramitacao";
 
 type MobilePane = "lista" | "trabalho";
 
 export function PapelariaPage() {
   /** Só preenche o formulário/visualização após clique na lista de SPs. */
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
-  const [listExpanded, setListExpanded] = useState(false);
   const [formHost, setFormHost] = useState<HTMLDivElement | null>(null);
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
@@ -43,14 +43,12 @@ export function PapelariaPage() {
     setMobilePane("trabalho");
   };
 
-  /** Quando a lista traz a linha completa, sincroniza metadados e alterna a expansão. */
+  /** Quando a lista traz a linha completa, sincroniza metadados sem alternar expansão. */
   const handleSelectFromList = (row: OsSearchRow) => {
     if (sameOsRow(selected, row) && selected) {
       setSelected({ ...selected, ...row });
-      setListExpanded((open) => !open);
       return;
     }
-    setListExpanded(true);
     handleSelect(row);
   };
 
@@ -95,10 +93,9 @@ export function PapelariaPage() {
             mobilePane !== "lista" && "max-md:hidden",
           )}
         >
-          {/* A lista mantém a metade de cima; os botões e o formulário dividem o resto. */}
+          {/* A lista mantém a metade de cima; andamentos + formulário dividem o resto. */}
           <PapelariaSpList
             selected={selected}
-            expanded={listExpanded}
             onSelect={handleSelectFromList}
             className="min-h-0 flex-1 basis-0 md:h-[calc(50%-0.25rem)] md:flex-none"
           />
@@ -107,11 +104,17 @@ export function PapelariaPage() {
             className="flex shrink-0 empty:hidden"
             data-testid="papelaria-actions-host"
           />
-          <div
-            ref={setFormHost}
-            className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col"
-            data-testid="papelaria-form-host"
-          />
+          <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-2 md:flex-row">
+            <PapelariaSpTramitacao
+              row={selected}
+              className="min-h-[220px] min-w-0 flex-1 md:min-h-0 md:flex-[1.4]"
+            />
+            <div
+              ref={setFormHost}
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
+              data-testid="papelaria-form-host"
+            />
+          </div>
         </div>
         <div
           className={cn(

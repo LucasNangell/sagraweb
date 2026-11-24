@@ -1746,11 +1746,11 @@ export function PapelariaCorelPanel({
         {formHost
           ? createPortal(
               <section
-                className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm md:flex-row"
+                className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm"
                 data-testid="papelaria-modelos-campos"
               >
                 <div
-                  className="flex min-h-0 min-w-0 flex-col max-md:h-32 md:w-[35.28%] md:shrink-0 md:border-r md:border-sagra-border"
+                  className="flex min-h-0 min-w-0 shrink-0 flex-col border-b border-sagra-border md:h-[30%]"
                   data-testid="papelaria-observacoes-os"
                 >
                   <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
@@ -1768,7 +1768,7 @@ export function PapelariaCorelPanel({
                     />
                   </div>
                 </div>
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-sagra-border md:border-t-0">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
                     <h2 className="text-xs font-bold text-secondary-blue">
                       Informações do cliente

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PAPELARIA_SP_SITUACOES_KEY } from "../papelariaSpSituacoesPrefs";
@@ -40,47 +40,6 @@ vi.mock("@/api/papelaria", () => ({
 
 vi.mock("@/hooks/useSagraWebSocket", () => ({
   useSagraWebSocket: () => ({ status: "connected" }),
-}));
-
-vi.mock("@/api/hooks/useOsHistory", () => ({
-  useOsHistory: () => ({
-    data: [
-      {
-        CodStatus: "1",
-        SituacaoLink: "Recebido",
-        SetorLink: "SEFOC",
-        Data: "2026-11-01",
-        Ponto: "111111",
-        usuario_nome: "Ana",
-        Observaçao: "Primeira observação",
-      },
-      {
-        CodStatus: "2",
-        SituacaoLink: "Em execução",
-        SetorLink: "SEFOC",
-        Data: "2026-11-18",
-        Ponto: "918713",
-        usuario_nome: "Paulo",
-        Observaçao: "Aguardando prova",
-      },
-    ],
-    isPending: false,
-    isFetching: false,
-  }),
-}));
-
-vi.mock("@/features/os/components/OsAndamentoEditor", () => ({
-  formatUsuarioPontoLabel: (ponto?: string | null, nome?: string | null) =>
-    [ponto, nome].filter(Boolean).join(" "),
-  OsAndamentoEditor: () => (
-    <div>
-      <button type="button" title="Excluir andamento selecionado">
-        Excluir
-      </button>
-      <button type="button">Novo</button>
-      <button type="button">Editar</button>
-    </div>
-  ),
 }));
 
 import { PapelariaSpList } from "./PapelariaSpList";
@@ -169,22 +128,13 @@ describe("PapelariaSpList coluna Tiragem", () => {
     );
   });
 
-  it("mostra o andamento atual e expande o último com observação e botões", () => {
+  it("não embute tramitação na linha selecionada", () => {
     renderList(searchRow);
     expect(screen.getByTestId("papelaria-sp-situacao-6100")).toHaveTextContent(
       "Em execução",
     );
-    expect(screen.queryByTestId("papelaria-sp-andamento-atual-6100")).not.toBeInTheDocument();
-    expect(screen.getByTestId("papelaria-sp-obs-6100")).toHaveTextContent(
-      "Aguardando prova",
-    );
-    expect(screen.getByRole("button", { name: "Novo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId("papelaria-sp-andamento-6100-1"));
-    expect(screen.getByTestId("papelaria-sp-obs-6100")).toHaveTextContent(
-      "Primeira observação",
-    );
+    expect(
+      screen.queryByTestId("papelaria-sp-tramitacao-6100"),
+    ).not.toBeInTheDocument();
   });
 });

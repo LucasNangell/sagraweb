@@ -28,6 +28,7 @@ import {
   type ProvaPdfAlinhamento,
   type ProvaPdfAncora,
   type ProvaPdfCampo,
+  type ProvaPdfGrupo,
   type ProvaPdfModelo,
   type ProvaPdfTexto,
 } from "@/api/papelariaProvaPdf";
@@ -81,6 +82,8 @@ export function PapelariaModeloProvaPdfPanel({
   });
 
   const [campos, setCampos] = useState<Record<string, ProvaPdfCampo>>({});
+  /** Grupos de campos (empilhados, alinhamento do grupo — como o bloco de redes). */
+  const [grupos, setGrupos] = useState<ProvaPdfGrupo[]>([]);
   const [orfaosKeys, setOrfaosKeys] = useState<string[]>([]);
   const [teste, setTeste] = useState<Record<string, string>>({});
   const [previa, setPrevia] = useState<{
@@ -95,6 +98,7 @@ export function PapelariaModeloProvaPdfPanel({
   const aplicarResposta = (data: ProvaPdfModelo) => {
     const { mapa, orfaos } = hidratarCampos(data);
     setCampos(mapa);
+    setGrupos(data.grupos ?? []);
     setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
     suppressHydrateRef.current = true;
     qc.setQueryData(queryKey, data);
@@ -111,6 +115,7 @@ export function PapelariaModeloProvaPdfPanel({
     }
     const { mapa, orfaos } = hidratarCampos(query.data);
     setCampos(mapa);
+    setGrupos(query.data.grupos ?? []);
     setOrfaosKeys(orfaos.map((c) => chaveTexto(c)));
   }, [query.data]);
 
@@ -163,7 +168,7 @@ export function PapelariaModeloProvaPdfPanel({
   });
   const saveMutation = useMutation({
     mutationFn: (lista: ProvaPdfCampo[]) =>
-      saveProvaPdfCampos(modelo.id, lista, { limpar: lista.length === 0 }),
+      saveProvaPdfCampos(modelo.id, lista, { limpar: lista.length === 0, grupos }),
     onSuccess: (data) => {
       aplicarResposta(data);
       setMsg({ texto: "Campos salvos.", erro: false });
@@ -179,6 +184,7 @@ export function PapelariaModeloProvaPdfPanel({
       // somem na UI até sair/voltar da aba.
       await saveProvaPdfCampos(modelo.id, payload.lista, {
         limpar: payload.lista.length === 0,
+        grupos,
       });
       return previaProvaPdf(modelo.id, payload.dadosTeste);
     },
@@ -331,6 +337,37 @@ export function PapelariaModeloProvaPdfPanel({
                   : a.label}
               </option>
             ))}
+          </select>
+          <select
+            className="pw-input pw-input--sm mt-1"
+            aria-label={`Grupo de ${c.marcador}`}
+            title="Campos do mesmo grupo ficam empilhados e respeitam uns aos outros; o alinhamento é do grupo."
+            value={c.grupo ?? ""}
+            disabled={!ligado}
+            onChange={(e) => {
+              const valor = e.target.value;
+              if (valor === "__novo") {
+                const novo: ProvaPdfGrupo = {
+                  id: `g${Date.now().toString(36)}`,
+                  nome: `Grupo ${grupos.length + 1}`,
+                  ancora: "centro",
+                  alinhamento: "auto",
+                };
+                setGrupos((g) => [...g, novo]);
+                opts.onChange({ grupo: novo.id });
+                return;
+              }
+              opts.onChange({ grupo: valor || null });
+            }}
+            data-testid={opts.testId ? `${opts.testId}-grupo` : undefined}
+          >
+            <option value="">Sem grupo</option>
+            {grupos.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.nome}
+              </option>
+            ))}
+            <option value="__novo">+ Novo grupo</option>
           </select>
         </div>
         <div className="pw-map-row__cell" data-label="Várias linhas">
@@ -689,6 +726,90 @@ export function PapelariaModeloProvaPdfPanel({
                   })}
                 </div>
               </PanelCard>
+
+              {grupos.length ? (
+                <PanelCard
+                  icon={<Link2 className="size-3.5" aria-hidden />}
+                  title="Grupos de campos"
+                  description="Como o bloco de redes sociais: os campos do grupo ficam empilhados na área que os junta; se um ganha linhas, os outros se afastam e o grupo segue o alinhamento escolhido. Grupo com menos de 2 campos é descartado ao salvar."
+                >
+                  <div className="space-y-2" data-testid="papelaria-prova-pdf-grupos">
+                    {grupos.map((g) => {
+                      const membros = Object.values(campos).filter((c) => c.grupo === g.id && c.template.trim());
+                      return (
+                        <div key={g.id} className="flex flex-wrap items-end gap-2 rounded-md border border-slate-200 p-2">
+                          <Field label="Nome">
+                            <input
+                              className="pw-input pw-input--sm"
+                              value={g.nome}
+                              aria-label={`Nome do grupo ${g.nome}`}
+                              onChange={(e) =>
+                                setGrupos((lista) => lista.map((x) => (x.id === g.id ? { ...x, nome: e.target.value } : x)))
+                              }
+                            />
+                          </Field>
+                          <Field label="Vertical">
+                            <select
+                              className="pw-input pw-input--sm"
+                              aria-label={`Alinhamento vertical de ${g.nome}`}
+                              value={g.ancora}
+                              onChange={(e) =>
+                                setGrupos((lista) =>
+                                  lista.map((x) => (x.id === g.id ? { ...x, ancora: e.target.value as ProvaPdfAncora } : x)),
+                                )
+                              }
+                            >
+                              <option value="auto">Automático</option>
+                              <option value="topo">Topo (cresce p/ baixo)</option>
+                              <option value="centro">Centro (cresce p/ os dois lados)</option>
+                              <option value="base">Base (cresce p/ cima)</option>
+                            </select>
+                          </Field>
+                          <Field label="Horizontal">
+                            <select
+                              className="pw-input pw-input--sm"
+                              aria-label={`Alinhamento horizontal de ${g.nome}`}
+                              value={g.alinhamento}
+                              onChange={(e) =>
+                                setGrupos((lista) =>
+                                  lista.map((x) =>
+                                    x.id === g.id ? { ...x, alinhamento: e.target.value as ProvaPdfAlinhamento } : x,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="auto">De cada campo</option>
+                              <option value="esquerda">Esquerda</option>
+                              <option value="centro">Centro</option>
+                              <option value="direita">Direita</option>
+                            </select>
+                          </Field>
+                          <p className="min-w-0 flex-1 text-[10px] text-slate-500">
+                            {membros.length
+                              ? membros.map((c) => c.marcador).join(" · ")
+                              : "Nenhum campo — escolha este grupo na coluna Alinhamento."}
+                          </p>
+                          <button
+                            type="button"
+                            className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                            onClick={() => {
+                              setGrupos((lista) => lista.filter((x) => x.id !== g.id));
+                              setCampos((prev) =>
+                                Object.fromEntries(
+                                  Object.entries(prev).map(([k, c]) => [k, c.grupo === g.id ? { ...c, grupo: null } : c]),
+                                ),
+                              );
+                            }}
+                          >
+                            <Trash2 className="size-3" aria-hidden />
+                            Desfazer grupo
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PanelCard>
+              ) : null}
 
               {orfaosVisiveis.length ? (
                 <PanelCard

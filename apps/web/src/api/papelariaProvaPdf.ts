@@ -44,6 +44,8 @@ export interface ProvaPdfCampo {
   bloquear_edicao?: boolean;
   /** Textos do PDF (abaixo deste, mesma página) que formam um campo só com ele. */
   juntar?: string[];
+  /** Grupo de campos (id) — o alinhamento passa a ser o do grupo. */
+  grupo?: string | null;
 }
 
 export type ProvaPdfRedesDisposicao = "vertical" | "horizontal" | "grade";
@@ -71,8 +73,22 @@ export interface ProvaPdfBlocoRedes {
   estilo_padrao?: "quadrado_policromia" | "quadrado_pb" | "policromia" | "pb";
 }
 
+/**
+ * Grupo de campos (como o bloco de redes sociais): os campos ficam
+ * empilhados e o alinhamento vertical/horizontal é do grupo.
+ */
+export interface ProvaPdfGrupo {
+  id: string;
+  nome: string;
+  /** Vertical: topo (cresce para baixo), base (para cima) ou centro. */
+  ancora: ProvaPdfAncora;
+  /** Horizontal na área que junta os campos (auto = cada campo o seu). */
+  alinhamento: ProvaPdfAlinhamento;
+}
+
 export interface ProvaPdfModelo {
   tem_pdf: boolean;
+  grupos?: ProvaPdfGrupo[];
   arquivo?: string;
   atualizado_em?: string | null;
   campos: ProvaPdfCampo[];
@@ -117,7 +133,7 @@ export async function uploadProvaPdfModelo(
 export function saveProvaPdfCampos(
   modeloId: number,
   campos: ProvaPdfCampo[],
-  options?: { limpar?: boolean },
+  options?: { limpar?: boolean; grupos?: ProvaPdfGrupo[] },
 ): Promise<ProvaPdfModelo> {
   return apiFetch<ProvaPdfModelo>(`${base(modeloId)}/campos`, {
     method: "PUT",
@@ -125,6 +141,7 @@ export function saveProvaPdfCampos(
     body: JSON.stringify({
       campos,
       limpar: Boolean(options?.limpar),
+      ...(options?.grupos ? { grupos: options.grupos } : {}),
     }),
   });
 }

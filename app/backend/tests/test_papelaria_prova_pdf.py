@@ -805,3 +805,110 @@ def test_dpi_da_previa_adapta_ao_tamanho():
     assert svc.dpi_da_previa(doc[1]) == pytest.approx(205, abs=1)
     assert svc.dpi_da_previa(doc[2]) == svc.PREVIA_DPI_MIN
     doc.close()
+
+
+# --------------------------------------------------------------------------
+# Grupos de campos: empilhados, com o alinhamento do grupo.
+# --------------------------------------------------------------------------
+
+
+def _pdf_tres_linhas() -> bytes:
+    """Três textos empilhados no meio da página (como nome / cargo / partido)."""
+    if not os.path.isfile(_FONTE):
+        pytest.skip("fonte Arial indisponível")
+    doc = fitz.open()
+    page = doc.new_page(width=255.1, height=141.7)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    page.insert_text((60, 55), "CAMPOUM", fontname="F1", fontsize=10)
+    page.insert_text((60, 70), "CAMPODOIS", fontname="F1", fontsize=10)
+    page.insert_text((60, 85), "CAMPOTRES", fontname="F1", fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _y_das_linhas(pdf: bytes) -> dict[str, float]:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        out = {}
+        for b in doc[0].get_text("dict")["blocks"]:
+            for l in b.get("lines", []):
+                t = "".join(s["text"] for s in l["spans"]).strip().replace("\xa0", " ")
+                out[t] = round(l["spans"][0]["origin"][1], 1)
+        return out
+    finally:
+        doc.close()
+
+
+def _campos_grupo(meio: str, ancora: str) -> list[dict]:
+    from services import papelaria_prova_pdf_service as svc
+
+    base = [("CAMPOUM", "Um"), ("CAMPODOIS", meio), ("CAMPOTRES", "Tres")]
+    marc = {m for m, _ in base}
+    return [
+        svc._normalizar_campo(
+            {"marcador": m, "pagina": 1, "template": t, "alinhamento": "esquerda", "ancora": "topo",
+             "entrelinha": 1.5, "grupo": "g1", "grupo_ancora": ancora},
+            marc,
+        )
+        for m, t in base
+    ]
+
+
+def test_grupo_centro_campo_do_meio_cresce_e_os_outros_se_afastam():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_tres_linhas()
+    normal = _y_das_linhas(svc.renderizar(pdf, _campos_grupo("Dois", "centro"), {}))
+    assert normal["Um"] == pytest.approx(55, abs=0.3)
+    assert normal["Dois"] == pytest.approx(70, abs=0.3)
+    assert normal["Tres"] == pytest.approx(85, abs=0.3)
+    # O do meio ganha uma linha (15 pt): o de cima sobe 7,5 e o de baixo desce 7,5.
+    duas = _y_das_linhas(svc.renderizar(pdf, _campos_grupo("Dois\nDois B", "centro"), {}))
+    assert duas["Um"] == pytest.approx(55 - 7.5, abs=0.3)
+    assert duas["Dois"] == pytest.approx(70 - 7.5, abs=0.3)
+    assert duas["Dois B"] == pytest.approx(70 + 7.5, abs=0.3)
+    assert duas["Tres"] == pytest.approx(85 + 7.5, abs=0.3)
+
+
+def test_grupo_topo_e_base():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_tres_linhas()
+    topo = _y_das_linhas(svc.renderizar(pdf, _campos_grupo("Dois\nDois B", "topo"), {}))
+    assert topo["Um"] == pytest.approx(55, abs=0.3) and topo["Tres"] == pytest.approx(100, abs=0.3)
+    base = _y_das_linhas(svc.renderizar(pdf, _campos_grupo("Dois\nDois B", "base"), {}))
+    assert base["Um"] == pytest.approx(40, abs=0.3) and base["Tres"] == pytest.approx(85, abs=0.3)
+
+
+def test_grupo_campo_vazio_fecha_o_espaco():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_tres_linhas()
+    y = _y_das_linhas(svc.renderizar(pdf, _campos_grupo("", "topo"), {}))
+    assert "Dois" not in y
+    assert y["Um"] == pytest.approx(55, abs=0.3) and y["Tres"] == pytest.approx(70, abs=0.3)
+
+
+def test_salvar_campos_grupos_precisam_de_dois_campos(tmp_path, monkeypatch):
+    from services import papelaria_prova_pdf_service as svc
+
+    monkeypatch.setattr(svc, "RAIZ_MODELOS_PDF", tmp_path)
+    svc.salvar_pdf_modelo(4, filename="g.pdf", content=_pdf_tres_linhas())
+    r = svc.salvar_campos(
+        4,
+        [
+            {"marcador": "CAMPOUM", "pagina": 1, "template": "a", "grupo": "g1"},
+            {"marcador": "CAMPODOIS", "pagina": 1, "template": "b", "grupo": "g1"},
+            {"marcador": "CAMPOTRES", "pagina": 1, "template": "c", "grupo": "g2"},
+        ],
+        grupos=[
+            {"id": "g1", "nome": "Nome e cargo", "ancora": "centro", "alinhamento": "centro"},
+            {"id": "g2", "ancora": "topo"},
+        ],
+    )
+    assert r["grupos"] == [{"id": "g1", "nome": "Nome e cargo", "ancora": "centro", "alinhamento": "centro"}]
+    por = {c["marcador"]: c for c in r["campos"]}
+    assert por["CAMPOUM"]["grupo"] == "g1" and por["CAMPOUM"]["grupo_ancora"] == "centro"
+    assert por["CAMPOUM"]["grupo_alinhamento"] == "centro"
+    assert por["CAMPOTRES"]["grupo"] is None  # grupo de um campo só não vale

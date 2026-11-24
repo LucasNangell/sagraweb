@@ -630,7 +630,47 @@ def _normalizar_campo(raw: Any, marcadores: set[str]) -> Optional[dict[str, Any]
         # Base da repetição: o texto só é redesenhado se o usuário editar na
         # prévia; sem edição fica o original do PDF, intocado.
         "somente_se_editado": bool(raw.get("somente_se_editado", False)),
+        # Grupo de campos empilhados (o alinhamento vertical é do grupo).
+        "grupo": (str(raw.get("grupo") or "").strip()[:40] or None),
+        "grupo_ancora": (
+            str(raw.get("grupo_ancora") or "auto")
+            if str(raw.get("grupo_ancora") or "auto") in ANCORAS
+            else "auto"
+        ),
+        "grupo_alinhamento": (
+            str(raw.get("grupo_alinhamento") or "auto")
+            if str(raw.get("grupo_alinhamento") or "auto") in ALINHAMENTOS
+            else "auto"
+        ),
     }
+
+
+def normalizar_grupos(raw: Any) -> list[dict[str, Any]]:
+    """
+    Grupos de campos (como o bloco de redes sociais): ``[{"id", "nome",
+    "ancora", "alinhamento"}]`` — vertical (topo/centro/base) e horizontal
+    (esquerda/centro/direita) do grupo, na área que junta os campos.
+    """
+    out: list[dict[str, Any]] = []
+    vistos: set[str] = set()
+    for g in raw or []:
+        if not isinstance(g, dict):
+            continue
+        gid = str(g.get("id") or "").strip()[:40]
+        if not gid or gid in vistos:
+            continue
+        vistos.add(gid)
+        ancora = str(g.get("ancora") or "auto")
+        alinhamento = str(g.get("alinhamento") or "auto")
+        out.append(
+            {
+                "id": gid,
+                "nome": str(g.get("nome") or gid).strip()[:60] or gid,
+                "ancora": ancora if ancora in ANCORAS else "auto",
+                "alinhamento": alinhamento if alinhamento in ALINHAMENTOS else "auto",
+            }
+        )
+    return out[:30]
 
 
 def obter_modelo_pdf(modelo_id: int) -> dict[str, Any]:
@@ -643,6 +683,7 @@ def obter_modelo_pdf(modelo_id: int) -> dict[str, Any]:
         "arquivo": config.get("arquivo_original") or pdf.name,
         "atualizado_em": config.get("atualizado_em"),
         "campos": config.get("campos") or [],
+        "grupos": config.get("grupos") or [],
         "redes": config.get("redes"),
         "analise": analisar_pdf(pdf),
     }
@@ -685,7 +726,11 @@ def salvar_pdf_modelo(modelo_id: int, *, filename: str, content: bytes) -> dict[
 
 
 def salvar_campos(
-    modelo_id: int, campos: list[Any], *, limpar: bool = False
+    modelo_id: int,
+    campos: list[Any],
+    *,
+    limpar: bool = False,
+    grupos: Optional[list[Any]] = None,
 ) -> dict[str, Any]:
     pdf = caminho_pdf(modelo_id)
     if not pdf.is_file():
@@ -724,6 +769,24 @@ def salvar_campos(
             "Nenhum campo foi enviado, mas este modelo já tem campos salvos. "
             "Envie os campos novamente ou confirme a limpeza explícita."
         )
+    # Grupos: só os que têm ao menos 2 campos; cada campo leva a âncora do grupo.
+    if grupos is not None:
+        lista = normalizar_grupos(grupos)
+    else:
+        lista = normalizar_grupos(config.get("grupos"))
+    por_id = {g["id"]: g for g in lista}
+    uso: dict[str, int] = {}
+    for c in normalizados:
+        if c.get("grupo") in por_id:
+            uso[c["grupo"]] = uso.get(c["grupo"], 0) + 1
+    lista = [g for g in lista if uso.get(g["id"], 0) >= 2]
+    por_id = {g["id"]: g for g in lista}
+    for c in normalizados:
+        g = por_id.get(c.get("grupo") or "")
+        c["grupo"] = g["id"] if g else None
+        c["grupo_ancora"] = g["ancora"] if g else "auto"
+        c["grupo_alinhamento"] = g["alinhamento"] if g else "auto"
+    config["grupos"] = lista
     config["campos"] = normalizados
     config["atualizado_em"] = time.strftime("%Y-%m-%d %H:%M:%S")
     _salvar_config(modelo_id, config)
@@ -1019,6 +1082,75 @@ def _largura_segmentos(
         f = fonte_bold if negrito and fonte_bold is not None else fonte
         total += f.largura(trecho, tamanho, espacamento)
     return total
+
+
+# Altura de uma linha em relação ao tamanho da fonte (acima / abaixo da base).
+_ASC = 0.85
+_DESC = 0.25
+
+
+def _empilhar_grupos(layouts: list[dict[str, Any]], altura_pg: float) -> None:
+    """
+    Campos do mesmo grupo viram uma pilha: na ordem em que estão no modelo,
+    com os mesmos espaços entre eles. Se um campo ganha linhas, os de baixo
+    descem e/ou os de cima sobem conforme a âncora do grupo (topo: tudo desce;
+    base: tudo sobe; centro: o meio do grupo fica onde estava). Campo vazio
+    some com o espaço dele.
+    """
+    grupos: dict[str, list[dict[str, Any]]] = {}
+    for lay in layouts:
+        gid = lay["campo"].get("grupo")
+        if gid:
+            grupos.setdefault(str(gid), []).append(lay)
+    for membros in grupos.values():
+        if len(membros) < 2:
+            continue
+        geo = []
+        for lay in membros:
+            alvo = lay["alvo"]
+            t0 = float(alvo["tamanho"])
+            primeira = float(alvo["topo_y"])
+            ultima = float(alvo["origem_base"].y) if alvo.get("origem_base") is not None else primeira
+            geo.append((primeira - _ASC * t0, ultima + _DESC * t0, lay))
+        geo.sort(key=lambda g: g[0])
+        topo0 = min(g[0] for g in geo)
+        base0 = max(g[1] for g in geo)
+        ancora = str(membros[0]["campo"].get("grupo_ancora") or "auto")
+        if ancora == "auto":
+            ancora = ancora_sugerida(topo0, base0, altura_pg)
+        # Pilha nova: alturas pelo nº de linhas; espaço = o do modelo antes do campo.
+        pilha: list[tuple[float, float, dict[str, Any]]] = []  # (espaço antes, altura, layout)
+        for i, (topo, _base, lay) in enumerate(geo):
+            if lay["vazio"]:
+                continue
+            espaco = (topo - geo[i - 1][1]) if i > 0 and pilha else 0.0
+            n = len(lay["segs_linhas"])
+            altura = (_ASC + _DESC) * lay["tam"] + (n - 1) * lay["entrelinha"]
+            pilha.append((espaco, altura, lay))
+        if not pilha:
+            continue
+        total = sum(e + h for e, h, _ in pilha)
+        if ancora == "base":
+            cursor = base0 - total
+        elif ancora == "centro":
+            cursor = (topo0 + base0) / 2.0 - total / 2.0
+        else:
+            cursor = topo0
+        alinhamento = str(membros[0]["campo"].get("grupo_alinhamento") or "auto")
+        caixa = None
+        if alinhamento != "auto":
+            caixa = (
+                min(float(l["alvo"]["bbox"].x0) for l in membros),
+                max(float(l["alvo"]["bbox"].x1) for l in membros),
+            )
+        for espaco, altura, lay in pilha:
+            cursor += espaco
+            lay["ancora"] = "topo"
+            lay["base_y"] = cursor + _ASC * lay["tam"]
+            if caixa is not None:
+                lay["alinhar"] = alinhamento
+                lay["caixa_x"] = caixa
+            cursor += altura
 
 
 def _area_relativa(area: Any, largura: float, altura: float) -> list[float]:
@@ -1428,9 +1560,10 @@ def renderizar(
             ops = ["q"]
             # Topo do texto (estimado pela linha de base) antes e depois, por campo.
             medidas: list[dict[str, Any]] = []
+            # 1º passo: linhas, tamanho (já reduzido) e posição de cada campo.
+            layouts: list[dict[str, Any]] = []
             for campo, alvo, fonte, texto, ranges_negrito, fonte_bold, _bx, bold_recurso, editado in planos:
                 bbox: fitz.Rect = alvo["bbox"]
-                area = fitz.Rect(bbox)
                 medida: dict[str, Any] = {
                     "bbox": fitz.Rect(bbox),
                     "topo_original": alvo["topo_y"] - alvo["tamanho"] * 0.85,
@@ -1450,9 +1583,19 @@ def renderizar(
                         "bloquear_edicao": bool(campo.get("bloquear_edicao")),
                     }
                     regioes.append(regiao)
+                lay: dict[str, Any] = {
+                    "campo": campo,
+                    "alvo": alvo,
+                    "fonte": fonte,
+                    "fonte_bold": fonte_bold,
+                    "bold_recurso": bold_recurso,
+                    "medida": medida,
+                    "regiao": regiao,
+                    "area": fitz.Rect(bbox),
+                    "vazio": not texto,
+                }
+                layouts.append(lay)
                 if not texto:
-                    if regiao is not None:
-                        regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
                     continue
                 tam = alvo["tamanho"]
                 tc = _espacamento_do_marcador(fonte, alvo["chars"], tam)
@@ -1493,12 +1636,36 @@ def renderizar(
                             )
                     tam *= fator
                     tc *= fator
-                entrelinha = tam * float(campo.get("entrelinha") or 1.2)
-                n = len(segs_linhas)
                 base_y = alvo["origem"].y
                 if ancora == "base" and alvo.get("origem_base") is not None:
                     # Campo juntado: a última linha fica onde estava a última do modelo.
                     base_y = alvo["origem_base"].y
+                lay.update(
+                    {
+                        "tam": tam,
+                        "tc": tc,
+                        "alinhar": alinhar,
+                        "ancora": ancora,
+                        "segs_linhas": segs_linhas,
+                        "entrelinha": tam * float(campo.get("entrelinha") or 1.2),
+                        "base_y": base_y,
+                    }
+                )
+            # 2º passo: grupos empilhados — cada campo respeita os outros e o
+            # alinhamento vertical (topo/centro/base) é do grupo.
+            _empilhar_grupos(layouts, altura_pg)
+            # 3º passo: desenha.
+            for lay in layouts:
+                if lay["vazio"]:
+                    if lay["regiao"] is not None:
+                        lay["regiao"]["area"] = _area_relativa(lay["area"], largura_pg, altura_pg)
+                    continue
+                alvo, fonte, fonte_bold = lay["alvo"], lay["fonte"], lay["fonte_bold"]
+                bold_recurso, medida, area = lay["bold_recurso"], lay["medida"], lay["area"]
+                bbox = alvo["bbox"]
+                tam, tc, alinhar, ancora = lay["tam"], lay["tc"], lay["alinhar"], lay["ancora"]
+                segs_linhas, entrelinha, base_y = lay["segs_linhas"], lay["entrelinha"], lay["base_y"]
+                n = len(segs_linhas)
                 for i, segs in enumerate(segs_linhas):
                     if ancora == "base":
                         y = base_y - (n - 1 - i) * entrelinha
@@ -1507,12 +1674,14 @@ def renderizar(
                     else:
                         y = base_y + i * entrelinha
                     w = _largura_segmentos(segs, fonte, fonte_bold, tam, tc)
+                    # Grupo com alinhamento próprio: a área é a que junta os campos.
+                    gx0, gx1 = lay.get("caixa_x") or (bbox.x0, bbox.x1)
                     if alinhar == "direita":
-                        x = bbox.x1 - w
+                        x = gx1 - w
                     elif alinhar == "centro":
-                        x = (bbox.x0 + bbox.x1) / 2.0 - w / 2.0
+                        x = (gx0 + gx1) / 2.0 - w / 2.0
                     else:
-                        x = alvo["origem"].x
+                        x = gx0 if lay.get("caixa_x") else alvo["origem"].x
                     if w > 0:
                         area |= fitz.Rect(x, y - tam * 0.85, x + w, y + tam * 0.25)
                         topo = y - tam * 0.85
@@ -1532,8 +1701,8 @@ def renderizar(
                             f"<{f_use.codificar(trecho)}> Tj ET"
                         )
                         cursor += f_use.largura(trecho, tam, tc)
-                if regiao is not None:
-                    regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
+                if lay["regiao"] is not None:
+                    lay["regiao"]["area"] = _area_relativa(area, largura_pg, altura_pg)
             ops.append("Q")
             if regioes is not None:
                 # Textos não editados (base da repetição): clicáveis, mas intactos.

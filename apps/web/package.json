@@ -1,6 +1,6 @@
 {
   "name": "@sagra/web",
-  "version": "0.112.1",
+  "version": "0.113.0",
   "private": true,
   "type": "module",
   "description": "SAGRA Web SPA — React 19 + Vite 6",

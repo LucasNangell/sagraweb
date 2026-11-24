@@ -350,6 +350,8 @@ async def upload_prova_email_template(
 class PapelariaProvaPdfCamposPayload(BaseModel):
     campos: list[Dict[str, Any]] = Field(default_factory=list)
     limpar: bool = False
+    # Grupos de campos (alinhamento do grupo); None = mantém os salvos.
+    grupos: Optional[list[Dict[str, Any]]] = None
 
 
 class PapelariaProvaPdfPreviaPayload(BaseModel):
@@ -418,7 +420,7 @@ def salvar_campos_prova_pdf_modelo(
 
     try:
         return svc.salvar_campos(
-            modelo_id, payload.campos, limpar=bool(payload.limpar)
+            modelo_id, payload.campos, limpar=bool(payload.limpar), grupos=payload.grupos
         )
     except svc.ProvaPdfError as e:
         raise HTTPException(400, str(e))

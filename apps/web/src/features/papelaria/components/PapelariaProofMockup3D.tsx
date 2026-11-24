@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
 import { Box } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import {
   buildFaceTransform,
@@ -12,9 +12,10 @@ import {
   paginasUsadas,
   PAPELARIA_MOCKUP_SCENE_BASE_PX,
   resolvePageUrl,
+  resolverBolso,
   sceneDimensionsPx,
 } from "../mockup";
-import type { PapelariaMockupConfig } from "../mockup";
+import type { PapelariaMockupBolsoConfig, PapelariaMockupConfig } from "../mockup";
 import "./PapelariaProofMockup3D.css";
 
 export type PapelariaProofMockup3DProps = {
@@ -25,6 +26,56 @@ export type PapelariaProofMockup3DProps = {
   /** Referência em px para dimensionar a cena (padrão da Papelaria). */
   sceneBasePx?: number;
 };
+
+/**
+ * Bolso interno sobre a face: papel um pouco mais claro que a base, sombra
+ * fina projetada acima da boca e as fendas do cartão.
+ */
+export function MockupBolso({ bolso }: { bolso: PapelariaMockupBolsoConfig }) {
+  const id = useId().replace(/:/g, "");
+  const boca = bolso.boca ?? bolso.contorno;
+  return (
+    <svg
+      className="mockup-bolso"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden
+      data-testid="mockup-bolso"
+    >
+      <defs>
+        <linearGradient id={`${id}-papel`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#e7e8ea" />
+          <stop offset="0.12" stopColor={bolso.cor ?? "#f7f7f6"} />
+          <stop offset="1" stopColor={bolso.cor ?? "#fcfcfb"} />
+        </linearGradient>
+        <filter id={`${id}-sombra`} x="-5%" y="-20%" width="110%" height="140%">
+          <feDropShadow dx="0" dy="-0.5" stdDeviation="0.7" floodColor="#0f172a" floodOpacity="0.22" />
+        </filter>
+      </defs>
+      <path d={bolso.contorno} fill={`url(#${id}-papel)`} filter={`url(#${id}-sombra)`} />
+      <path
+        d={boca}
+        fill="none"
+        stroke="#c9cbcf"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      />
+      {(bolso.cortes ?? []).map(([x1, y1, x2, y2], i) => (
+        <line
+          key={i}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke="#7c818a"
+          strokeWidth={1.4}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </svg>
+  );
+}
 
 function MockupFace({
   face,
@@ -48,6 +99,7 @@ function MockupFace({
   const layout = faceLayoutStyle(face, config, productW, productH);
   const isFullBleed =
     !face.crop && !face.style3d.widthMm && !face.espessuraMm;
+  const bolso = resolverBolso(face);
 
   return (
     <div
@@ -68,7 +120,9 @@ function MockupFace({
         backgroundPosition: bg.backgroundPosition,
       }}
       title={face.nome}
-    />
+    >
+      {bolso ? <MockupBolso bolso={bolso} /> : null}
+    </div>
   );
 }
 

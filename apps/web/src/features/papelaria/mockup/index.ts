@@ -1,9 +1,17 @@
 export type {
+  PapelariaMockupBolsoConfig,
   PapelariaMockupConfig,
   PapelariaMockupFaceConfig,
   PapelariaMockupResolveInput,
   PapelariaMockupResolveResult,
 } from "./types";
+
+export {
+  aplicarBolsoPadrao,
+  BOLSO_PASTA_AVULSO,
+  produtoTemBolso,
+  resolverBolso,
+} from "./bolsoInterno";
 
 export {
   PAPELARIA_MOCKUP_CONFIGS,
@@ -13,6 +21,7 @@ export {
 export {
   escolherPresetPorPaginas,
   getPapelariaMockupConfig,
+  mockupConfigMatchesRequest,
 } from "./getPapelariaMockupConfig";
 export type { PapelariaMockupResolveResultExtended } from "./getPapelariaMockupConfig";
 

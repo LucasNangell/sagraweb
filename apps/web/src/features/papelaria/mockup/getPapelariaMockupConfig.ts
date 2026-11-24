@@ -1,3 +1,4 @@
+import { aplicarBolsoPadrao } from "./bolsoInterno";
 import {
   PAPELARIA_MOCKUP_CONFIGS,
   PAPELARIA_MOCKUP_CONFIG_LIST,
@@ -99,10 +100,38 @@ function presetsNaoFallback(): PapelariaMockupConfig[] {
 }
 
 /**
+ * O JSON salvo declara para qual produto/arquivo foi feito.
+ * Sem essas listas, a configuração é tratada como exclusiva deste item.
+ */
+export function mockupConfigMatchesRequest(
+  config: PapelariaMockupConfig,
+  input: { produto?: string; arquivoModelo?: string },
+): boolean {
+  const hasProduto = (config.produtoMatch?.length ?? 0) > 0;
+  const hasArquivo = (config.arquivoModeloMatch?.length ?? 0) > 0;
+  if (!hasProduto && !hasArquivo) return true;
+  const produtoOk = hasProduto && matchProduto(input.produto ?? "", config.produtoMatch);
+  const arquivoOk =
+    hasArquivo && matchArquivoModelo(input.arquivoModelo ?? "", config.arquivoModeloMatch);
+  return produtoOk || arquivoOk;
+}
+
+/**
  * Resolve mockup: MockupConfigJson (banco) → preset automático (por
  * arquivo/produto + pageCount) → fallback.
  */
+/**
+ * Mockup do produto (JSON salvo, preset ou genérico). Pasta com bolso ganha o
+ * bolso interno padrão na face interna quando a configuração não define um.
+ */
 export function getPapelariaMockupConfig(
+  input: PapelariaMockupResolveInput,
+): PapelariaMockupResolveResultExtended {
+  const r = resolverConfigBase(input);
+  return { ...r, config: aplicarBolsoPadrao(r.config, input.produto) };
+}
+
+function resolverConfigBase(
   input: PapelariaMockupResolveInput,
 ): PapelariaMockupResolveResultExtended {
   const dbJson = input.mockupConfigJson?.trim();

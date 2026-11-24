@@ -42,6 +42,18 @@ export type PapelariaMockupFaceStyle3d = {
   rotateYHover?: number;
 };
 
+/** Bolso interno desenhado sobre a face (ex.: pasta com bolso). */
+export type PapelariaMockupBolsoConfig = {
+  /** Contorno do bolso (path SVG em % da face: viewBox 0 0 100 100). */
+  contorno: string;
+  /** Só a boca do bolso (borda que recebe sombra/realce); padrão: o contorno. */
+  boca?: string;
+  /** Fendas para cartão, em % da face: [x1, y1, x2, y2]. */
+  cortes?: Array<[number, number, number, number]>;
+  /** Cor do papel do bolso (padrão: branco levemente sombreado). */
+  cor?: string;
+};
+
 export type PapelariaMockupFaceConfig = {
   id: string;
   nome: string;
@@ -56,6 +68,11 @@ export type PapelariaMockupFaceConfig = {
   espessuraMm?: number;
   sombra?: boolean;
   lombada?: boolean;
+  /**
+   * Bolso interno sobre esta face: `"pasta_avulso"` (faca padrão da Pasta
+   * Avulso c/ Bolso), um contorno próprio ou `false` para não desenhar.
+   */
+  bolso?: PapelariaMockupBolsoConfig | "pasta_avulso" | false;
 };
 
 export type PapelariaMockupDobraConfig = {

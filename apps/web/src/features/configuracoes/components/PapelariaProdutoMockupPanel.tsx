@@ -16,6 +16,7 @@ import {
   PAPELARIA_MOCKUP_CONFIGS,
   parseMockupConfigJson,
   validateMockupConfigObject,
+  aplicarBolsoPadrao,
 } from "@/features/papelaria/mockup";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
@@ -153,7 +154,8 @@ function MockupEditor({
   const [validateMsg, setValidateMsg] = useState<ValidateMsg | null>(null);
 
   const parsed = useMemo(() => (jsonText.trim() ? parseMockupConfigJson(jsonText) : null), [jsonText]);
-  const previewConfig = parsed?.ok ? parsed.config : null;
+  // Mesma regra da prova: pasta com bolso ganha o bolso interno padrão.
+  const previewConfig = parsed?.ok ? aplicarBolsoPadrao(parsed.config, produto) : null;
   const dirty = jsonText.trim() !== savedText.trim();
   const herdadoIntacto = herdadoAtivo && jsonText.trim() === textoHerdado.trim();
 

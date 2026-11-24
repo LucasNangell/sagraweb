@@ -87,10 +87,10 @@ describe("isPastaAvulsoProduct / papelariaProofPdfViewerSrc", () => {
   it("usa FitH para pasta e FitV para os demais", () => {
     expect(
       papelariaProofPdfViewerSrc("/api/email/os/2026/1/proof-file?f=a.pdf", "Pasta Avulso c/ Bolso"),
-    ).toBe("/api/email/os/2026/1/proof-file?f=a.pdf#view=FitH");
+    ).toBe("/api/email/os/2026/1/proof-file?f=a.pdf#view=FitH&navpanes=0&pagemode=none");
     expect(
       papelariaProofPdfViewerSrc("/api/x.pdf#old", "Ct Visita"),
-    ).toBe("/api/x.pdf#view=FitV");
+    ).toBe("/api/x.pdf#view=FitV&navpanes=0&pagemode=none");
   });
 });
 

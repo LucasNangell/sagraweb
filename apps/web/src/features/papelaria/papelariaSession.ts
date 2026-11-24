@@ -97,6 +97,7 @@ export function isPreImpressoImposicaoProduct(
 /**
  * Fragmento do visualizador PDF embutido:
  * pastas avulso → FitH (largura); demais → FitV (altura).
+ * Sem a coluna de miniaturas: `navpanes=0` (Chrome/Edge) e `pagemode=none` (Firefox).
  */
 export function papelariaProofPdfViewerSrc(
   pdfUrl: string,
@@ -106,7 +107,7 @@ export function papelariaProofPdfViewerSrc(
   if (!raw) return "";
   const base = raw.split("#", 1)[0] ?? raw;
   const fit = isPastaAvulsoProduct(product) ? "FitH" : "FitV";
-  return `${base}#view=${fit}`;
+  return `${base}#view=${fit}&navpanes=0&pagemode=none`;
 }
 
 export type PapelariaTabId = "cartao" | "corel";

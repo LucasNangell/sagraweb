@@ -31,14 +31,17 @@ async function loadPdfBlobUrl(pdfUrl: string): Promise<string> {
   return URL.createObjectURL(pdfBlob);
 }
 
-/** URL do iframe — zoom nativo do visualizador PDF (Chrome/Edge). */
+/** Sem a coluna de miniaturas: `navpanes=0` (Chrome/Edge) e `pagemode=none` (Firefox). */
+const SEM_MINIATURAS = "navpanes=0&pagemode=none";
+
+/** URL do iframe — zoom nativo do visualizador PDF (Chrome/Edge), só a página. */
 function pdfIframeSrc(blobUrl: string, fit: PdfViewerFit | null): string {
   if (!fit) {
-    return blobUrl;
+    return `${blobUrl}#${SEM_MINIATURAS}`;
   }
   const zoom =
     fit === "height" ? "page-height" : fit === "width" ? "page-width" : "page-fit";
-  return `${blobUrl}#page=1&zoom=${zoom}`;
+  return `${blobUrl}#page=1&zoom=${zoom}&${SEM_MINIATURAS}`;
 }
 
 export function ClienteProofViewer({

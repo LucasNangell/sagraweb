@@ -40,7 +40,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf",
+        "blob:mock-pdf#navpanes=0&pagemode=none",
       );
     });
 
@@ -64,7 +64,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-fit",
+        "blob:mock-pdf#page=1&zoom=page-fit&navpanes=0&pagemode=none",
       );
     });
   });
@@ -83,7 +83,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-height",
+        "blob:mock-pdf#page=1&zoom=page-height&navpanes=0&pagemode=none",
       );
     });
   });
@@ -102,7 +102,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-width",
+        "blob:mock-pdf#page=1&zoom=page-width&navpanes=0&pagemode=none",
       );
     });
   });

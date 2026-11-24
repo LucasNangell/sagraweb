@@ -233,6 +233,8 @@ export interface PapelariaOsContext {
 
 export interface PapelariaRepeticaoBase {
   origem?: { ano: number; nro: number } | null;
+  /** Montada da prova da própria OS (padrão antigo). */
+  propria?: boolean;
   arquivo_origem?: string | null;
   criado_em?: string | null;
   faces?: Array<{ face: string; metodo: string; pagina_origem: number; escala: number; rotacao: number }> | null;
@@ -245,6 +247,13 @@ export interface PapelariaRepeticao {
   /** «1234/25» */
   rotulo: string | null;
   base: PapelariaRepeticaoBase | null;
+  /**
+   * Não é repetição: a última prova da própria OS está no padrão antigo
+   * (folha A4 com molduras) e a base editável sai dela para a alteração.
+   */
+  propria?: boolean;
+  /** Arquivo da prova antiga (quando a base ainda não foi montada). */
+  prova_antiga?: string | null;
 }
 
 export interface PapelariaAndamentoAtual {

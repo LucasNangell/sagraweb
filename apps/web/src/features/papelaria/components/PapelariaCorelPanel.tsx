@@ -343,7 +343,7 @@ export function PapelariaCorelPanel({
     if (repeticaoComposicaoAplicada.current) return;
     const ctx = contextQuery.data;
     const base = ctx?.repeticao?.base;
-    if (!base || ctx?.cliente_alteracao || !composicao) return;
+    if (!base || (ctx?.cliente_alteracao && !ctx.repeticao?.propria) || !composicao) return;
     repeticaoComposicaoAplicada.current = true;
     const faces = (base.faces ?? []).map((f) => f.face);
     setUsarRepeticao(false);
@@ -800,11 +800,13 @@ export function PapelariaCorelPanel({
     const ctx = contextQuery.data;
     if (!ctx || repeticaoInicializada.current) return;
     repeticaoInicializada.current = true;
-    if (ctx.repeticao?.base && !ctx.cliente_alteracao) setUsarRepeticao(true);
+    // Prova anterior no padrão antigo: a base é o caminho da alteração.
+    if (ctx.repeticao?.base && (!ctx.cliente_alteracao || ctx.repeticao.propria)) setUsarRepeticao(true);
   }, [contextQuery.data]);
 
   const replicarMutation = useMutation({
-    mutationFn: (origem: { ano: number; nro: number } | null) => replicarSp(anoNum, nroNum, origem),
+    mutationFn: (origem: { ano: number; nro: number } | null) =>
+      replicarSp(anoNum, nroNum, origem, { propria: Boolean(contextQuery.data?.repeticao?.propria) }),
     onSuccess: () => {
       setTextosEditados({});
       setUsarRepeticao(true);
@@ -1594,6 +1596,18 @@ export function PapelariaCorelPanel({
     waitingApogee,
   ]);
 
+  // Prova da própria OS no padrão antigo (folha A4): ao abrir a prévia para
+  // alterar, monta a base editável a partir dela (como na repetição de SP).
+  const provaAntigaMontada = useRef(false);
+  useEffect(() => {
+    const rep = contextQuery.data?.repeticao;
+    if (!viewModeInitialized.current || provaAntigaMontada.current) return;
+    if (!rep?.propria || rep.base || viewMode !== "previa" || replicarMutation.isPending) return;
+    provaAntigaMontada.current = true;
+    replicarMutation.mutate(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextQuery.data?.repeticao, viewMode, proofFilesQuery.isFetched, jobsQuery.isLoading]);
+
   const mutationGenerating =
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
@@ -1857,8 +1871,10 @@ export function PapelariaCorelPanel({
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                     {usarRepeticao || repeticaoAmbasFaces ? (
                       <p className="p-4 text-center text-xs text-neutral-500" data-testid="papelaria-repeticao-aviso-campos">
-                        Repetição da SP {contextQuery.data?.repeticao?.rotulo ?? ""}: os textos vêm da prova
-                        antiga — clique neles na prévia para editar.
+                        {contextQuery.data?.repeticao?.propria
+                          ? "Prova anterior (padrão antigo)"
+                          : `Repetição da SP ${contextQuery.data?.repeticao?.rotulo ?? ""}`}
+                        : os textos vêm da prova antiga — clique neles na prévia para editar.
                       </p>
                     ) : selectedModelId == null ? (
                       <p className="p-4 text-center text-xs text-neutral-500">
@@ -2167,6 +2183,7 @@ export function PapelariaCorelPanel({
                       contextQuery.data?.repeticao?.base
                         ? {
                             rotulo: contextQuery.data.repeticao.rotulo ?? "",
+                            nome: contextQuery.data.repeticao.propria ? "Prova anterior" : undefined,
                             ativo: usarRepeticao,
                             faces: (contextQuery.data.repeticao.base.faces ?? []).map(
                               (f) => f.face as "frente" | "verso",

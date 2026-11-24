@@ -458,6 +458,7 @@ def resumo_base(ano: int, nro: int) -> Optional[dict[str, Any]]:
     cfg = carregar_config_base(ano, nro)
     return {
         "origem": cfg.get("origem"),
+        "propria": bool(cfg.get("propria")),
         "arquivo_origem": cfg.get("arquivo_origem"),
         "criado_em": cfg.get("criado_em"),
         "faces": cfg.get("faces"),
@@ -494,6 +495,108 @@ def campos_editaveis(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], list[str]]
     return campos, avisos
 
 
+def ultima_prova_da_os(ano: int, nro: int) -> Optional[str]:
+    """Caminho da última prova na pasta Sefoc da própria OS (ou None)."""
+    try:
+        from services.proof_files_service import list_proof_pdf_files, resolve_proof_pdf_path
+
+        info = list_proof_pdf_files(int(ano), int(nro))
+        if info.get("suggested"):
+            return resolve_proof_pdf_path(int(ano), int(nro), info["suggested"])
+    except Exception as exc:  # noqa: BLE001 — pasta inacessível
+        logger.info("Prova da OS %s/%s indisponível: %s", nro, ano, exc)
+    return None
+
+
+_CACHE_FORMATO: dict[tuple[str, float], tuple[float, float]] = {}
+
+
+def _tamanho_pagina_mm(caminho: str) -> Optional[tuple[float, float]]:
+    """Tamanho da página 1 em mm (com cache pela data do arquivo)."""
+    import fitz
+
+    try:
+        chave = (os.path.normcase(os.path.abspath(caminho)), os.path.getmtime(caminho))
+    except OSError:
+        return None
+    if chave not in _CACHE_FORMATO:
+        try:
+            with fitz.open(caminho) as doc:
+                r = doc[0].rect
+            _CACHE_FORMATO[chave] = (r.width / MM, r.height / MM)
+        except Exception:  # noqa: BLE001
+            return None
+    return _CACHE_FORMATO[chave]
+
+
+def no_formato_do_produto(caminho: str, alvo_mm: tuple[float, float]) -> bool:
+    tam = _tamanho_pagina_mm(caminho)
+    return bool(
+        tam
+        and abs(tam[0] - alvo_mm[0]) <= TOLERANCIA_MM
+        and abs(tam[1] - alvo_mm[1]) <= TOLERANCIA_MM
+    )
+
+
+def prova_antiga_da_os(ano: int, nro: int) -> Optional[dict[str, Any]]:
+    """
+    Última prova da OS no padrão antigo (folha A4 com as molduras, não no
+    formato do produto): ``{"arquivo", "caminho"}``; senão None.
+    """
+    caminho = ultima_prova_da_os(ano, nro)
+    if not caminho:
+        return None
+    try:
+        alvo, _faces, _modelo = formato_do_produto(ano, nro)
+    except RepeticaoError:
+        return None
+    if no_formato_do_produto(caminho, alvo):
+        return None
+    return {"arquivo": os.path.basename(caminho), "caminho": caminho}
+
+
+def pdf_base_para_imposicao(ano: int, nro: int, existente: Optional[str]) -> Optional[str]:
+    """
+    PDF no formato do produto para a imposição. Usa o BaseSefoc se ele já
+    está no formato; senão monta um a partir da última prova da OS (padrão
+    antigo, folha A4 com molduras) — o mesmo processamento da repetição — e
+    grava na pasta Sefoc sem sobrescrever o BaseSefoc existente.
+    Devolve None quando não há como montar (mantém o comportamento antigo).
+    """
+    try:
+        alvo, faces, _modelo = formato_do_produto(ano, nro)
+    except RepeticaoError:
+        return None
+    if existente and no_formato_do_produto(existente, alvo):
+        return existente
+    prova = ultima_prova_da_os(ano, nro)
+    if not prova:
+        return None
+    from services.papelaria_jobs_service import (
+        build_base_sefoc_pdf_name,
+        get_os_folder_basename,
+        resolve_os_papelaria_dir,
+    )
+
+    sefoc = resolve_os_papelaria_dir(int(ano), int(nro), create=False)
+    nome = (
+        f"{get_os_folder_basename(int(ano), int(nro))}-BaseSefoc-Formato.pdf"
+        if existente
+        else build_base_sefoc_pdf_name(int(ano), int(nro))
+    )
+    destino = os.path.join(sefoc, nome)
+    # Já montado a partir desta prova (ou de uma mais nova): reaproveita.
+    if os.path.isfile(destino) and os.path.getmtime(destino) >= os.path.getmtime(prova):
+        if no_formato_do_produto(destino, alvo):
+            return destino
+    with open(prova, "rb") as fh:
+        base, _molduras = montar_base(fh.read(), alvo, faces)
+    with open(destino, "wb") as fh:
+        fh.write(base)
+    logger.info("Imposição: base no formato do produto montada de %s → %s", os.path.basename(prova), nome)
+    return destino
+
+
 def criar_base(
     *,
     ano: int,
@@ -502,11 +605,21 @@ def criar_base(
     origem_nro: int,
     alvo_mm: tuple[float, float],
     faces: int,
+    propria: bool = False,
 ) -> dict[str, Any]:
-    """Lê a prova antiga, monta a base e grava (substitui) a base desta SP."""
-    if (int(origem_ano), int(origem_nro)) == (int(ano), int(nro)):
+    """
+    Lê a prova antiga, monta a base e grava (substitui) a base desta SP.
+    ``propria``: a prova é da própria OS (alteração de prova no padrão antigo).
+    """
+    if propria:
+        caminho = ultima_prova_da_os(ano, nro)
+        if not caminho:
+            raise RepeticaoError("Esta OS não tem prova na pasta Sefoc.")
+        origem_ano, origem_nro = int(ano), int(nro)
+    elif (int(origem_ano), int(origem_nro)) == (int(ano), int(nro)):
         raise RepeticaoError("A OS repetida não pode ser a própria OS.")
-    caminho = localizar_prova_origem(ano, nro, origem_ano, origem_nro)
+    else:
+        caminho = localizar_prova_origem(ano, nro, origem_ano, origem_nro)
     with open(caminho, "rb") as fh:
         conteudo = fh.read()  # só em memória: a prova antiga não é copiada para esta OS
     base, molduras = montar_base(conteudo, alvo_mm, faces)
@@ -521,6 +634,7 @@ def criar_base(
     caminho_base(ano, nro).write_bytes(base)
     config = {
         "origem": {"ano": int(origem_ano), "nro": int(origem_nro)},
+        "propria": bool(propria),
         "arquivo_origem": os.path.basename(caminho),
         "criado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
         "faces": [

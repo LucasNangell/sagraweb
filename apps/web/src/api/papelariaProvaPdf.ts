@@ -247,11 +247,18 @@ export function replicarSp(
   ano: number,
   nro: number,
   origem?: { ano: number; nro: number } | null,
+  /** `propria`: base a partir da prova da própria OS (padrão antigo, alteração). */
+  options?: { propria?: boolean },
 ): Promise<import("@/features/papelaria/types").PapelariaRepeticaoBase> {
+  const body = options?.propria
+    ? { propria: true }
+    : origem
+      ? { origem_ano: origem.ano, origem_nro: origem.nro }
+      : {};
   return apiFetch(`/papelaria/os/${ano}/${nro}/repeticao`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(origem ? { origem_ano: origem.ano, origem_nro: origem.nro } : {}),
+    body: JSON.stringify(body),
   });
 }
 

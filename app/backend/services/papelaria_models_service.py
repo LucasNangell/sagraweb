@@ -1938,8 +1938,30 @@ def _repeticao_da_sp(ano: int, nro: int, observ: str) -> Optional[dict[str, Any]
 
         info = rep_svc.detectar_repeticao(observ)
         base = rep_svc.resumo_base(ano, nro)
+        if base and base.get("propria"):
+            info = None
         if not info and not base:
-            return None
+            # Prova da própria OS no padrão antigo (A4): a base editável é
+            # montada a partir dela para a alteração.
+            antiga = rep_svc.prova_antiga_da_os(ano, nro)
+            if not antiga:
+                return None
+            return {
+                "origem_nro": nro,
+                "origem_ano": ano,
+                "rotulo": f"{nro:04d}/{ano % 100:02d}",
+                "base": None,
+                "propria": True,
+                "prova_antiga": antiga["arquivo"],
+            }
+        if base and base.get("propria"):
+            return {
+                "origem_nro": nro,
+                "origem_ano": ano,
+                "rotulo": f"{nro:04d}/{ano % 100:02d}",
+                "base": base,
+                "propria": True,
+            }
         return {**(info or {"origem_nro": None, "origem_ano": None, "rotulo": None}), "base": base}
     except Exception as exc:  # noqa: BLE001
         logger.warning("Papelaria: repetição da SP %s/%s indisponível: %s", nro, ano, exc)

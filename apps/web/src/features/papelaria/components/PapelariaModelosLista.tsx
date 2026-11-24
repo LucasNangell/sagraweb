@@ -50,11 +50,11 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 }
 
 /** Face da base da repetição de SP como opção da lista (modelo 0). */
-function faceDaRepeticao(pagina: 1 | 2, rotulo: string): PapelariaFaceFonte {
+function faceDaRepeticao(pagina: 1 | 2, nome: string): PapelariaFaceFonte {
   return {
     modelo_id: 0,
     pagina,
-    rotulo: `Repetição da SP ${rotulo} — ${pagina === 1 ? "Frente" : "Verso"}`,
+    rotulo: `${nome} — ${pagina === 1 ? "Frente" : "Verso"}`,
     tem_pdf: true,
   } as PapelariaFaceFonte;
 }
@@ -98,6 +98,8 @@ export function PapelariaModelosLista({
   /** Repetição de SP: base recortada da prova antiga, no topo da lista. */
   repeticao?: {
     rotulo: string;
+    /** Nome do card (padrão «Repetição da SP 1234/25»; «Prova anterior» na prova antiga da OS). */
+    nome?: string;
     /** Produto só frente: card único da repetição escolhido. */
     ativo: boolean;
     onSelect: () => void;
@@ -107,10 +109,11 @@ export function PapelariaModelosLista({
 }) {
   // Com a repetição escolhida, nenhum modelo aparece selecionado.
   const outrosAtivos = !repeticao?.ativo;
+  const nomeRepeticao = repeticao ? (repeticao.nome ?? `Repetição da SP ${repeticao.rotulo}`.trim()) : "";
   const cardRepeticao = repeticao ? (
-    <Secao titulo="Repetição">
+    <Secao titulo={repeticao.nome ? "Prova anterior" : "Repetição"}>
       <CardModelo
-        nome={`Repetição da SP ${repeticao.rotulo}`.trim()}
+        nome={nomeRepeticao}
         ativo={repeticao.ativo}
         onClick={repeticao.onSelect}
         testId="papelaria-modelo-repeticao"
@@ -125,9 +128,9 @@ export function PapelariaModelosLista({
         <Secao titulo="Frentes">
           {repeticao?.faces?.includes("frente") ? (
             <CardModelo
-              nome={`Repetição da SP ${repeticao.rotulo} — Frente`}
+              nome={`${nomeRepeticao} — Frente`}
               ativo={composicao.frente.modelo_id === 0}
-              onClick={() => onSelectFrente?.(faceDaRepeticao(1, repeticao.rotulo))}
+              onClick={() => onSelectFrente?.(faceDaRepeticao(1, nomeRepeticao))}
               testId="papelaria-frente-repeticao"
             />
           ) : null}
@@ -144,9 +147,9 @@ export function PapelariaModelosLista({
         <Secao titulo="Versos">
           {repeticao?.faces?.includes("verso") ? (
             <CardModelo
-              nome={`Repetição da SP ${repeticao.rotulo} — Verso`}
+              nome={`${nomeRepeticao} — Verso`}
               ativo={composicao.verso.modelo_id === 0}
-              onClick={() => onSelectVerso?.(faceDaRepeticao(2, repeticao.rotulo))}
+              onClick={() => onSelectVerso?.(faceDaRepeticao(2, nomeRepeticao))}
               testId="papelaria-verso-repeticao"
             />
           ) : null}

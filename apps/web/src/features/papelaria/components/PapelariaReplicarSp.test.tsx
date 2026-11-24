@@ -151,3 +151,56 @@ describe("Repetição frente e verso nas listas", () => {
     expect(r).toEqual({ frente: { modelo_id: 0, pagina: 1 }, verso: { modelo_id: 0, pagina: 2 } });
   });
 });
+
+describe("Prova anterior no padrão antigo (alteração)", () => {
+  it("sem base: mostra o arquivo e o «Montar prévia da prova anterior»", () => {
+    const onReplicar = vi.fn();
+    render(
+      <PapelariaReplicarSp
+        repeticao={{
+          origem_nro: 6242,
+          origem_ano: 2026,
+          rotulo: "6242/26",
+          base: null,
+          propria: true,
+          prova_antiga: "06242-Fulano-Prova1_SEFOC.pdf",
+        }}
+        pending={false}
+        onReplicar={onReplicar}
+      />,
+    );
+    expect(screen.queryByTestId("papelaria-replicar-sp")).toBeNull();
+    expect(screen.getByTestId("papelaria-prova-antiga")).toHaveTextContent("06242-Fulano-Prova1_SEFOC.pdf");
+    const botao = screen.getByTestId("papelaria-prova-antiga-montar");
+    expect(botao).toHaveTextContent("Montar prévia da prova anterior");
+    fireEvent.click(botao);
+    expect(onReplicar).toHaveBeenCalledWith(null);
+  });
+
+  it("com base: «Remontar da prova anterior» e card «Prova anterior» na lista", () => {
+    render(
+      <>
+        <PapelariaReplicarSp
+          repeticao={{
+            origem_nro: 6242,
+            origem_ano: 2026,
+            rotulo: "6242/26",
+            base: { arquivo_origem: "06242-Prova1.pdf", propria: true, faces: [] },
+            propria: true,
+          }}
+          pending={false}
+          onReplicar={vi.fn()}
+        />
+        <PapelariaModelosLista
+          modelos={[]}
+          selectedModelId={null}
+          onSelectModel={vi.fn()}
+          repeticao={{ rotulo: "6242/26", nome: "Prova anterior", ativo: true, onSelect: vi.fn() }}
+        />
+      </>,
+    );
+    expect(screen.getByTestId("papelaria-prova-antiga-montar")).toHaveTextContent("Remontar da prova anterior");
+    expect(screen.getByTestId("papelaria-modelo-repeticao")).toHaveTextContent("Prova anterior");
+    expect(screen.getByTestId("papelaria-modelo-repeticao")).not.toHaveTextContent("Repetição");
+  });
+});

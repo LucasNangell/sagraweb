@@ -268,3 +268,105 @@ def test_frente_e_verso_misturam_repeticao_e_modelo(tmp_path, monkeypatch):
     with pytest.raises(ComposicaoError):
         normalizar_composicao({"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}})
 
+
+
+# --- Prova da própria OS no padrão antigo (A4): imposição e alteração ---------------------------
+
+
+def _prova_no_formato() -> bytes:
+    _fonte_ok()
+    doc = fitz.open()
+    page = doc.new_page(width=85 * MM, height=50 * MM)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    page.insert_text((20, 40), "Prova nova", fontname="F1", fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _os_com_prova(tmp_path, monkeypatch, prova: bytes):
+    """Pasta Sefoc em tmp, OS 85×50 frente e verso e a última prova dada."""
+    from services import papelaria_jobs_service as jobs
+    from services import papelaria_repeticao_service as rep
+
+    sefoc = tmp_path / "Sefoc"
+    sefoc.mkdir()
+    caminho = sefoc / "06242-Fulano-CtVisita-Prova1_SEFOC.pdf"
+    caminho.write_bytes(prova)
+    monkeypatch.setattr(rep, "ultima_prova_da_os", lambda ano, nro: str(caminho))
+    monkeypatch.setattr(rep, "formato_do_produto", lambda ano, nro: ((85.0, 50.0), 2, 15))
+    monkeypatch.setattr(jobs, "resolve_os_papelaria_dir", lambda ano, nro, create=False: str(sefoc))
+    monkeypatch.setattr(jobs, "get_os_folder_basename", lambda ano, nro: "06242-Fulano-CtVisita")
+    return sefoc, caminho
+
+
+def _tamanhos_mm(caminho) -> list[tuple[float, float]]:
+    with fitz.open(caminho) as doc:
+        return [(round(p.rect.width / MM), round(p.rect.height / MM)) for p in doc]
+
+
+def test_prova_antiga_da_os_so_quando_fora_do_formato(tmp_path, monkeypatch):
+    from services import papelaria_repeticao_service as rep
+
+    _sefoc, caminho = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    assert rep.prova_antiga_da_os(2026, 6242) == {"arquivo": caminho.name, "caminho": str(caminho)}
+    caminho.write_bytes(_prova_no_formato())
+    os.utime(caminho, (os.path.getmtime(caminho) + 5,) * 2)
+    assert rep.prova_antiga_da_os(2026, 6242) is None
+
+
+def test_imposicao_monta_base_sefoc_no_formato_da_prova_antiga(tmp_path, monkeypatch):
+    from services import papelaria_jobs_service as jobs
+
+    sefoc, _prova = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    caminho = jobs.resolve_base_sefoc_pdf_path(2026, 6242)
+    assert os.path.basename(caminho) == "06242-Fulano-CtVisita-BaseSefoc.pdf"
+    assert _tamanhos_mm(caminho) == [(85, 50), (85, 50)]
+    assert _textos(open(caminho, "rb").read()) == [["Texto da Frente"], ["Texto da Verso"]]
+    # Segunda vez reaproveita o arquivo já montado.
+    mtime = os.path.getmtime(caminho)
+    assert jobs.resolve_base_sefoc_pdf_path(2026, 6242) == caminho
+    assert os.path.getmtime(caminho) == mtime
+
+
+def test_imposicao_nao_sobrescreve_base_sefoc_antiga(tmp_path, monkeypatch):
+    from services import papelaria_jobs_service as jobs
+
+    sefoc, _prova = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    antiga = sefoc / "06242-Fulano-CtVisita-BaseSefoc.pdf"
+    antiga.write_bytes(_prova_a4())
+    caminho = jobs.resolve_base_sefoc_pdf_path(2026, 6242)
+    assert os.path.basename(caminho) == "06242-Fulano-CtVisita-BaseSefoc-Formato.pdf"
+    assert _tamanhos_mm(caminho) == [(85, 50), (85, 50)]
+    assert _tamanhos_mm(antiga) == [(210, 297)]
+
+
+def test_imposicao_usa_base_sefoc_que_ja_esta_no_formato(tmp_path, monkeypatch):
+    from services import papelaria_jobs_service as jobs
+
+    sefoc, _prova = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    base = sefoc / "06242-Fulano-CtVisita-BaseSefoc.pdf"
+    base.write_bytes(_prova_no_formato())
+    assert jobs.resolve_base_sefoc_pdf_path(2026, 6242) == os.path.normpath(str(base))
+    assert not (sefoc / "06242-Fulano-CtVisita-BaseSefoc-Formato.pdf").exists()
+
+
+def test_alteracao_monta_base_editavel_da_propria_prova(tmp_path, monkeypatch):
+    from services import papelaria_models_service as models_svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path / "raiz")
+    _sefoc, caminho = _os_com_prova(tmp_path, monkeypatch, _prova_a4())
+    # Contexto antes de montar: aponta a prova antiga, sem base.
+    ctx = models_svc._repeticao_da_sp(2026, 6242, "")
+    assert ctx["propria"] is True and ctx["base"] is None and ctx["prova_antiga"] == caminho.name
+
+    r = rep.criar_base(ano=2026, nro=6242, origem_ano=2026, origem_nro=6242, alvo_mm=(85, 50), faces=2, propria=True)
+    assert r["propria"] is True and r["arquivo_origem"] == caminho.name
+    assert [f["face"] for f in r["faces"]] == ["frente", "verso"]
+    previa = pdf_svc.previa_repeticao(2026, 6242, {}, dpi=30)
+    assert {x["chave"] for x in previa["regioes"]} == {"0:1:Texto da Frente", "0:2:Texto da Verso"}
+    # Depois: a base própria vem no contexto (mesmo com «Repetição» na observação).
+    ctx = models_svc._repeticao_da_sp(2026, 6242, "Repetição da OS 1234/25")
+    assert ctx["propria"] is True and ctx["base"]["propria"] is True and ctx["origem_nro"] == 6242

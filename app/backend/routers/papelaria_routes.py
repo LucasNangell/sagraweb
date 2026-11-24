@@ -1161,6 +1161,8 @@ class PapelariaRepeticaoPayload(BaseModel):
     # Sem origem: usa a OS da observação («Repetição da OS 1234/25»).
     origem_ano: Optional[int] = None
     origem_nro: Optional[int] = None
+    # Prova da própria OS no padrão antigo (alteração de prova).
+    propria: bool = False
 
 
 @router.post("/os/{ano}/{nro}/repeticao")
@@ -1177,6 +1179,11 @@ def replicar_sp(
     from services import papelaria_repeticao_service as rep_svc
 
     try:
+        if payload.propria:
+            alvo_mm, faces, _modelo = rep_svc.formato_do_produto(ano, nro)
+            return rep_svc.criar_base(
+                ano=ano, nro=nro, origem_ano=ano, origem_nro=nro, alvo_mm=alvo_mm, faces=faces, propria=True
+            )
         origem_ano, origem_nro = payload.origem_ano, payload.origem_nro
         if not origem_ano or not origem_nro:
             from database import db

@@ -2689,6 +2689,16 @@ def resolve_base_sefoc_pdf_path(ano: int, nro: int) -> str:
     """Caminho absoluto do PDF BaseSefoc na pasta Sefoc da OS."""
     sefoc = resolve_os_papelaria_dir(ano, nro, create=False)
     path = os.path.normpath(os.path.join(sefoc, build_base_sefoc_pdf_name(ano, nro)))
+    # Prova no padrão antigo (folha A4 com molduras): monta o PDF no formato
+    # do produto a partir da última prova, como na repetição de SP.
+    try:
+        from services.papelaria_repeticao_service import pdf_base_para_imposicao
+
+        no_formato = pdf_base_para_imposicao(ano, nro, path if os.path.isfile(path) else None)
+        if no_formato:
+            return os.path.normpath(no_formato)
+    except Exception as exc:  # noqa: BLE001 — sem conseguir montar, segue como antes
+        logger.warning("BaseSefoc no formato do produto indisponível (%s/%s): %s", nro, ano, exc)
     if not os.path.isfile(path):
         raise FileNotFoundError(
             f"PDF BaseSefoc não encontrado: {os.path.basename(path)}. "

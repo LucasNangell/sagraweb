@@ -27,6 +27,48 @@ export function PapelariaReplicarSp({
     repeticao.rotulo ??
     (base?.origem ? `${String(base.origem.nro).padStart(4, "0")}/${String(base.origem.ano % 100).padStart(2, "0")}` : "");
 
+  // Prova da própria OS no padrão antigo: a base é montada sozinha ao abrir
+  // a prévia; aqui só o resumo e o «remontar».
+  if (repeticao.propria) {
+    return (
+      <div className="mt-2 space-y-1.5" data-testid="papelaria-prova-antiga">
+        <p className="text-[10px] leading-snug text-neutral-600">
+          Prova no padrão antigo (A4)
+          {base?.arquivo_origem || repeticao.prova_antiga ? (
+            <>
+              : <span className="font-medium">{base?.arquivo_origem ?? repeticao.prova_antiga}</span>
+            </>
+          ) : null}
+          .{" "}
+          {base
+            ? "A prévia foi montada a partir dela — edite os textos direto na prévia."
+            : "A prévia para alteração é montada a partir dela."}
+        </p>
+        <button
+          type="button"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-secondary-blue px-2.5 py-1.5 text-[11px] font-semibold text-secondary-blue hover:bg-secondary-blue/5 disabled:opacity-55"
+          onClick={() => onReplicar(null)}
+          disabled={pending}
+          title="Monta de novo a prévia editável a partir da última prova da OS (Frente/Verso das molduras)"
+          data-testid="papelaria-prova-antiga-montar"
+        >
+          {pending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <RefreshCw className="size-3.5" aria-hidden />
+          )}
+          {base ? "Remontar da prova anterior" : "Montar prévia da prova anterior"}
+        </button>
+        {(base?.avisos ?? []).map((a) => (
+          <p key={a} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-900">
+            {a}
+          </p>
+        ))}
+        {erro ? <p className="text-[11px] text-sagra-danger">{erro}</p> : null}
+      </div>
+    );
+  }
+
   const replicar = () => {
     if (temOrigem) {
       onReplicar(null);

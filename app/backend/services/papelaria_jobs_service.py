@@ -317,6 +317,13 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if sel is not None:
                 cleaned[key_stripped] = json.dumps(sel, ensure_ascii=False)
             continue
+        if key_stripped == "__repeticao":
+            from services.papelaria_prova_pdf_service import repeticao_dos_dados
+
+            if repeticao_dos_dados({"__repeticao": value}) is None:
+                raise ValueError("Repetição inválida.")
+            cleaned[key_stripped] = str(value).strip()
+            continue
         if key_stripped == "__textos":
             from services.papelaria_prova_pdf_service import ProvaPdfError, normalizar_textos
 
@@ -511,20 +518,32 @@ def create_job(
 
     # Modo «Prova PDF»: modelo com PDF configurado gera no servidor (sem worker).
     prova_pdf_servidor = False
+    # Repetição de SP: a prova sai da base recortada da prova antiga (só desta OS).
+    if "__repeticao" in dados_clean:
+        from services import papelaria_repeticao_service as rep_svc
+        from services.papelaria_prova_pdf_service import repeticao_dos_dados
+
+        rep = repeticao_dos_dados(dados_clean)
+        if rep != (int(ano), int(nro)) or not rep_svc.tem_base(ano, nro):
+            raise ValueError("A base da repetição desta SP não existe — use «Replicar SP» de novo.")
     if tipo_job == TIPO_JOB_CREATE:
         from services.papelaria_prova_modo import MODO_PROVA_PDF, get_modo
 
         if get_modo() == MODO_PROVA_PDF:
             from services import papelaria_prova_pdf_service as prova_pdf_svc
 
-            prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id)
+            prova_pdf_servidor = prova_pdf_svc.tem_modelo_pdf(modelo_id) or "__repeticao" in dados_clean
 
     corel_do_pdf = False
     if gerar_corel:
         from services import papelaria_prova_pdf_service as prova_pdf_svc
 
         prova_pdf_servidor = False
-        corel_do_pdf = "__composicao" in dados_clean or prova_pdf_svc.tem_modelo_pdf(modelo_id)
+        corel_do_pdf = (
+            "__composicao" in dados_clean
+            or "__repeticao" in dados_clean
+            or prova_pdf_svc.tem_modelo_pdf(modelo_id)
+        )
         if not corel_do_pdf:
             if str(modelo.get("arquivo_modelo") or "").lower().endswith(".pdf"):
                 raise ValueError(

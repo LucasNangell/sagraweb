@@ -1155,6 +1155,91 @@ def remover_face_modelo(
         raise HTTPException(400, str(e))
 
 
+class PapelariaRepeticaoPayload(BaseModel):
+    # Sem origem: usa a OS da observação («Repetição da OS 1234/25»).
+    origem_ano: Optional[int] = None
+    origem_nro: Optional[int] = None
+
+
+@router.post("/os/{ano}/{nro}/repeticao")
+def replicar_sp(
+    ano: int,
+    nro: int,
+    payload: PapelariaRepeticaoPayload,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """
+    Repetição de SP: monta a base da nova prova a partir da última prova da
+    OS repetida (molduras Frente/Verso), fora da pasta da OS.
+    """
+    from services import papelaria_repeticao_service as rep_svc
+
+    try:
+        origem_ano, origem_nro = payload.origem_ano, payload.origem_nro
+        if not origem_ano or not origem_nro:
+            from database import db
+
+            rows = db.execute_query(
+                """
+                SELECT d.Observ FROM tabDetalhesServico d
+                WHERE d.NroProtocoloLinkDet = %(nro)s AND d.AnoProtocoloLinkDet = %(ano)s
+                """,
+                {"nro": nro, "ano": ano},
+            ) or []
+            info = rep_svc.detectar_repeticao(str((rows[0] if rows else {}).get("Observ") or ""))
+            if not info or not info.get("origem_nro"):
+                raise rep_svc.RepeticaoError("Informe a OS que está sendo repetida (número/ano).")
+            origem_ano, origem_nro = info["origem_ano"], info["origem_nro"]
+        if origem_ano < 100:
+            origem_ano += 2000
+        alvo_mm, faces, _modelo = rep_svc.formato_do_produto(ano, nro)
+        return rep_svc.criar_base(
+            ano=ano,
+            nro=nro,
+            origem_ano=int(origem_ano),
+            origem_nro=int(origem_nro),
+            alvo_mm=alvo_mm,
+            faces=faces,
+        )
+    except rep_svc.RepeticaoError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao replicar SP %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao montar a base da repetição.")
+
+
+@router.post("/os/{ano}/{nro}/repeticao/previa")
+def previa_repeticao(
+    ano: int,
+    nro: int,
+    payload: PapelariaProvaPdfPreviaPayload,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Prévia ao vivo da base da repetição (textos editados na prévia)."""
+    from services import papelaria_prova_pdf_service as svc
+
+    dados = {k: v for k, v in (payload.dados or {}).items() if k == svc.TEXTOS_DADOS_KEY}
+    try:
+        return svc.previa_repeticao(ano, nro, dados)
+    except svc.ProvaPdfError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro na prévia da repetição %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao gerar a prévia da repetição.")
+
+
+@router.delete("/os/{ano}/{nro}/repeticao")
+def descartar_repeticao(
+    ano: int,
+    nro: int,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    from services import papelaria_repeticao_service as rep_svc
+
+    rep_svc.remover_base(ano, nro)
+    return {"ok": True}
+
+
 @router.post("/modelos/{modelo_id}/previa-pdf")
 def previa_pdf_ao_vivo(
     modelo_id: int,

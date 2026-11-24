@@ -1,0 +1,583 @@
+"""
+Repetição de SP: a base da nova prova sai do PDF da última prova da OS
+repetida (o mesmo produto, os mesmos textos).
+
+Da prova antiga só se aproveita o que está dentro das molduras do produto:
+a BordaF (página 1, Frente) e a BordaV (página 2, Verso). O nome do objeto
+não sobrevive no PDF exportado do Corel, então as molduras são achadas pela
+geometria: retângulo sem preenchimento do tamanho do produto (provas antigas
+em folha A4), a página inteira quando ela já está no formato do produto
+(provas novas) ou o retângulo com a proporção do produto (prova reduzida
+para caber no A4, com ou sem rotação).
+
+O conteúdo de dentro da moldura não é reescrito: a página é copiada, o que
+está fora é apagado e um único ``cm`` (deslocamento/escala/rotação) leva a
+moldura para a página nova — fontes, cores (CMYK) e estrutura ficam
+idênticas e os textos continuam no conteúdo da página (editáveis na prévia).
+
+O PDF antigo é lido em memória; nada é gravado na pasta da OS nova. A base
+fica em ``Modelos/papelaria/prova_pdf/repeticao/{ano}-{nro}/``.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import time
+import unicodedata
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+MM = 72.0 / 25.4
+TOLERANCIA_MM = 2.0
+TOLERANCIA_PROPORCAO = 0.02
+LADO_MINIMO_MM = 20.0
+
+
+class RepeticaoError(ValueError):
+    """Erro de replicação com mensagem para o usuário."""
+
+
+# ---------------------------------------------------------------------------
+# Observação «Repetição da OS 1234/25»
+# ---------------------------------------------------------------------------
+
+_REPETICAO_RE = re.compile(r"repeticao[^0-9]{0,40}?(\d{1,5})\s*/\s*(\d{2,4})")
+
+
+def _sem_acento(texto: str) -> str:
+    return unicodedata.normalize("NFD", texto or "").encode("ascii", "ignore").decode().lower()
+
+
+def detectar_repeticao(observ: Optional[str]) -> Optional[dict[str, Any]]:
+    """
+    ``{"origem_nro", "origem_ano", "rotulo"}`` quando a observação fala em
+    repetição; números ausentes → ``origem_* = None`` (o usuário informa).
+    """
+    texto = _sem_acento(observ or "")
+    if "repeticao" not in texto:
+        return None
+    m = _REPETICAO_RE.search(texto)
+    if not m:
+        return {"origem_nro": None, "origem_ano": None, "rotulo": None}
+    nro = int(m.group(1))
+    ano = int(m.group(2))
+    if ano < 100:
+        ano += 2000
+    return {"origem_nro": nro, "origem_ano": ano, "rotulo": f"{nro:04d}/{ano % 100:02d}"}
+
+
+# ---------------------------------------------------------------------------
+# Onde está a prova antiga
+# ---------------------------------------------------------------------------
+
+
+def _pasta_sefoc_movida(dest_ano: int, dest_nro: int, origem_ano: int, origem_nro: int) -> Optional[str]:
+    """Sefoc da OS antiga movido para a pasta da OS nova («26 05570 Sefoc»)."""
+    from services.os_folder_path_service import resolve_os_folder_path
+
+    pasta = resolve_os_folder_path(int(dest_ano), int(dest_nro))
+    if not pasta or not os.path.isdir(pasta):
+        return None
+    nome = f"{origem_ano % 100:02d} {int(origem_nro):05d} Sefoc".lower()
+    for item in os.listdir(pasta):
+        if item.lower() == nome and os.path.isdir(os.path.join(pasta, item)):
+            return os.path.join(pasta, item)
+    return None
+
+
+def _ultima_prova_na_pasta(pasta: str) -> Optional[str]:
+    from services.proof_files_service import summarize_prova_files
+
+    entradas = []
+    for nome in os.listdir(pasta):
+        caminho = os.path.join(pasta, nome)
+        if nome.lower().endswith(".pdf") and os.path.isfile(caminho):
+            entradas.append((nome, os.path.getmtime(caminho)))
+    if not entradas:
+        return None
+    resumo = summarize_prova_files(entradas)
+    escolhido = resumo.get("latest")
+    return os.path.join(pasta, escolhido) if escolhido else None
+
+
+def localizar_prova_origem(dest_ano: int, dest_nro: int, origem_ano: int, origem_nro: int) -> str:
+    """
+    Caminho do PDF da última prova da OS repetida: primeiro o Sefoc movido
+    para a OS nova (Mover pastas), depois o Sefoc da própria OS antiga.
+    """
+    movida = _pasta_sefoc_movida(dest_ano, dest_nro, origem_ano, origem_nro)
+    if movida:
+        achado = _ultima_prova_na_pasta(movida)
+        if achado:
+            return achado
+    try:
+        from services.proof_files_service import list_proof_pdf_files, resolve_proof_pdf_path
+
+        info = list_proof_pdf_files(int(origem_ano), int(origem_nro))
+        if info.get("suggested"):
+            return resolve_proof_pdf_path(int(origem_ano), int(origem_nro), info["suggested"])
+    except Exception as exc:  # noqa: BLE001 — pasta da OS antiga inacessível
+        logger.info("Repetição: pasta da OS %s/%s indisponível: %s", origem_nro, origem_ano, exc)
+    raise RepeticaoError(
+        f"Não encontrei a prova da OS {origem_nro}/{origem_ano % 100:02d} — nem na pasta dela "
+        "nem na pasta Sefoc movida para esta OS."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Molduras
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Moldura:
+    pagina: int  # índice 0-based na prova antiga
+    rect: Any  # fitz.Rect (coordenadas da página, origem no topo)
+    escala: float = 1.0
+    rotacao: int = 0  # 0, 90 ou -90 (sentido do conteúdo na página nova)
+    espessura: float = 0.0
+    pagina_inteira: bool = False
+    metodo: str = ""
+    face: Optional[str] = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+def _segmentos_no_contorno(itens: list[Any], r: Any, tol: float) -> bool:
+    """Traços retos sobre as bordas do retângulo (moldura feita de linhas)."""
+    bordas = set()
+    for it in itens:
+        if it[0] != "l":
+            return False
+        p1, p2 = it[1], it[2]
+        if abs(p1.y - p2.y) <= tol and (abs(p1.y - r.y0) <= tol or abs(p1.y - r.y1) <= tol):
+            bordas.add("h0" if abs(p1.y - r.y0) <= tol else "h1")
+        elif abs(p1.x - p2.x) <= tol and (abs(p1.x - r.x0) <= tol or abs(p1.x - r.x1) <= tol):
+            bordas.add("v0" if abs(p1.x - r.x0) <= tol else "v1")
+        else:
+            return False
+    return len(bordas) >= 2
+
+
+def retangulos_sem_preenchimento(page: Any) -> list[dict[str, Any]]:
+    """Retângulos só com contorno (``re``, quad ou linhas sobre as bordas)."""
+    out: list[dict[str, Any]] = []
+    for d in page.get_drawings():
+        if d.get("type") == "f":
+            continue
+        r = d.get("rect")
+        itens = d.get("items") or []
+        if r is None or r.width < LADO_MINIMO_MM * MM or r.height < LADO_MINIMO_MM * MM:
+            continue
+        tipos = [it[0] for it in itens]
+        if tipos == ["re"] or tipos == ["qu"]:
+            ok = True
+        else:
+            ok = 2 <= len(itens) <= 4 and _segmentos_no_contorno(itens, r, 0.6)
+        if not ok:
+            continue
+        rect = r
+        if any(abs(rect.x0 - o["rect"].x0) < 0.5 and abs(rect.y0 - o["rect"].y0) < 0.5
+               and abs(rect.x1 - o["rect"].x1) < 0.5 and abs(rect.y1 - o["rect"].y1) < 0.5 for o in out):
+            continue
+        out.append({"rect": rect, "espessura": float(d.get("width") or 0.0), "cor": d.get("color")})
+    return out
+
+
+def _casa(w: float, h: float, alvo_w: float, alvo_h: float) -> Optional[tuple[float, int, str]]:
+    """(escala, rotação, método) quando o retângulo w×h (pt) serve para o produto."""
+    tol = TOLERANCIA_MM * MM
+    if abs(w - alvo_w) <= tol and abs(h - alvo_h) <= tol:
+        return 1.0, 0, "tamanho do produto"
+    if abs(w - alvo_h) <= tol and abs(h - alvo_w) <= tol and abs(alvo_w - alvo_h) > tol:
+        return 1.0, 90, "tamanho do produto (girado)"
+    if w < alvo_w and h < alvo_h and abs((w / h) / (alvo_w / alvo_h) - 1) <= TOLERANCIA_PROPORCAO:
+        return alvo_w / w, 0, "prova reduzida"
+    if w < alvo_h and h < alvo_w and abs((w / h) / (alvo_h / alvo_w) - 1) <= TOLERANCIA_PROPORCAO:
+        return alvo_h / w, 90, "prova reduzida (girada)"
+    return None
+
+
+def _rotulo_face(page: Any, r: Any) -> Optional[str]:
+    """«Frente»/«Verso» escrito logo acima (ou dentro, no topo) da moldura."""
+    import fitz
+
+    faixa = fitz.Rect(r.x0, r.y0 - 25 * MM, r.x1, r.y0 + 6 * MM)
+    for b in page.get_text("dict", clip=faixa)["blocks"]:
+        for linha in b.get("lines", []):
+            t = _sem_acento(" ".join(s["text"] for s in linha["spans"]).strip())
+            if t in ("frente", "verso"):
+                return t
+    return None
+
+
+def _sentido_texto(page: Any, r: Any) -> int:
+    """Rotação que deixa os textos de dentro na horizontal (90 ou -90)."""
+    votos = 0
+    for b in page.get_text("dict", clip=r)["blocks"]:
+        for linha in b.get("lines", []):
+            dx, dy = linha.get("dir", (1, 0))
+            if abs(dy) > abs(dx):
+                # Texto «subindo» (dy < 0) precisa girar no sentido horário.
+                votos += -1 if dy < 0 else 1
+    return -90 if votos < 0 else 90
+
+
+def detectar_molduras(doc: Any, alvo_mm: tuple[float, float], faces: int) -> list[Moldura]:
+    """
+    Molduras das faces (Frente, depois Verso) na prova antiga.
+    Preferência: página no formato do produto → moldura do tamanho do produto
+    → moldura reduzida com a proporção do produto.
+    """
+    alvo_w, alvo_h = alvo_mm[0] * MM, alvo_mm[1] * MM
+    tol = TOLERANCIA_MM * MM
+
+    # Prova nova: cada página já é uma face.
+    inteiras = [
+        Moldura(pagina=i, rect=p.rect, pagina_inteira=True, metodo="página no formato do produto")
+        for i, p in enumerate(doc)
+        if abs(p.rect.width - alvo_w) <= tol and abs(p.rect.height - alvo_h) <= tol
+    ]
+    if len(inteiras) >= faces:
+        escolhidas = inteiras[:faces]
+        for m, nome in zip(escolhidas, ("frente", "verso")):
+            m.face = nome
+        return escolhidas
+
+    candidatas: list[Moldura] = []
+    for i, page in enumerate(doc):
+        for ret in retangulos_sem_preenchimento(page):
+            r = ret["rect"]
+            casa = _casa(r.width, r.height, alvo_w, alvo_h)
+            if not casa:
+                continue
+            escala, rotacao, metodo = casa
+            if rotacao:
+                rotacao = _sentido_texto(page, r)
+            candidatas.append(
+                Moldura(
+                    pagina=i,
+                    rect=r,
+                    escala=escala,
+                    rotacao=rotacao,
+                    espessura=ret["espessura"],
+                    metodo=metodo,
+                    face=_rotulo_face(page, r),
+                )
+            )
+    if not candidatas:
+        return []
+    # Tamanho real antes de reduzido; dentro de cada grupo, rótulos e ordem de leitura.
+    melhor = min(abs(c.escala - 1) for c in candidatas)
+    candidatas = [c for c in candidatas if abs(abs(c.escala - 1) - melhor) < 0.05]
+    candidatas.sort(key=lambda c: (c.pagina, round(c.rect.y0 / (5 * MM)), c.rect.x0))
+    out: list[Moldura] = []
+    for nome in ("frente", "verso")[:faces]:
+        rotulada = next((c for c in candidatas if c.face == nome and c not in out), None)
+        if rotulada:
+            out.append(rotulada)
+    for c in candidatas:
+        if len(out) >= faces:
+            break
+        if c not in out and c.face not in {m.face for m in out if m.face}:
+            out.append(c)
+    for m, nome in zip(out, ("frente", "verso")):
+        m.face = m.face or nome
+    out.sort(key=lambda m: 0 if m.face == "frente" else 1)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Montagem da base
+# ---------------------------------------------------------------------------
+
+_NUM = r"(-?\d+(?:\.\d+)?|-?\.\d+)"
+_RE_RET_CONTORNO = re.compile(_NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+re\s+[sS]\b")
+
+
+def _apagar_contorno(doc: Any, page: Any, r: Any) -> bool:
+    """Tira a própria moldura («x y w h re S») do conteúdo da página."""
+    import fitz
+
+    inv = ~page.transformation_matrix
+    a = fitz.Point(r.x0, r.y1) * inv  # canto inferior esquerdo em coordenadas PDF
+    tol = 0.8
+    for xref in page.get_contents():
+        bruto = doc.xref_stream(xref)
+        if not bruto:
+            continue
+        texto = bruto.decode("latin-1")
+        for m in _RE_RET_CONTORNO.finditer(texto):
+            x, y, w, h = (float(v) for v in m.groups())
+            x0, y0 = min(x, x + w), min(y, y + h)
+            if (abs(x0 - a.x) <= tol and abs(y0 - a.y) <= tol
+                    and abs(abs(w) - r.width) <= tol and abs(abs(h) - r.height) <= tol):
+                novo = texto[: m.start()] + "n" + texto[m.end():]
+                doc.update_stream(xref, novo.encode("latin-1"))
+                return True
+    return False
+
+
+def _matriz(m: Moldura, x0: float, y0: float, x1: float, y1: float, s: float) -> tuple[float, ...]:
+    """``cm`` que leva a moldura (coordenadas PDF) para a página nova a partir de (0, 0)."""
+    if m.rotacao == 90:  # anti-horário
+        return (0.0, s, -s, 0.0, s * y1, -s * x0)
+    if m.rotacao == -90:  # horário
+        return (0.0, -s, s, 0.0, -s * y0, s * x1)
+    return (s, 0.0, 0.0, s, -s * x0, -s * y0)
+
+
+def montar_face(src: Any, m: Moldura, alvo_mm: tuple[float, float]) -> bytes:
+    """PDF de uma página no tamanho do produto com o conteúdo da moldura."""
+    import fitz
+
+    tmp = fitz.open()
+    try:
+        tmp.insert_pdf(src, from_page=m.pagina, to_page=m.pagina)
+        page = tmp[0]
+        if page.rotation:
+            page.set_rotation(0)
+        r = fitz.Rect(m.rect)
+        if not m.pagina_inteira:
+            # 1) Apaga o que está fora da moldura (rótulos, carimbo, a outra face…).
+            pr = page.rect
+            faixas = [
+                fitz.Rect(pr.x0, pr.y0, pr.x1, r.y0),
+                fitz.Rect(pr.x0, r.y1, pr.x1, pr.y1),
+                fitz.Rect(pr.x0, r.y0, r.x0, r.y1),
+                fitz.Rect(r.x1, r.y0, pr.x1, r.y1),
+            ]
+            for f in faixas:
+                if f.width > 0.01 and f.height > 0.01:
+                    page.add_redact_annot(f, fill=False)
+            page.apply_redactions(
+                images=fitz.PDF_REDACT_IMAGE_NONE,
+                graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
+                text=fitz.PDF_REDACT_TEXT_REMOVE,
+            )
+            # 2) Tira o contorno da moldura; sem achar, recorta meia espessura para dentro.
+            if not _apagar_contorno(tmp, page, r) and m.espessura > 0:
+                r = r + (m.espessura, m.espessura, -m.espessura, -m.espessura)
+        inv = ~page.transformation_matrix
+        p0 = fitz.Point(r.x0, r.y1) * inv
+        p1 = fitz.Point(r.x1, r.y0) * inv
+        x0, y0, x1, y1 = min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y)
+        largura_alvo = alvo_mm[0] * MM
+        altura_alvo = alvo_mm[1] * MM
+        if m.rotacao:
+            s = largura_alvo / (y1 - y0)
+        else:
+            s = largura_alvo / (x1 - x0)
+        a, b, c, d, e, f_ = _matriz(m, x0, y0, x1, y1, s)
+        # 3) Um único «cm» antes do conteúdo original: nada de dentro é reescrito.
+        pre = tmp.get_new_xref()
+        tmp.update_object(pre, "<<>>")
+        tmp.update_stream(pre, f"q {a:.6f} {b:.6f} {c:.6f} {d:.6f} {e:.4f} {f_:.4f} cm\n".encode("latin-1"))
+        pos = tmp.get_new_xref()
+        tmp.update_object(pos, "<<>>")
+        tmp.update_stream(pos, b"\nQ\n")
+        conteudos = [pre, *page.get_contents(), pos]
+        tmp.xref_set_key(page.xref, "Contents", "[" + " ".join(f"{x} 0 R" for x in conteudos) + "]")
+        caixa = f"[0 0 {largura_alvo:.4f} {altura_alvo:.4f}]"
+        for chave in ("MediaBox", "CropBox", "TrimBox", "BleedBox", "ArtBox"):
+            tmp.xref_set_key(page.xref, chave, caixa if chave in ("MediaBox", "CropBox") else "null")
+        return tmp.tobytes(garbage=3, deflate=True)
+    finally:
+        tmp.close()
+
+
+def montar_base(pdf_bytes: bytes, alvo_mm: tuple[float, float], faces: int) -> tuple[bytes, list[Moldura]]:
+    """PDF base (Frente e, se houver, Verso) a partir da prova antiga."""
+    import fitz
+
+    src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        molduras = detectar_molduras(src, alvo_mm, faces)
+        if len(molduras) < faces:
+            achadas = ", ".join(m.face or "?" for m in molduras) or "nenhuma"
+            raise RepeticaoError(
+                f"Não encontrei na prova antiga a moldura do produto ({alvo_mm[0]:g} × {alvo_mm[1]:g} mm) "
+                f"para {'Frente e Verso' if faces == 2 else 'a Frente'} (achadas: {achadas})."
+            )
+        out = fitz.open()
+        try:
+            for m in molduras:
+                parte = fitz.open(stream=montar_face(src, m, alvo_mm), filetype="pdf")
+                try:
+                    out.insert_pdf(parte)
+                finally:
+                    parte.close()
+            return out.tobytes(garbage=3, deflate=True), molduras
+        finally:
+            out.close()
+    finally:
+        src.close()
+
+
+# ---------------------------------------------------------------------------
+# Base guardada (fora da pasta da OS) + campos para editar na prévia
+# ---------------------------------------------------------------------------
+
+
+def _pasta_base(ano: int, nro: int) -> Path:
+    from services.papelaria_prova_pdf_service import RAIZ_MODELOS_PDF
+
+    return RAIZ_MODELOS_PDF / "repeticao" / f"{int(ano)}-{int(nro)}"
+
+
+def caminho_base(ano: int, nro: int) -> Path:
+    return _pasta_base(ano, nro) / "modelo.pdf"
+
+
+def carregar_config_base(ano: int, nro: int) -> dict[str, Any]:
+    caminho = _pasta_base(ano, nro) / "config.json"
+    if not caminho.is_file():
+        return {}
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def tem_base(ano: int, nro: int) -> bool:
+    return caminho_base(ano, nro).is_file()
+
+
+def resumo_base(ano: int, nro: int) -> Optional[dict[str, Any]]:
+    if not tem_base(ano, nro):
+        return None
+    cfg = carregar_config_base(ano, nro)
+    return {
+        "origem": cfg.get("origem"),
+        "arquivo_origem": cfg.get("arquivo_origem"),
+        "criado_em": cfg.get("criado_em"),
+        "faces": cfg.get("faces"),
+        "avisos": cfg.get("avisos") or [],
+    }
+
+
+def campos_editaveis(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], list[str]]:
+    """Cada texto da base vira um campo editável na prévia (redesenhado só se editado)."""
+    from services.papelaria_prova_pdf_service import analisar_pdf
+
+    analise = analisar_pdf(pdf_bytes)
+    campos = [
+        {
+            "marcador": t["marcador"],
+            "pagina": t["pagina"],
+            "template": t["marcador"],
+            "alinhamento": "auto",
+            "ancora": "auto",
+            "entrelinha": 1.2,
+            "reduzir_para_caber": True,
+            "somente_se_editado": True,
+        }
+        for t in analise["textos"]
+    ]
+    avisos = []
+    incompletas = [f["nome"] for f in analise.get("fontes") or [] if not (f.get("editavel") and f.get("completa"))]
+    if incompletas:
+        avisos.append(
+            "Algumas fontes da prova antiga estão incorporadas só com os caracteres usados "
+            f"({', '.join(sorted(set(incompletas))[:4])}): ao editar, letras que não existiam no "
+            "texto original podem não estar disponíveis."
+        )
+    return campos, avisos
+
+
+def criar_base(
+    *,
+    ano: int,
+    nro: int,
+    origem_ano: int,
+    origem_nro: int,
+    alvo_mm: tuple[float, float],
+    faces: int,
+) -> dict[str, Any]:
+    """Lê a prova antiga, monta a base e grava (substitui) a base desta SP."""
+    if (int(origem_ano), int(origem_nro)) == (int(ano), int(nro)):
+        raise RepeticaoError("A OS repetida não pode ser a própria OS.")
+    caminho = localizar_prova_origem(ano, nro, origem_ano, origem_nro)
+    with open(caminho, "rb") as fh:
+        conteudo = fh.read()  # só em memória: a prova antiga não é copiada para esta OS
+    base, molduras = montar_base(conteudo, alvo_mm, faces)
+    campos, avisos = campos_editaveis(base)
+    pasta = _pasta_base(ano, nro)
+    pasta.mkdir(parents=True, exist_ok=True)
+    caminho_base(ano, nro).write_bytes(base)
+    config = {
+        "origem": {"ano": int(origem_ano), "nro": int(origem_nro)},
+        "arquivo_origem": os.path.basename(caminho),
+        "criado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "faces": [
+            {"face": m.face, "metodo": m.metodo, "pagina_origem": m.pagina + 1, "escala": round(m.escala, 4), "rotacao": m.rotacao}
+            for m in molduras
+        ],
+        "avisos": avisos,
+        "campos": campos,
+    }
+    (pasta / "config.json").write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    return resumo_base(ano, nro) or {}
+
+
+def remover_base(ano: int, nro: int) -> None:
+    pasta = _pasta_base(ano, nro)
+    for nome in ("modelo.pdf", "config.json"):
+        try:
+            (pasta / nome).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Repetição: não foi possível remover %s: %s", pasta / nome, exc)
+
+
+def formato_do_produto(ano: int, nro: int) -> tuple[tuple[float, float], int, Optional[int]]:
+    """
+    (tamanho da face em mm, nº de faces, modelo padrão) da SP: o tamanho vem
+    do PDF do modelo padrão do produto (página 1); 2 faces quando a OS é
+    frente e verso.
+    """
+    import fitz
+
+    from database import db
+    from services import papelaria_models_service as models_svc
+    from services.papelaria_prova_pdf_service import caminho_pdf
+
+    rows = db.execute_query(
+        """
+        SELECT d.TipoPublicacaoLink, d.Cores, d.CoresDescricao, d.FrenteVerso
+        FROM tabProtocolos p
+        LEFT JOIN tabDetalhesServico d
+          ON p.NroProtocolo = d.NroProtocoloLinkDet
+         AND p.AnoProtocolo = d.AnoProtocoloLinkDet
+        WHERE p.NroProtocolo = %(nro)s AND p.AnoProtocolo = %(ano)s
+        """,
+        {"nro": int(nro), "ano": int(ano)},
+    ) or []
+    if not rows:
+        raise RepeticaoError("OS não encontrada.")
+    row = rows[0]
+    produto = str(row.get("TipoPublicacaoLink") or "").strip()
+    cores = str(row.get("CoresDescricao") or row.get("Cores") or "").strip()
+    frente_verso = str(row.get("FrenteVerso") or "").strip()
+    modelos, _avisos, auto_id = models_svc.match_modelos_para_os(
+        produto, cores, frente_verso, models_svc.list_modelos()
+    )
+    candidatos = [m["id"] for m in modelos]
+    if auto_id in candidatos:
+        candidatos.remove(auto_id)
+        candidatos.insert(0, auto_id)
+    for mid in candidatos:
+        pdf = caminho_pdf(int(mid))
+        if not pdf.is_file():
+            continue
+        with fitz.open(pdf) as doc:
+            r = doc[0].rect
+        faces = 2 if "verso" in _sem_acento(frente_verso) else 1
+        return (round(r.width / MM, 2), round(r.height / MM, 2)), faces, int(auto_id or mid)
+    raise RepeticaoError(
+        f"O produto «{produto or '?'}» não tem modelo com PDF configurado — preciso do tamanho do produto."
+    )
+

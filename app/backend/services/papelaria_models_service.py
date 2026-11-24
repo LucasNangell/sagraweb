@@ -1932,6 +1932,20 @@ def _redes_alteradas_cliente(
     return out
 
 
+def _repeticao_da_sp(ano: int, nro: int, observ: str) -> Optional[dict[str, Any]]:
+    try:
+        from services import papelaria_repeticao_service as rep_svc
+
+        info = rep_svc.detectar_repeticao(observ)
+        base = rep_svc.resumo_base(ano, nro)
+        if not info and not base:
+            return None
+        return {**(info or {"origem_nro": None, "origem_ano": None, "rotulo": None}), "base": base}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Papelaria: repetição da SP %s/%s indisponível: %s", nro, ano, exc)
+        return None
+
+
 def _estado_da_sp(ano: int, nro: int) -> dict[str, Any]:
     try:
         from services.papelaria_sp_status_service import estado_da_sp
@@ -2161,6 +2175,8 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         # Situação atual e fase da prova (aprovada pelo cliente, pendente…):
         # decidem a visualização inicial e os badges da prova.
         **_estado_da_sp(ano, nro),
+        # «Repetição da OS 1234/25» na observação → botão «Replicar SP».
+        "repeticao": _repeticao_da_sp(ano, nro, _as_str(row.get("Observ"))),
         # Variável → fonte (o front reaplica após enriquecer com a Câmara).
         "variaveis_fonte": {
             v["chave"]: v["fonte"] for v in variaveis_svc.mapa().values() if v.get("fonte")

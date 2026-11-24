@@ -111,6 +111,8 @@ class FonteEmbutida:
     larguras: dict[int, float]
     largura_padrao: float
     completa: bool
+    # Fonte simples (Type1/TrueType, 1 byte por letra); senão Type0/Identity-H (2 bytes).
+    simples: bool = False
 
     def faltando(self, texto: str) -> list[str]:
         return sorted({c for c in texto if c not in ("\n", "\r") and c not in self.uni_cid})
@@ -121,7 +123,8 @@ class FonteEmbutida:
         return base + espacamento * max(0, len(cids) - 1)
 
     def codificar(self, texto: str) -> str:
-        return "".join(f"{self.uni_cid[c]:04X}" for c in texto)
+        largura = 2 if self.simples else 4
+        return "".join(f"{self.uni_cid[c]:0{largura}X}" for c in texto)
 
 
 def _nome_sem_subconjunto(nome: str) -> str:
@@ -164,10 +167,58 @@ def _ler_larguras(doc: Any, texto_w: str) -> tuple[dict[int, float], float]:
     return larg, 1000.0
 
 
+def _ler_fonte_simples(doc: Any, xref: int, obj: str) -> Optional[FonteEmbutida]:
+    """
+    Fonte simples com WinAnsiEncoding (provas antigas exportadas do Corel:
+    Type1/CFF ou TrueType em subconjunto): letra → código de 1 byte. Só entram
+    as letras que existem na fonte (largura > 0 na tabela /Widths).
+    """
+    if "/WinAnsiEncoding" not in obj or "/Differences" in obj:
+        return None
+    m_fc = re.search(r"/FirstChar (\d+)", obj)
+    m_w = re.search(r"/Widths\s*(\[[^\]]*\]|\d+ 0 R)", obj)
+    if not m_fc or not m_w:
+        return None
+    w_txt = m_w.group(1)
+    ref = re.fullmatch(r"(\d+) 0 R", w_txt)
+    if ref:
+        w_txt = doc.xref_object(int(ref.group(1)))
+    valores = [float(v) for v in re.findall(r"-?[\d.]+", w_txt)]
+    primeiro = int(m_fc.group(1))
+    uni_cid: dict[str, int] = {}
+    larguras: dict[int, float] = {}
+    for i, w in enumerate(valores):
+        codigo = primeiro + i
+        if w <= 0 or codigo < 32 or codigo > 255:
+            continue
+        try:
+            letra = bytes([codigo]).decode("cp1252")
+        except UnicodeDecodeError:
+            continue
+        uni_cid.setdefault(letra, codigo)
+        larguras[codigo] = w
+    if " " not in uni_cid and "\xa0" in uni_cid:
+        uni_cid[" "] = uni_cid["\xa0"]
+    if not uni_cid:
+        return None
+    m_nome = re.search(r"/BaseFont /([^\s/]+)", obj)
+    return FonteEmbutida(
+        xref=xref,
+        nome=_nome_sem_subconjunto(m_nome.group(1) if m_nome else "Fonte"),
+        uni_cid=uni_cid,
+        larguras=larguras,
+        largura_padrao=0.0,
+        completa=all(c in uni_cid for c in CARACTERES_COMUNS if c != " "),
+        simples=True,
+    )
+
+
 def ler_fonte_embutida(doc: Any, xref: int) -> Optional[FonteEmbutida]:
-    """Mapa letra→glifo e larguras de uma fonte Type0/Identity-H do PDF."""
+    """Mapa letra→glifo e larguras da fonte (Type0/Identity-H ou simples WinAnsi)."""
     obj = doc.xref_object(xref)
     if "/Type0" not in obj or "Identity-H" not in obj:
+        if re.search(r"/Subtype /(Type1|TrueType|MMType1)\b", obj):
+            return _ler_fonte_simples(doc, xref, obj)
         return None
     m_tu = re.search(r"/ToUnicode (\d+) 0 R", obj)
     m_desc = re.search(r"/DescendantFonts \[ ?(\d+) 0 R", obj)
@@ -576,6 +627,9 @@ def _normalizar_campo(raw: Any, marcadores: set[str]) -> Optional[dict[str, Any]
         "reduzir_para_caber": bool(raw.get("reduzir_para_caber", True)),
         "uppercase": bool(raw.get("uppercase", False)),
         "bloquear_edicao": bool(raw.get("bloquear_edicao", False)),
+        # Base da repetição: o texto só é redesenhado se o usuário editar na
+        # prévia; sem edição fica o original do PDF, intocado.
+        "somente_se_editado": bool(raw.get("somente_se_editado", False)),
     }
 
 
@@ -1289,7 +1343,13 @@ def renderizar(
                 _nome_sem_subconjunto(f[3]): (f[0], f[4]) for f in page.get_fonts(full=True)
             }
             planos = []
+            fixos: list[tuple[dict[str, Any], dict[str, Any]]] = []
             for campo, alvo in itens:
+                if campo.get("somente_se_editado") and not (
+                    textos is not None and f"{pidx + 1}:{campo['marcador']}" in textos
+                ):
+                    fixos.append((campo, alvo))
+                    continue
                 fonte = fontes_cache.get(alvo["xref"])
                 if fonte is None:
                     fonte = ler_fonte_embutida(doc, alvo["xref"])
@@ -1475,6 +1535,22 @@ def renderizar(
                 if regiao is not None:
                     regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
             ops.append("Q")
+            if regioes is not None:
+                # Textos não editados (base da repetição): clicáveis, mas intactos.
+                for campo, alvo in fixos:
+                    regioes.append(
+                        {
+                            "pagina": pidx + 1,
+                            "marcador": campo["marcador"],
+                            "texto": campo["marcador"],
+                            "negrito": [],
+                            "template": "",
+                            "valores": {},
+                            "editado": False,
+                            "bloquear_edicao": bool(campo.get("bloquear_edicao")),
+                            "area": _area_relativa(alvo["bbox"], largura_pg, altura_pg),
+                        }
+                    )
             ops_linhas = _mover_linhas_acima(
                 doc, page, linhas_por_pagina.get(pidx) or [], medidas
             )
@@ -1723,6 +1799,70 @@ def previa_png(
 # ---------------------------------------------------------------------------
 
 
+REPETICAO_DADOS_KEY = "__repeticao"
+# Chave dos textos editados na base da repetição: «0:pagina:marcador».
+MODELO_ID_REPETICAO = 0
+
+
+def repeticao_dos_dados(dados: dict[str, Any]) -> Optional[tuple[int, int]]:
+    """(ano, nro) da base de repetição pedida nos dados (``__repeticao = "ano-nro"``)."""
+    bruto = str((dados or {}).get(REPETICAO_DADOS_KEY) or "").strip()
+    m = re.fullmatch(r"(\d{4})-(\d{1,6})", bruto)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def renderizar_base_repeticao(
+    ano: int,
+    nro: int,
+    dados_brutos: dict[str, Any],
+    avisos: Optional[list[str]] = None,
+    regioes: Optional[list[dict[str, Any]]] = None,
+) -> tuple[bytes, int]:
+    """Base da repetição com os textos editados na prévia (os demais intactos)."""
+    from services import papelaria_repeticao_service as rep_svc
+
+    pdf = rep_svc.caminho_base(ano, nro)
+    if not pdf.is_file():
+        raise ProvaPdfError("A base da repetição desta SP não existe mais — replique a SP de novo.")
+    campos = [c for c in rep_svc.carregar_config_base(ano, nro).get("campos") or [] if c.get("template")]
+    try:
+        textos = normalizar_textos((dados_brutos or {}).get(TEXTOS_DADOS_KEY))
+    except ProvaPdfError:
+        textos = {}
+    prefixo = f"{MODELO_ID_REPETICAO}:"
+    locais = {k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)}
+    conteudo = (
+        renderizar(pdf, campos, {}, avisos=avisos, exigir_campos=False, textos=locais, regioes=regioes)
+        if campos
+        else pdf.read_bytes()
+    )
+    return conteudo, len(locais)
+
+
+def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: int = 110) -> dict[str, Any]:
+    """Prévia ao vivo da base da repetição (mesma resposta de ``previa_png``)."""
+    import fitz
+
+    avisos: list[str] = []
+    regioes: list[dict[str, Any]] = []
+    t0 = time.perf_counter()
+    saida, _n = renderizar_base_repeticao(ano, nro, dados, avisos=avisos, regioes=regioes)
+    ms = int((time.perf_counter() - t0) * 1000)
+    doc = fitz.open(stream=saida, filetype="pdf")
+    try:
+        paginas = [
+            "data:image/png;base64," + base64.b64encode(p.get_pixmap(dpi=dpi).tobytes("png")).decode()
+            for p in doc
+        ]
+    finally:
+        doc.close()
+    for r in regioes:
+        r["modelo_id"] = MODELO_ID_REPETICAO
+        r["pagina_saida"] = int(r["pagina"]) - 1
+        r["chave"] = f"{MODELO_ID_REPETICAO}:{r['pagina']}:{r['marcador']}"
+    return {"paginas": paginas, "ms": ms, "avisos": avisos, "regioes": regioes}
+
+
 def renderizar_pdf_final(
     modelo_id: int,
     dados_brutos: dict[str, Any],
@@ -1738,6 +1878,10 @@ def renderizar_pdf_final(
     from services.papelaria_faces_service import composicao_do_job
 
     brutos = dados_brutos or {}
+    repeticao = repeticao_dos_dados(brutos)
+    if repeticao is not None:
+        # Repetição de SP: a prova sai da base recortada da prova antiga.
+        return renderizar_base_repeticao(repeticao[0], repeticao[1], brutos, avisos=avisos)
     dados = preparar_dados({k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo)
     composicao = composicao_do_job({"modelo_id": modelo_id, "dados": brutos})
     redes_sel = selecao_redes_dos_dados(brutos)

@@ -27,6 +27,7 @@ import {
   formatAndamentoObsHoraStamp,
   insertAndamentoObsHoraStamp,
 } from "../andamentoObsHoraStamp";
+import { sortHistoryRowsNewestFirst } from "../osHistoryMultiselect";
 import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsEditLock } from "../hooks/useOsEditLock";
@@ -133,8 +134,16 @@ export type OsAndamentoEditorProps = {
   selected: OsSearchRow | null;
   historyRow: OsHistoryRow | null;
   subHistoryRow?: SubOsHistoryRow | null;
+  /** Seleção múltipla da home; quando omitida, exclusão usa só `historyRow`. */
+  selectedHistoryRows?: OsHistoryRow[];
+  selectedSubHistoryRows?: SubOsHistoryRow[];
+  /** Lista completa (ordem cronológica) para excluir do mais novo ao mais antigo. */
+  historyListRows?: OsHistoryRow[];
+  subHistoryListRows?: SubOsHistoryRow[];
   onHistoryRowChange?: (row: OsHistoryRow | null) => void;
   onSubHistoryRowChange?: (row: SubOsHistoryRow | null) => void;
+  onSelectedHistoryRowsChange?: (rows: OsHistoryRow[]) => void;
+  onSelectedSubHistoryRowsChange?: (rows: SubOsHistoryRow[]) => void;
   compact?: boolean;
   /** `panel` mostra o formulário sempre. `inline` só ao criar ou editar. */
   presentation?: "panel" | "inline";
@@ -150,8 +159,14 @@ export function OsAndamentoEditor({
   selected,
   historyRow,
   subHistoryRow = null,
+  selectedHistoryRows,
+  selectedSubHistoryRows,
+  historyListRows,
+  subHistoryListRows,
   onHistoryRowChange,
   onSubHistoryRowChange,
+  onSelectedHistoryRowsChange,
+  onSelectedSubHistoryRowsChange,
   compact = false,
   presentation = "panel",
   extraActions,
@@ -180,9 +195,18 @@ export function OsAndamentoEditor({
   const componentesQuery = useOsComponentes(ano, id, {
     enabled: Boolean(selected) && !isSubOs,
   });
-  const { addMutation, updateMutation, deleteMutation, replicateMutation } =
-    useOsHistoryMutations(isSubOs ? null : ano, isSubOs ? null : id);
-  const { addMutation: addSubOsMutation, deleteMutation: deleteSubOsMutation } =
+  const {
+    addMutation,
+    updateMutation,
+    deleteMutation,
+    deleteManyMutation,
+    replicateMutation,
+  } = useOsHistoryMutations(isSubOs ? null : ano, isSubOs ? null : id);
+  const {
+    addMutation: addSubOsMutation,
+    deleteMutation: deleteSubOsMutation,
+    deleteManyMutation: deleteManySubOsMutation,
+  } =
     useSubOsHistoryMutations(ano, id, subOsId);
 
   const activeSubOsList = subOsListQuery.data ?? [];
@@ -342,6 +366,8 @@ export function OsAndamentoEditor({
     setIsEditMode(false);
     setEditingState(true);
     setTourSaved(false);
+    onSelectedHistoryRowsChange?.([]);
+    onSelectedSubHistoryRowsChange?.([]);
     onHistoryRowChange?.(null);
     onSubHistoryRowChange?.(null);
     setAndamentoTarget(
@@ -636,50 +662,125 @@ export function OsAndamentoEditor({
     });
   };
 
+  const historyRowsForDelete = useMemo(() => {
+    if (selectedHistoryRows && selectedHistoryRows.length > 0) {
+      return selectedHistoryRows;
+    }
+    return historyRow ? [historyRow] : [];
+  }, [selectedHistoryRows, historyRow]);
+
+  const subHistoryRowsForDelete = useMemo(() => {
+    if (selectedSubHistoryRows && selectedSubHistoryRows.length > 0) {
+      return selectedSubHistoryRows;
+    }
+    return subHistoryRow ? [subHistoryRow] : [];
+  }, [selectedSubHistoryRows, subHistoryRow]);
+
+  const clearHistorySelection = useCallback(() => {
+    onSelectedHistoryRowsChange?.([]);
+    onHistoryRowChange?.(null);
+  }, [onSelectedHistoryRowsChange, onHistoryRowChange]);
+
+  const clearSubHistorySelection = useCallback(() => {
+    onSelectedSubHistoryRowsChange?.([]);
+    onSubHistoryRowChange?.(null);
+  }, [onSelectedSubHistoryRowsChange, onSubHistoryRowChange]);
+
   const handleDelete = async () => {
     if (isSubOs) {
-      if (!subHistoryRow) {
+      const targets = subHistoryRowsForDelete;
+      if (targets.length === 0) {
         toast.warning("Selecione um andamento para excluir.");
         return;
       }
       const label =
         selected?.display_label ??
         `${selected?.nr_os} [${selected?.componente_nome ?? "Componente"}]`;
-      const inherited = Boolean(subHistoryRow.herdado_da_os_principal);
-      const confirmMsg = inherited
-        ? `Excluir andamento herdado da Sub OS ${label}?\n\nIsso remove apenas o status herdado deste componente. O andamento da OS principal não será alterado.`
-        : `Excluir andamento da Sub OS ${label}?`;
+      let confirmMsg = `Excluir andamento da Sub OS ${label}?`;
+      if (targets.length > 1) {
+        confirmMsg = `Excluir ${targets.length} andamentos da Sub OS ${label}?\n\nEssa ação não pode ser desfeita.`;
+      } else if (targets[0]?.herdado_da_os_principal) {
+        confirmMsg = `Excluir andamento herdado da Sub OS ${label}?\n\nIsso remove apenas o status herdado deste componente. O andamento da OS principal não será alterado.`;
+      }
       if (!window.confirm(confirmMsg)) {
         return;
       }
+      const ids = sortHistoryRowsNewestFirst(
+        targets,
+        subHistoryListRows ?? targets,
+        (row) => String(row.id),
+      ).map((row) => row.id);
       try {
-        await deleteSubOsMutation.mutateAsync(subHistoryRow.id);
-        toast.success("Andamento da Sub OS excluído.");
-        onSubHistoryRowChange?.(null);
+        if (ids.length === 1) {
+          await deleteSubOsMutation.mutateAsync(ids[0]!);
+          toast.success("Andamento da Sub OS excluído.");
+        } else {
+          await deleteManySubOsMutation.mutateAsync(ids);
+          toast.success(`${ids.length} andamentos da Sub OS excluídos.`);
+        }
+        clearSubHistorySelection();
         setForm(emptyForm());
       } catch (e) {
-        toast.error(`Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`);
+        const deleted =
+          e && typeof e === "object" && "deleted" in e
+            ? Number((e as { deleted?: number }).deleted ?? 0)
+            : 0;
+        if (deleted > 0) {
+          clearSubHistorySelection();
+          setForm(emptyForm());
+        }
+        toast.error(
+          deleted > 0
+            ? `Erro após excluir ${deleted} de ${ids.length}: ${e instanceof Error ? e.message : "falha"}`
+            : `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
+        );
       }
       return;
     }
 
-    if (!historyRow) {
+    const targets = historyRowsForDelete;
+    if (targets.length === 0) {
       toast.error("Selecione um andamento para excluir.");
       return;
     }
     const confirmMsg =
-      "Confirma a exclusão deste andamento?\n\n" +
-      "Essa ação não pode ser desfeita.";
+      targets.length > 1
+        ? `Confirma a exclusão de ${targets.length} andamentos?\n\nEssa ação não pode ser desfeita.`
+        : "Confirma a exclusão deste andamento?\n\nEssa ação não pode ser desfeita.";
     if (!window.confirm(confirmMsg)) {
       return;
     }
+    const orderedIds = sortHistoryRowsNewestFirst(
+      targets,
+      historyListRows ?? targets,
+      (row) => row.CodStatus,
+    ).map((row) => row.CodStatus);
     try {
-      await deleteMutation.mutateAsync(historyRow.CodStatus);
-      toast.success("Andamento excluído e lista reorganizada.");
-      onHistoryRowChange?.(null);
+      if (orderedIds.length === 1) {
+        await deleteMutation.mutateAsync(orderedIds[0]!);
+        toast.success("Andamento excluído e lista reorganizada.");
+      } else {
+        await deleteManyMutation.mutateAsync(orderedIds);
+        toast.success(
+          `${orderedIds.length} andamentos excluídos e lista reorganizada.`,
+        );
+      }
+      clearHistorySelection();
       setForm(emptyForm());
     } catch (e) {
-      toast.error(`Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`);
+      const deleted =
+        e && typeof e === "object" && "deleted" in e
+          ? Number((e as { deleted?: number }).deleted ?? 0)
+          : 0;
+      if (deleted > 0) {
+        clearHistorySelection();
+        setForm(emptyForm());
+      }
+      toast.error(
+        deleted > 0
+          ? `Erro após excluir ${deleted} de ${orderedIds.length}: ${e instanceof Error ? e.message : "falha"}`
+          : `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
+      );
     }
   };
 
@@ -730,9 +831,11 @@ export function OsAndamentoEditor({
     addMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
+    deleteManyMutation.isPending ||
     replicateMutation.isPending ||
     addSubOsMutation.isPending ||
-    deleteSubOsMutation.isPending;
+    deleteSubOsMutation.isPending ||
+    deleteManySubOsMutation.isPending;
 
   useEffect(() => {
     onSavingChange?.(saving);
@@ -937,9 +1040,18 @@ export function OsAndamentoEditor({
           {!(editing && !isEditMode) ? (
             <button
               type="button"
-              title="Excluir andamento selecionado"
+              title={
+                (isSubOs
+                  ? subHistoryRowsForDelete.length
+                  : historyRowsForDelete.length) > 1
+                  ? "Excluir andamentos selecionados"
+                  : "Excluir andamento selecionado"
+              }
               disabled={
-                isSubOs ? !subHistoryRow || saving : !historyRow || saving
+                saving ||
+                (isSubOs
+                  ? subHistoryRowsForDelete.length === 0
+                  : historyRowsForDelete.length === 0)
               }
               onClick={() => void handleDelete()}
               className="sagra-btn sagra-btn--delete sagra-btn--icon"

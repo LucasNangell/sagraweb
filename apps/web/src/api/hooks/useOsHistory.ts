@@ -84,11 +84,36 @@ export function useOsHistoryMutations(ano: number | null, id: number | null) {
     onSuccess: invalidate,
   });
 
+  /** Exclui vários andamentos em sequência e só atualiza o cache ao final. */
+  const deleteManyMutation = useMutation({
+    mutationFn: async (codStatuses: string[]) => {
+      let deleted = 0;
+      try {
+        for (const codStatus of codStatuses) {
+          await deleteOsHistory(osAno!, osId!, codStatus);
+          deleted += 1;
+        }
+        return { deleted, total: codStatuses.length };
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        (err as Error & { deleted?: number }).deleted = deleted;
+        throw err;
+      }
+    },
+    onSettled: invalidate,
+  });
+
   const replicateMutation = useMutation({
     mutationFn: (payload: HistoryPayload) =>
       replicateOsHistory(osAno!, osId!, payload),
     onSuccess: invalidate,
   });
 
-  return { addMutation, updateMutation, deleteMutation, replicateMutation };
+  return {
+    addMutation,
+    updateMutation,
+    deleteMutation,
+    deleteManyMutation,
+    replicateMutation,
+  };
 }

@@ -110,6 +110,41 @@ export function useSubOsHistoryMutations(
     },
   });
 
+  const refreshAfterDelete = async (options?: {
+    refreshMainHistory?: boolean;
+    stillListable?: boolean;
+  }) => {
+    if (ano == null || id == null || subOsId == null) {
+      return;
+    }
+    const subHistory = await fetchSubOsHistory(ano, id, subOsId);
+    queryClient.setQueryData(
+      queryKeys.os.subOsHistory(ano, id, subOsId),
+      subHistory,
+    );
+    if (options?.refreshMainHistory !== false) {
+      const mainHistory = await fetchOsHistory(ano, id);
+      queryClient.setQueryData(
+        queryKeys.os.history(ano, id),
+        dedupeOsHistoryRows(mainHistory),
+      );
+    }
+    queryClient.invalidateQueries({ queryKey: queryKeys.os.subOs(ano, id) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.os.subOsSummary(ano, id),
+    });
+    await silentRefreshOsSearch(queryClient, undefined, {
+      skipCrossTabLock: true,
+    });
+
+    if (options?.stillListable === false) {
+      const selected = useOsSelectionStore.getState().selected;
+      if (selected?.is_sub_os && selected.sub_os_id === subOsId) {
+        useOsSelectionStore.getState().setSelected(toMainOsSelection(selected));
+      }
+    }
+  };
+
   const deleteMutation = useMutation({
     mutationFn: (historyId: number) => {
       if (ano == null || id == null || subOsId == null) {
@@ -118,37 +153,56 @@ export function useSubOsHistoryMutations(
       return deleteSubOsHistory(ano, id, subOsId, historyId);
     },
     onSuccess: async (result) => {
-      if (ano == null || id == null || subOsId == null) {
-        return;
-      }
-      const subHistory = await fetchSubOsHistory(ano, id, subOsId);
-      queryClient.setQueryData(
-        queryKeys.os.subOsHistory(ano, id, subOsId),
-        subHistory,
-      );
-      if (!result.inherited) {
-        const mainHistory = await fetchOsHistory(ano, id);
-        queryClient.setQueryData(
-          queryKeys.os.history(ano, id),
-          dedupeOsHistoryRows(mainHistory),
-        );
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.os.subOs(ano, id) });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.os.subOsSummary(ano, id),
+      await refreshAfterDelete({
+        refreshMainHistory: !result.inherited,
+        stillListable: result.still_listable,
       });
-      await silentRefreshOsSearch(queryClient, undefined, {
-        skipCrossTabLock: true,
-      });
-
-      if (!result.still_listable) {
-        const selected = useOsSelectionStore.getState().selected;
-        if (selected?.is_sub_os && selected.sub_os_id === subOsId) {
-          useOsSelectionStore.getState().setSelected(toMainOsSelection(selected));
-        }
-      }
     },
   });
 
-  return { addMutation, deleteMutation };
+  const deleteManyMutation = useMutation({
+    mutationFn: async (historyIds: number[]) => {
+      if (ano == null || id == null || subOsId == null) {
+        throw new Error("OS/Sub OS não selecionada");
+      }
+      let deleted = 0;
+      let stillListable = true;
+      let refreshMainHistory = false;
+      try {
+        for (const historyId of historyIds) {
+          const result = await deleteSubOsHistory(ano, id, subOsId, historyId);
+          deleted += 1;
+          stillListable = Boolean(result.still_listable);
+          if (!result.inherited) {
+            refreshMainHistory = true;
+          }
+        }
+        return {
+          deleted,
+          total: historyIds.length,
+          stillListable,
+          refreshMainHistory,
+        };
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        Object.assign(err, { deleted, stillListable, refreshMainHistory });
+        throw err;
+      }
+    },
+    onSettled: async (data, error) => {
+      const partial = error as
+        | (Error & {
+            stillListable?: boolean;
+            refreshMainHistory?: boolean;
+          })
+        | null;
+      await refreshAfterDelete({
+        refreshMainHistory:
+          data?.refreshMainHistory ?? partial?.refreshMainHistory ?? true,
+        stillListable: data?.stillListable ?? partial?.stillListable ?? true,
+      });
+    },
+  });
+
+  return { addMutation, deleteMutation, deleteManyMutation };
 }

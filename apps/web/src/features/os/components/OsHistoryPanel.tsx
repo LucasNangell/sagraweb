@@ -15,6 +15,10 @@ import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useAuthStore } from "@/features/auth/authStore";
 import { formatDateBr } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
+import {
+  isHistorySelectionAdditive,
+  nextHistorySelectionRows,
+} from "../osHistoryMultiselect";
 import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import type { OsHistoryRow, OsSearchRow, SubOsHistoryRow } from "../types";
 import { OsGravacaoAlterarArquivosButton } from "./OsGravacaoAlterarArquivosButton";
@@ -57,9 +61,17 @@ export function OsHistoryPanel({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tourSaved, setTourSaved] = useState(false);
-  const [selectedHistory, setSelectedHistory] = useState<OsHistoryRow | null>(null);
-  const [selectedSubHistory, setSelectedSubHistory] =
-    useState<SubOsHistoryRow | null>(null);
+  const [selectedHistoryRows, setSelectedHistoryRows] = useState<
+    OsHistoryRow[]
+  >([]);
+  const [selectedSubHistoryRows, setSelectedSubHistoryRows] = useState<
+    SubOsHistoryRow[]
+  >([]);
+
+  const selectedHistory =
+    selectedHistoryRows.length === 1 ? selectedHistoryRows[0]! : null;
+  const selectedSubHistory =
+    selectedSubHistoryRows.length === 1 ? selectedSubHistoryRows[0]! : null;
 
   const handleEditingChange = useCallback(
     (next: boolean) => {
@@ -117,8 +129,8 @@ export function OsHistoryPanel({
   const historyListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSelectedHistory(null);
-    setSelectedSubHistory(null);
+    setSelectedHistoryRows([]);
+    setSelectedSubHistoryRows([]);
     setTourSaved(false);
     lastAutoKeyRef.current = null;
   }, [ano, id, isSubOs, subOsId]);
@@ -139,9 +151,11 @@ export function OsHistoryPanel({
     }
     lastAutoKeyRef.current = key;
     if (isSubOs) {
-      setSelectedSubHistory(last as SubOsHistoryRow);
+      setSelectedSubHistoryRows([last as SubOsHistoryRow]);
+      setSelectedHistoryRows([]);
     } else {
-      setSelectedHistory(last as OsHistoryRow);
+      setSelectedHistoryRows([last as OsHistoryRow]);
+      setSelectedSubHistoryRows([]);
     }
   }, [rows, selected, editing, ano, id, isSubOs]);
 
@@ -308,15 +322,25 @@ export function OsHistoryPanel({
                   rows.map((row) => {
                     if (isSubOs) {
                       const subRow = row as SubOsHistoryRow;
-                      const isRowSelected = selectedSubHistory?.id === subRow.id;
+                      const isRowSelected = selectedSubHistoryRows.some(
+                        (item) => item.id === subRow.id,
+                      );
                       return (
                         <tr
                           key={`${historyOsKey}-${subRow.id}`}
                           data-testid={homeTestIds.osHistoryRow(subRow.id)}
-                          onClick={() => {
-                            if (!editing) {
-                              setSelectedSubHistory(subRow);
+                          onClick={(event) => {
+                            if (editing) {
+                              return;
                             }
+                            setSelectedSubHistoryRows((current) =>
+                              nextHistorySelectionRows(
+                                current,
+                                subRow,
+                                (item) => String(item.id),
+                                isHistorySelectionAdditive(event),
+                              ),
+                            );
                           }}
                           className={cn(
                             "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
@@ -347,16 +371,25 @@ export function OsHistoryPanel({
                       );
                     }
                     const mainRow = row as OsHistoryRow;
-                    const isRowSelected =
-                      selectedHistory?.CodStatus === mainRow.CodStatus;
+                    const isRowSelected = selectedHistoryRows.some(
+                      (item) => item.CodStatus === mainRow.CodStatus,
+                    );
                     return (
                       <tr
                         key={`${historyOsKey}-${mainRow.CodStatus}`}
                         data-testid={homeTestIds.osHistoryRow(mainRow.CodStatus)}
-                        onClick={() => {
-                          if (!editing) {
-                            setSelectedHistory(mainRow);
+                        onClick={(event) => {
+                          if (editing) {
+                            return;
                           }
+                          setSelectedHistoryRows((current) =>
+                            nextHistorySelectionRows(
+                              current,
+                              mainRow,
+                              (item) => item.CodStatus,
+                              isHistorySelectionAdditive(event),
+                            ),
+                          );
                         }}
                         className={cn(
                           "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
@@ -395,8 +428,22 @@ export function OsHistoryPanel({
             selected={selected}
             historyRow={selectedHistory}
             subHistoryRow={selectedSubHistory}
-            onHistoryRowChange={setSelectedHistory}
-            onSubHistoryRowChange={setSelectedSubHistory}
+            selectedHistoryRows={selectedHistoryRows}
+            selectedSubHistoryRows={selectedSubHistoryRows}
+            historyListRows={
+              isSubOs ? undefined : (rows as OsHistoryRow[])
+            }
+            subHistoryListRows={
+              isSubOs ? (rows as SubOsHistoryRow[]) : undefined
+            }
+            onHistoryRowChange={(row) =>
+              setSelectedHistoryRows(row ? [row] : [])
+            }
+            onSubHistoryRowChange={(row) =>
+              setSelectedSubHistoryRows(row ? [row] : [])
+            }
+            onSelectedHistoryRowsChange={setSelectedHistoryRows}
+            onSelectedSubHistoryRowsChange={setSelectedSubHistoryRows}
             compact={compactList}
             presentation="panel"
             onEditingChange={handleEditingChange}

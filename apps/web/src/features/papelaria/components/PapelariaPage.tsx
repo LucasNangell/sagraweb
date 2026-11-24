@@ -93,16 +93,11 @@ export function PapelariaPage() {
             mobilePane !== "lista" && "max-md:hidden",
           )}
         >
-          {/* A lista mantém a metade de cima; andamentos + formulário dividem o resto. */}
+          {/* Lista no topo; andamentos + formulário no meio; ações na base. */}
           <PapelariaSpList
             selected={selected}
             onSelect={handleSelectFromList}
             className="min-h-0 flex-1 basis-0 md:h-[calc(50%-0.25rem)] md:flex-none"
-          />
-          <div
-            ref={setActionsHost}
-            className="flex shrink-0 empty:hidden"
-            data-testid="papelaria-actions-host"
           />
           <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-2 md:flex-row">
             <PapelariaSpTramitacao
@@ -115,6 +110,11 @@ export function PapelariaPage() {
               data-testid="papelaria-form-host"
             />
           </div>
+          <div
+            ref={setActionsHost}
+            className="flex shrink-0 empty:hidden"
+            data-testid="papelaria-actions-host"
+          />
         </div>
         <div
           className={cn(

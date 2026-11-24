@@ -544,6 +544,23 @@ export async function updateOsHistory(
   });
 }
 
+export type HistoryReorderResponse = {
+  status: string;
+  mapping: Record<string, string>;
+};
+
+export async function reorderOsHistory(
+  ano: number,
+  id: number,
+  orderedCodStatuses: string[],
+): Promise<HistoryReorderResponse> {
+  return apiFetch<HistoryReorderResponse>(`/os/${ano}/${id}/history/reorder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordered_cod_statuses: orderedCodStatuses }),
+  });
+}
+
 export async function deleteOsHistory(
   ano: number,
   id: number,

@@ -4,6 +4,7 @@ import {
   addOsHistory,
   deleteOsHistory,
   fetchOsHistory,
+  reorderOsHistory,
   replicateOsHistory,
   updateOsHistory,
 } from "@/api/os";
@@ -78,6 +79,11 @@ export function useOsHistoryMutations(ano: number | null, id: number | null) {
     onSuccess: invalidate,
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (orderedCodStatuses: string[]) =>
+      reorderOsHistory(osAno!, osId!, orderedCodStatuses),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (codStatus: string) =>
       deleteOsHistory(osAno!, osId!, codStatus),
@@ -112,6 +118,7 @@ export function useOsHistoryMutations(ano: number | null, id: number | null) {
   return {
     addMutation,
     updateMutation,
+    reorderMutation,
     deleteMutation,
     deleteManyMutation,
     replicateMutation,

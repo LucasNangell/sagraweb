@@ -19,6 +19,7 @@ import {
   createVinculoExcecao,
   fetchOsHistory,
   fetchSubOsHistory,
+  reorderOsHistory,
 } from "@/api/os";
 import { useAuthStore } from "@/features/auth/authStore";
 import { formatDateBr, formatPonto, sanitizePontoDigits } from "@/lib/format";
@@ -28,7 +29,11 @@ import {
   insertAndamentoObsHoraStamp,
 } from "../andamentoObsHoraStamp";
 import { sortHistoryRowsNewestFirst } from "../osHistoryMultiselect";
-import { dedupeOsHistoryRows } from "../osHistoryUtils";
+import {
+  dedupeOsHistoryRows,
+  resolveReorderedCodStatus,
+  sortOsHistoryRows,
+} from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsEditLock } from "../hooks/useOsEditLock";
 import { sharedSetorIfAllTogether } from "../subOsUnir";
@@ -140,6 +145,9 @@ export type OsAndamentoEditorProps = {
   /** Lista completa (ordem cronológica) para excluir do mais novo ao mais antigo. */
   historyListRows?: OsHistoryRow[];
   subHistoryListRows?: SubOsHistoryRow[];
+  /** Ordem rascunho de CodStatus enquanto edita (drag). */
+  draftOrder?: string[] | null;
+  onDraftOrderClear?: () => void;
   onHistoryRowChange?: (row: OsHistoryRow | null) => void;
   onSubHistoryRowChange?: (row: SubOsHistoryRow | null) => void;
   onSelectedHistoryRowsChange?: (rows: OsHistoryRow[]) => void;
@@ -149,6 +157,7 @@ export type OsAndamentoEditorProps = {
   presentation?: "panel" | "inline";
   extraActions?: ReactNode;
   onEditingChange?: (editing: boolean) => void;
+  onEditModeChange?: (isEditMode: boolean) => void;
   onTourSavedChange?: (saved: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
   /** Linha de ações (Excluir, Novo, Editar ou Salvar, Cancelar). */
@@ -163,6 +172,8 @@ export function OsAndamentoEditor({
   selectedSubHistoryRows,
   historyListRows,
   subHistoryListRows,
+  draftOrder = null,
+  onDraftOrderClear,
   onHistoryRowChange,
   onSubHistoryRowChange,
   onSelectedHistoryRowsChange,
@@ -171,6 +182,7 @@ export function OsAndamentoEditor({
   presentation = "panel",
   extraActions,
   onEditingChange,
+  onEditModeChange,
   onTourSavedChange,
   onSavingChange,
   actionsRef,
@@ -274,6 +286,14 @@ export function OsAndamentoEditor({
     [onEditingChange],
   );
 
+  const setEditModeState = useCallback(
+    (next: boolean) => {
+      setIsEditMode(next);
+      onEditModeChange?.(next);
+    },
+    [onEditModeChange],
+  );
+
   const setTourSaved = useCallback(
     (saved: boolean) => {
       onTourSavedChange?.(saved);
@@ -284,15 +304,17 @@ export function OsAndamentoEditor({
   useEffect(() => {
     return () => {
       onEditingChange?.(false);
+      onEditModeChange?.(false);
     };
-  }, [onEditingChange]);
+  }, [onEditingChange, onEditModeChange]);
 
   const resetForm = useCallback(() => {
     void lock.release();
     setEditingState(false);
-    setIsEditMode(false);
+    setEditModeState(false);
+    onDraftOrderClear?.();
     setForm(emptyForm());
-  }, [lock.release, setEditingState]);
+  }, [lock.release, setEditingState, setEditModeState, onDraftOrderClear]);
 
   useEffect(() => {
     resetForm();
@@ -363,7 +385,8 @@ export function OsAndamentoEditor({
     }
     const ok = await lock.acquire();
     if (!ok) return;
-    setIsEditMode(false);
+    onDraftOrderClear?.();
+    setEditModeState(false);
     setEditingState(true);
     setTourSaved(false);
     onSelectedHistoryRowsChange?.([]);
@@ -392,7 +415,8 @@ export function OsAndamentoEditor({
     }
     const ok = await lock.acquire();
     if (!ok) return;
-    setIsEditMode(true);
+    onDraftOrderClear?.();
+    setEditModeState(true);
     setEditingState(true);
     setTourSaved(false);
   };
@@ -410,8 +434,9 @@ export function OsAndamentoEditor({
 
   const cancelEdit = () => {
     void lock.release();
+    onDraftOrderClear?.();
     setEditingState(false);
-    setIsEditMode(false);
+    setEditModeState(false);
     setComponenteEspecifico(false);
     setAndamentoTarget(
       isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
@@ -564,9 +589,39 @@ export function OsAndamentoEditor({
             await refreshAfterSubOsSave(targetSubId);
           }
         } else if (isEditMode && historyRow) {
+          const originalCod = historyRow.CodStatus;
+          let codStatus = originalCod;
+          const serverOrder = sortOsHistoryRows(
+            historyListRows ?? [historyRow],
+          ).map((row) => row.CodStatus);
+          const orderChanged =
+            Boolean(draftOrder?.length) &&
+            (draftOrder!.length !== serverOrder.length ||
+              draftOrder!.some((cod, index) => cod !== serverOrder[index]));
+
+          if (orderChanged && draftOrder && osAno != null && osId != null) {
+            // Limpa o rascunho antes do broadcast/refetch para não reaplicar ordem antiga.
+            onDraftOrderClear?.();
+            const reorderResult = await reorderOsHistory(
+              osAno,
+              osId,
+              draftOrder,
+            );
+            codStatus = resolveReorderedCodStatus(
+              originalCod,
+              reorderResult.mapping,
+            );
+            if (codStatus !== originalCod) {
+              onHistoryRowChange?.({
+                ...historyRow,
+                CodStatus: codStatus,
+              });
+            }
+          }
+
           await updateMutation.mutateAsync({
             ...payload,
-            cod_status: historyRow.CodStatus,
+            cod_status: codStatus,
           });
         } else {
           const isGravacaoPendenteLaunch =

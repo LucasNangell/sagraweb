@@ -24,6 +24,47 @@ export function dedupeOsHistoryRows(rows: OsHistoryRow[]): OsHistoryRow[] {
   return sortOsHistoryRows(result);
 }
 
+/** Aplica ordem rascunho de CodStatus; ignora códigos desconhecidos e completa o restante. */
+export function applyOsHistoryDraftOrder(
+  rows: OsHistoryRow[],
+  draftOrder: string[] | null | undefined,
+): OsHistoryRow[] {
+  const deduped = dedupeOsHistoryRows(rows);
+  if (!draftOrder?.length) {
+    return deduped;
+  }
+  const byCod = new Map(
+    deduped.map((row) => [row.CodStatus, row] as const),
+  );
+  const used = new Set<string>();
+  const ordered: OsHistoryRow[] = [];
+  for (const cod of draftOrder) {
+    const row = byCod.get(cod);
+    if (!row || used.has(cod)) {
+      continue;
+    }
+    ordered.push(row);
+    used.add(cod);
+  }
+  for (const row of deduped) {
+    if (!used.has(row.CodStatus)) {
+      ordered.push(row);
+    }
+  }
+  return ordered;
+}
+
+/** Após reorder no servidor: CodStatus final do item que estava em `originalCod`. */
+export function resolveReorderedCodStatus(
+  originalCod: string,
+  mapping: Record<string, string> | null | undefined,
+): string {
+  if (!mapping) {
+    return originalCod;
+  }
+  return mapping[originalCod] ?? originalCod;
+}
+
 /** Último andamento operacional (UltimoStatus / Data mais recente). */
 export function pickLatestHistoryRow(
   rows: OsHistoryRow[],

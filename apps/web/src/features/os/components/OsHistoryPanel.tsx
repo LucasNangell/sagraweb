@@ -1,3 +1,18 @@
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { cn } from "@sagra/ui";
 import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
@@ -19,10 +34,14 @@ import {
   isHistorySelectionAdditive,
   nextHistorySelectionRows,
 } from "../osHistoryMultiselect";
-import { dedupeOsHistoryRows } from "../osHistoryUtils";
+import {
+  applyOsHistoryDraftOrder,
+  dedupeOsHistoryRows,
+} from "../osHistoryUtils";
 import type { OsHistoryRow, OsSearchRow, SubOsHistoryRow } from "../types";
 import { OsGravacaoAlterarArquivosButton } from "./OsGravacaoAlterarArquivosButton";
 import { OsAndamentoEditor, isOsFrozen } from "./OsAndamentoEditor";
+import { OsSortableHistoryRow } from "./OsSortableHistoryRow";
 
 interface OsHistoryPanelProps {
   selected: OsSearchRow | null;
@@ -59,6 +78,8 @@ export function OsHistoryPanel({
   const subHistoryQuery = useSubOsHistory(ano, id, subOsId);
 
   const [editing, setEditing] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [tourSaved, setTourSaved] = useState(false);
   const [selectedHistoryRows, setSelectedHistoryRows] = useState<
@@ -73,12 +94,37 @@ export function OsHistoryPanel({
   const selectedSubHistory =
     selectedSubHistoryRows.length === 1 ? selectedSubHistoryRows[0]! : null;
 
+  const reorderEnabled =
+    !isSubOs && editing && isEditMode && selectedHistory != null;
+
   const handleEditingChange = useCallback(
     (next: boolean) => {
       setEditing(next);
+      if (!next) {
+        setIsEditMode(false);
+        setDraftOrder(null);
+      }
       onEditingChange?.(next);
     },
     [onEditingChange],
+  );
+
+  const handleEditModeChange = useCallback((next: boolean) => {
+    setIsEditMode(next);
+    if (!next) {
+      setDraftOrder(null);
+    }
+  }, []);
+
+  const clearDraftOrder = useCallback(() => {
+    setDraftOrder(null);
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   useEffect(() => {
@@ -105,7 +151,7 @@ export function OsHistoryPanel({
     if (historyQuery.isPending) {
       return [];
     }
-    return dedupeOsHistoryRows(historyQuery.data ?? []);
+    return applyOsHistoryDraftOrder(historyQuery.data ?? [], draftOrder);
   }, [
     historyQueryEnabled,
     isSubOs,
@@ -113,7 +159,40 @@ export function OsHistoryPanel({
     historyQuery.data,
     subHistoryQuery.isPending,
     subHistoryQuery.data,
+    draftOrder,
   ]);
+
+  const sortableIds = useMemo(() => {
+    if (isSubOs) {
+      return [];
+    }
+    return (rows as OsHistoryRow[]).map((row) => row.CodStatus);
+  }, [isSubOs, rows]);
+
+  const handleHistoryDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (!reorderEnabled || !selectedHistory) {
+        return;
+      }
+      const { active, over } = event;
+      if (!over || active.id === over.id) {
+        return;
+      }
+      const currentOrder =
+        draftOrder ??
+        (rows as OsHistoryRow[]).map((row) => row.CodStatus);
+      const oldIndex = currentOrder.indexOf(String(active.id));
+      const newIndex = currentOrder.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) {
+        return;
+      }
+      if (String(active.id) !== selectedHistory.CodStatus) {
+        return;
+      }
+      setDraftOrder(arrayMove(currentOrder, oldIndex, newIndex));
+    },
+    [reorderEnabled, selectedHistory, draftOrder, rows],
+  );
 
   const showHistoryLoading =
     !historyQueryEnabled ||
@@ -132,6 +211,7 @@ export function OsHistoryPanel({
     setSelectedHistoryRows([]);
     setSelectedSubHistoryRows([]);
     setTourSaved(false);
+    setDraftOrder(null);
     lastAutoKeyRef.current = null;
   }, [ano, id, isSubOs, subOsId]);
 
@@ -263,165 +343,171 @@ export function OsHistoryPanel({
             className={cn(
               "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[45.6%] sm:border-r sm:border-b-0",
               "portrait:sm:w-[54%]",
-              editing && "cursor-not-allowed",
+              editing && !reorderEnabled && "opacity-60",
             )}
           >
-            {editing ? (
-              <div
-                className="absolute inset-0 z-10 cursor-not-allowed bg-white/40"
-                aria-hidden
-              />
-            ) : null}
-            <table
-              className={cn(
-                "w-full min-w-0 table-fixed border-collapse text-xs",
-                editing && "pointer-events-none opacity-60",
-              )}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleHistoryDragEnd}
             >
-              <thead className="sticky top-0 bg-slate-100">
-                <tr>
-                  <th className="min-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold">
-                    Situação
-                  </th>
-                  <th
-                    className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
-                    style={{ width: compactList ? "5.5rem" : "6.5rem" }}
-                  >
-                    Setor
-                  </th>
-                  {!compactList ? (
+              <table className="w-full min-w-0 table-fixed border-collapse text-xs">
+                <thead className="sticky top-0 z-[1] bg-slate-100">
+                  <tr>
+                    <th className="min-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold">
+                      Situação
+                    </th>
                     <th
                       className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
-                      style={{ width: "5.75rem" }}
+                      style={{ width: compactList ? "5.5rem" : "6.5rem" }}
                     >
-                      Data
+                      Setor
                     </th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody key={historyOsKey ?? "empty"}>
-                {showHistoryLoading ? (
-                  <tr>
-                    <td
-                      colSpan={compactList ? 2 : 3}
-                      className="px-2 py-4 text-center text-neutral-500"
-                    >
-                      Carregando...
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={compactList ? 2 : 3}
-                      className="px-2 py-4 text-center text-neutral-500"
-                    >
-                      Nenhum andamento.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row) => {
-                    if (isSubOs) {
-                      const subRow = row as SubOsHistoryRow;
-                      const isRowSelected = selectedSubHistoryRows.some(
-                        (item) => item.id === subRow.id,
-                      );
-                      return (
-                        <tr
-                          key={`${historyOsKey}-${subRow.id}`}
-                          data-testid={homeTestIds.osHistoryRow(subRow.id)}
-                          onClick={(event) => {
-                            if (editing) {
-                              return;
-                            }
-                            setSelectedSubHistoryRows((current) =>
-                              nextHistorySelectionRows(
-                                current,
-                                subRow,
-                                (item) => String(item.id),
-                                isHistorySelectionAdditive(event),
-                              ),
-                            );
-                          }}
-                          className={cn(
-                            "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
-                            isRowSelected && "bg-[var(--highlight-yellow)]",
-                          )}
-                        >
-                          <td className="min-w-0 overflow-hidden px-2 py-1">
-                            <span className="block truncate" title={subRow.situacao ?? undefined}>
-                              {subRow.situacao ?? "-"}
-                            </span>
-                          </td>
-                          <td
-                            className="overflow-hidden px-1.5 py-1"
-                            style={{ width: compactList ? "5.5rem" : "6.5rem" }}
-                          >
-                            <span className="block truncate" title={subRow.setor ?? undefined}>
-                              {subRow.setor ?? "-"}
-                            </span>
-                          </td>
-                          {!compactList ? (
-                            <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                              <span className="block tabular-nums">
-                                {formatDateBr(subRow.data ?? undefined)}
-                              </span>
-                            </td>
-                          ) : null}
-                        </tr>
-                      );
-                    }
-                    const mainRow = row as OsHistoryRow;
-                    const isRowSelected = selectedHistoryRows.some(
-                      (item) => item.CodStatus === mainRow.CodStatus,
-                    );
-                    return (
-                      <tr
-                        key={`${historyOsKey}-${mainRow.CodStatus}`}
-                        data-testid={homeTestIds.osHistoryRow(mainRow.CodStatus)}
-                        onClick={(event) => {
-                          if (editing) {
-                            return;
-                          }
-                          setSelectedHistoryRows((current) =>
-                            nextHistorySelectionRows(
-                              current,
-                              mainRow,
-                              (item) => item.CodStatus,
-                              isHistorySelectionAdditive(event),
-                            ),
-                          );
-                        }}
-                        className={cn(
-                          "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
-                          isRowSelected && "bg-[var(--highlight-yellow)]",
-                        )}
+                    {!compactList ? (
+                      <th
+                        className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
+                        style={{ width: "5.75rem" }}
                       >
-                        <td className="min-w-0 overflow-hidden px-2 py-1">
-                          <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
-                            {mainRow.SituacaoLink ?? "-"}
-                          </span>
-                        </td>
+                        Data
+                      </th>
+                    ) : null}
+                  </tr>
+                </thead>
+                <SortableContext
+                  items={sortableIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <tbody key={historyOsKey ?? "empty"}>
+                    {showHistoryLoading ? (
+                      <tr>
                         <td
-                          className="overflow-hidden px-1.5 py-1"
-                          style={{ width: compactList ? "5.5rem" : "6.5rem" }}
+                          colSpan={compactList ? 2 : 3}
+                          className="px-2 py-4 text-center text-neutral-500"
                         >
-                          <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
-                            {mainRow.SetorLink ?? "-"}
-                          </span>
+                          Carregando...
                         </td>
-                        {!compactList ? (
-                          <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                            <span className="block tabular-nums">
-                              {formatDateBr(mainRow.Data)}
-                            </span>
-                          </td>
-                        ) : null}
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    ) : rows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={compactList ? 2 : 3}
+                          className="px-2 py-4 text-center text-neutral-500"
+                        >
+                          Nenhum andamento.
+                        </td>
+                      </tr>
+                    ) : (
+                      rows.map((row) => {
+                        if (isSubOs) {
+                          const subRow = row as SubOsHistoryRow;
+                          const isRowSelected = selectedSubHistoryRows.some(
+                            (item) => item.id === subRow.id,
+                          );
+                          return (
+                            <tr
+                              key={`${historyOsKey}-${subRow.id}`}
+                              data-testid={homeTestIds.osHistoryRow(subRow.id)}
+                              onClick={(event) => {
+                                if (editing) {
+                                  return;
+                                }
+                                setSelectedSubHistoryRows((current) =>
+                                  nextHistorySelectionRows(
+                                    current,
+                                    subRow,
+                                    (item) => String(item.id),
+                                    isHistorySelectionAdditive(event),
+                                  ),
+                                );
+                              }}
+                              className={cn(
+                                "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
+                                isRowSelected && "bg-[var(--highlight-yellow)]",
+                              )}
+                            >
+                              <td className="min-w-0 overflow-hidden px-2 py-1">
+                                <span
+                                  className="block truncate"
+                                  title={subRow.situacao ?? undefined}
+                                >
+                                  {subRow.situacao ?? "-"}
+                                </span>
+                              </td>
+                              <td
+                                className="overflow-hidden px-1.5 py-1"
+                                style={{
+                                  width: compactList ? "5.5rem" : "6.5rem",
+                                }}
+                              >
+                                <span
+                                  className="block truncate"
+                                  title={subRow.setor ?? undefined}
+                                >
+                                  {subRow.setor ?? "-"}
+                                </span>
+                              </td>
+                              {!compactList ? (
+                                <td
+                                  className="overflow-hidden whitespace-nowrap px-1.5 py-1"
+                                  style={{ width: "5.75rem" }}
+                                >
+                                  <span className="block tabular-nums">
+                                    {formatDateBr(subRow.data ?? undefined)}
+                                  </span>
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        }
+                        const mainRow = row as OsHistoryRow;
+                        const isRowSelected = selectedHistoryRows.some(
+                          (item) => item.CodStatus === mainRow.CodStatus,
+                        );
+                        const isEditingRow =
+                          reorderEnabled &&
+                          selectedHistory?.CodStatus === mainRow.CodStatus;
+                        return (
+                          <OsSortableHistoryRow
+                            key={`${historyOsKey}-${mainRow.CodStatus}`}
+                            id={mainRow.CodStatus}
+                            testId={homeTestIds.osHistoryRow(mainRow.CodStatus)}
+                            disabled={!isEditingRow}
+                            selected={isRowSelected}
+                            showDragHandle={Boolean(isEditingRow)}
+                            compactList={compactList}
+                            situacao={mainRow.SituacaoLink ?? ""}
+                            setor={mainRow.SetorLink ?? ""}
+                            onRowClick={(event) => {
+                              if (editing) {
+                                return;
+                              }
+                              setSelectedHistoryRows((current) =>
+                                nextHistorySelectionRows(
+                                  current,
+                                  mainRow,
+                                  (item) => item.CodStatus,
+                                  isHistorySelectionAdditive(event),
+                                ),
+                              );
+                            }}
+                            dataCell={
+                              <td
+                                className="overflow-hidden whitespace-nowrap px-1.5 py-1"
+                                style={{ width: "5.75rem" }}
+                              >
+                                <span className="block tabular-nums">
+                                  {formatDateBr(mainRow.Data)}
+                                </span>
+                              </td>
+                            }
+                          />
+                        );
+                      })
+                    )}
+                  </tbody>
+                </SortableContext>
+              </table>
+            </DndContext>
           </div>
 
           <OsAndamentoEditor
@@ -431,11 +517,15 @@ export function OsHistoryPanel({
             selectedHistoryRows={selectedHistoryRows}
             selectedSubHistoryRows={selectedSubHistoryRows}
             historyListRows={
-              isSubOs ? undefined : (rows as OsHistoryRow[])
+              isSubOs
+                ? undefined
+                : dedupeOsHistoryRows(historyQuery.data ?? [])
             }
             subHistoryListRows={
               isSubOs ? (rows as SubOsHistoryRow[]) : undefined
             }
+            draftOrder={draftOrder}
+            onDraftOrderClear={clearDraftOrder}
             onHistoryRowChange={(row) =>
               setSelectedHistoryRows(row ? [row] : [])
             }
@@ -447,6 +537,7 @@ export function OsHistoryPanel({
             compact={compactList}
             presentation="panel"
             onEditingChange={handleEditingChange}
+            onEditModeChange={handleEditModeChange}
             onTourSavedChange={setTourSaved}
             onSavingChange={setSaving}
             extraActions={

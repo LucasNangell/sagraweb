@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
-from typing import Callable, List, Literal, Optional, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 import logging
 import os
 import time
@@ -2502,8 +2502,81 @@ def create_vinculo_excecao(ano: int, id: int, body: VinculoExcecaoRequest):
         logger.error(f"Error creating vinculo excecao: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class HistoryReorderItem(BaseModel):
+    ordered_cod_statuses: List[str]
+
+
+class HistoryReorderResponse(BaseModel):
+    status: str = "ok"
+    mapping: Dict[str, str]
+
+
 class HistoryUpdateItem(HistoryItem):
     cod_status: str
+
+
+@router.post(
+    "/os/{ano}/{id}/history/reorder",
+    response_model=HistoryReorderResponse,
+)
+def reorder_os_history(
+    ano: int, id: int, item: HistoryReorderItem, request: Request
+):
+    """Reordena andamentos reescrevendo o conteúdo nos slots CodStatus (A→Z)."""
+    from services.andamento_reorder import apply_andamento_reorder, mapping_changed
+    from services.os_edit_lock_service import enforce_interactive_lock
+
+    enforce_interactive_lock(request, id, ano, "andamento")
+    ordered = [str(c).strip() for c in (item.ordered_cod_statuses or []) if str(c).strip()]
+    if not ordered:
+        raise HTTPException(
+            status_code=400,
+            detail="ordered_cod_statuses é obrigatório",
+        )
+
+    def transaction_logic(cursor):
+        return apply_andamento_reorder(cursor, id, ano, ordered)
+
+    try:
+        mapping = db.execute_transaction([transaction_logic])[0]
+        if mapping_changed(mapping):
+            try:
+                from services.os_componentes_service import sync_sub_os_congelada_flags
+
+                sync_sub_os_congelada_flags(id, ano)
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao sincronizar congelamento Sub OS (reorder): %s", exc
+                )
+
+            _broadcast_os_system_update(id, ano, "history_reordered")
+
+            sync_codes = sorted(set(mapping.values()) | set(mapping.keys()))
+
+            def _sync_reorder_to_mdb() -> None:
+                from .mdb_writer import sync_andamento_from_mysql_to_mdb
+
+                for cod in sync_codes:
+                    sync_andamento_from_mysql_to_mdb(
+                        cod, id, ano, operation="update"
+                    )
+
+            _dispatch_mdb_sync(
+                "history_reorder",
+                _sync_reorder_to_mdb,
+                nro=id,
+                ano=ano,
+            )
+
+        return HistoryReorderResponse(status="ok", mapping=mapping)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"Reorder history error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.put("/os/{ano}/{id}/history", response_model=StatusResponse)
 def update_os_history(ano: int, id: int, item: HistoryUpdateItem, request: Request):

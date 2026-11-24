@@ -42,6 +42,8 @@ export interface ProvaPdfCampo {
   uppercase?: boolean;
   /** Se true, o texto não pode ser editado na prévia (clique no PDF). */
   bloquear_edicao?: boolean;
+  /** Textos do PDF (abaixo deste, mesma página) que formam um campo só com ele. */
+  juntar?: string[];
 }
 
 export type ProvaPdfRedesDisposicao = "vertical" | "horizontal" | "grade";

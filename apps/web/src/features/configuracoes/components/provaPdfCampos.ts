@@ -20,7 +20,75 @@ export function campoVazio(t: ProvaPdfTexto): ProvaPdfCampo {
     reduzir_para_caber: true,
     uppercase: false,
     bloquear_edicao: false,
+    juntar: [],
   };
+}
+
+const PT_PARA_MM = 25.4 / 72;
+
+/**
+ * Texto logo abaixo (mesma página, até ~2,5 linhas de distância) — candidato
+ * a ser juntado ao campo, como a segunda linha do rodapé.
+ */
+export function textoAbaixo(
+  t: ProvaPdfTexto,
+  textos: ProvaPdfTexto[],
+  ignorar: ReadonlySet<string> = new Set(),
+): ProvaPdfTexto | null {
+  const alturaLinha = Math.max(1, t.tamanho * PT_PARA_MM);
+  const candidatos = textos.filter(
+    (o) =>
+      o !== t &&
+      o.pagina === t.pagina &&
+      !ignorar.has(chaveTexto(o)) &&
+      o.y_mm > t.y_mm + 0.1 &&
+      o.y_mm - t.y_mm <= alturaLinha * 2.5,
+  );
+  candidatos.sort((a, b) => a.y_mm - b.y_mm);
+  return candidatos[0] ?? null;
+}
+
+/** Entrelinha (× tamanho da fonte) que reproduz a distância entre duas linhas do PDF. */
+export function entrelinhaEntre(cima: ProvaPdfTexto, baixo: ProvaPdfTexto): number {
+  const tamanhoMm = cima.tamanho * PT_PARA_MM;
+  if (!(tamanhoMm > 0)) return 1.2;
+  const valor = (baixo.y_mm - cima.y_mm) / tamanhoMm;
+  return Math.round(Math.min(3, Math.max(0.8, valor)) * 100) / 100;
+}
+
+/**
+ * Junta o texto de baixo ao campo: um campo só, de várias linhas. O template
+ * ganha a linha de baixo (o template dela, ou o texto do PDF) e a entrelinha
+ * passa a ser a do modelo.
+ */
+export function juntarCampos(
+  campo: ProvaPdfCampo,
+  dono: ProvaPdfTexto,
+  abaixo: ProvaPdfTexto,
+  campoAbaixo: ProvaPdfCampo | undefined,
+): ProvaPdfCampo {
+  const cima = campo.template.trim() ? campo.template : dono.marcador;
+  const baixo = campoAbaixo?.template.trim() ? campoAbaixo.template : abaixo.marcador;
+  const juntar = [...(campo.juntar ?? []), abaixo.marcador, ...(campoAbaixo?.juntar ?? [])];
+  return {
+    ...campo,
+    template: `${cima}
+${baixo}`,
+    juntar: [...new Set(juntar)],
+    entrelinha: (campo.juntar ?? []).length ? campo.entrelinha : entrelinhaEntre(dono, abaixo),
+  };
+}
+
+/** Dono (chave) de cada texto juntado a outro campo. */
+export function juntadosPorDono(
+  campos: Record<string, ProvaPdfCampo>,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [chave, c] of Object.entries(campos)) {
+    if (!c.template.trim()) continue;
+    for (const m of c.juntar ?? []) out.set(chaveTexto({ marcador: m, pagina: c.pagina }), chave);
+  }
+  return out;
 }
 
 function paginaEfetiva(pagina: number | null | undefined): number {

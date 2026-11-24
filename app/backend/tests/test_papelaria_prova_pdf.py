@@ -675,3 +675,119 @@ def test_sanitize_dados_aceita_textos_editados():
     assert json.loads(limpo["__textos"]) == {"3:1:NOME": "Ana"}
     with pytest.raises(ValueError):
         jobs_svc._sanitize_dados({"__textos": '{"ruim": "x"}'})
+
+
+# --------------------------------------------------------------------------
+# Campo com textos juntados (rodapé de várias linhas) e fio que acompanha.
+# --------------------------------------------------------------------------
+
+
+def _pdf_rodape() -> bytes:
+    """A5 com fio acima de um rodapé de duas linhas (como Timbrado A4 / Bloco A5)."""
+    if not os.path.isfile(_FONTE):
+        pytest.skip("fonte Arial indisponível")
+    doc = fitz.open()
+    page = doc.new_page(width=420, height=595)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+    page.draw_line((30, 548), (390, 548), color=(0.35, 0.35, 0.35), width=0.6)
+    page.insert_text((120, 562), "RODAPELINHAUM", fontname="F1", fontsize=8)
+    page.insert_text((140, 572.5), "RODAPELINHADOIS", fontname="F1", fontsize=8)
+    page.insert_text((40, 60), "CABECALHO", fontname="F1", fontsize=12)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _fio_y(pdf: bytes) -> list[float]:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        return [round(d["rect"].y0, 1) for d in doc[0].get_drawings() if d["rect"].width > 100]
+    finally:
+        doc.close()
+
+
+def _topo_texto(pdf: bytes, depois_de: float = 500) -> float:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        tops = [
+            l["bbox"][1]
+            for b in doc[0].get_text("dict")["blocks"]
+            for l in b.get("lines", [])
+            if l["bbox"][1] > depois_de and "".join(s["text"] for s in l["spans"]).strip()
+        ]
+        return round(min(tops), 1)
+    finally:
+        doc.close()
+
+
+def _campo_rodape(template: str) -> dict:
+    from services import papelaria_prova_pdf_service as svc
+
+    return svc._normalizar_campo(
+        {
+            "marcador": "RODAPELINHAUM",
+            "pagina": 1,
+            "juntar": ["RODAPELINHADOIS", "INEXISTENTE", "RODAPELINHAUM"],
+            "template": template,
+            "ancora": "base",
+            "entrelinha": 1.31,
+        },
+        {"RODAPELINHAUM", "RODAPELINHADOIS", "CABECALHO"},
+    )
+
+
+def test_normalizar_campo_juntar_so_textos_validos():
+    assert _campo_rodape("x")["juntar"] == ["RODAPELINHADOIS"]
+
+
+def test_rodape_juntado_vira_um_campo_e_fio_acompanha():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_rodape()
+    gap_original = _topo_texto(pdf) - _fio_y(pdf)[0]
+
+    # Duas linhas: igual ao modelo (fio não se move).
+    regioes: list[dict] = []
+    dois = svc.renderizar(pdf, [_campo_rodape("Linha A\nLinha B")], {}, regioes=regioes)
+    texto = _textos(dois)
+    assert "RODAPELINHAUM" not in texto and "RODAPELINHADOIS" not in texto
+    assert "Linha A" in texto and "Linha B" in texto
+    assert len(regioes) == 1 and regioes[0]["texto"] == "Linha A\nLinha B"
+    assert _fio_y(dois) == _fio_y(pdf)
+
+    # Três linhas: o bloco cresce para cima e o fio sobe junto.
+    tres = svc.renderizar(pdf, [_campo_rodape("Nova\nLinha A\nLinha B")], {})
+    assert _fio_y(tres)[0] < _fio_y(pdf)[0] - 8
+    assert _topo_texto(tres) - _fio_y(tres)[0] == pytest.approx(gap_original, abs=0.6)
+
+    # Uma linha: o fio desce até ficar à mesma distância do texto.
+    uma = svc.renderizar(pdf, [_campo_rodape("Linha B")], {})
+    assert _fio_y(uma)[0] > _fio_y(pdf)[0] + 8
+    assert _topo_texto(uma) - _fio_y(uma)[0] == pytest.approx(gap_original, abs=0.6)
+
+
+def test_fio_longe_do_campo_nao_se_move():
+    from services import papelaria_prova_pdf_service as svc
+
+    pdf = _pdf_rodape()
+    campo = svc._normalizar_campo(
+        {"marcador": "CABECALHO", "pagina": 1, "template": "A\nB\nC", "ancora": "base"},
+        {"CABECALHO"},
+    )
+    assert _fio_y(svc.renderizar(pdf, [campo], {})) == _fio_y(pdf)
+
+
+def test_salvar_campos_tira_campo_proprio_do_texto_juntado(tmp_path, monkeypatch):
+    from services import papelaria_prova_pdf_service as svc
+
+    monkeypatch.setattr(svc, "RAIZ_MODELOS_PDF", tmp_path)
+    svc.salvar_pdf_modelo(5, filename="rodape.pdf", content=_pdf_rodape())
+    r = svc.salvar_campos(
+        5,
+        [
+            {"marcador": "RODAPELINHAUM", "pagina": 1, "juntar": ["RODAPELINHADOIS"], "template": "A\nB"},
+            {"marcador": "RODAPELINHADOIS", "pagina": 1, "template": "B"},
+        ],
+    )
+    assert [c["marcador"] for c in r["campos"]] == ["RODAPELINHAUM"]
+    assert r["campos"][0]["juntar"] == ["RODAPELINHADOIS"]

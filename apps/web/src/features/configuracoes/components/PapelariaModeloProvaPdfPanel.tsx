@@ -8,9 +8,11 @@ import {
   Info,
   Link2,
   Loader2,
+  Merge,
   Save,
   Trash2,
   Type as TypeIcon,
+  Unlink,
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +38,9 @@ import {
   campoVazio,
   chaveTexto,
   hidratarCampos,
+  juntadosPorDono,
+  juntarCampos,
+  textoAbaixo,
   variaveisDosTemplates,
 } from "./provaPdfCampos";
 import { PapelariaBlocoRedesCard } from "./PapelariaBlocoRedesCard";
@@ -235,6 +240,54 @@ export function PapelariaModeloProvaPdfPanel({
     });
     setOrfaosKeys((prev) => prev.filter((k) => k !== origem));
     setMsg({ texto: "Template movido para a linha inteira — salve os campos para gravar.", erro: false });
+  };
+
+  /** Texto juntado → chave do campo que o contém (ex.: 2ª linha do rodapé). */
+  const juntados = useMemo(() => juntadosPorDono(campos), [campos]);
+  const textoPorChave = useMemo(() => new Map(textos.map((t) => [chaveTexto(t), t])), [textos]);
+
+  /** Último texto do bloco (o de baixo), para achar a próxima linha a juntar. */
+  const ultimoDoBloco = (t: ProvaPdfTexto, c: ProvaPdfCampo): ProvaPdfTexto => {
+    const doBloco = [t, ...(c.juntar ?? []).map((m) => textoPorChave.get(chaveTexto({ marcador: m, pagina: t.pagina })))];
+    return doBloco
+      .filter((x): x is ProvaPdfTexto => Boolean(x))
+      .reduce((a, b) => (b.y_mm > a.y_mm ? b : a), t);
+  };
+
+  const proximaParaJuntar = (t: ProvaPdfTexto, c: ProvaPdfCampo): ProvaPdfTexto | null => {
+    const ignorar = new Set<string>([...juntados.keys(), ...exemploRedes, chaveTexto(t)]);
+    return textoAbaixo(ultimoDoBloco(t, c), textos, ignorar);
+  };
+
+  const juntarAbaixo = (t: ProvaPdfTexto, abaixo: ProvaPdfTexto) => {
+    const chave = chaveTexto(t);
+    const chaveAbaixo = chaveTexto(abaixo);
+    setCampos((prev) => {
+      const dono = prev[chave] ?? campoVazio(t);
+      const next = { ...prev };
+      next[chave] = juntarCampos(dono, t, abaixo, prev[chaveAbaixo]);
+      next[chaveAbaixo] = campoVazio(abaixo);
+      return next;
+    });
+    setMsg({
+      texto: "Linhas juntadas num campo só — confira o template (uma linha por linha do PDF) e salve.",
+      erro: false,
+    });
+  };
+
+  const separar = (t: ProvaPdfTexto, chaveDono: string) => {
+    setCampos((prev) => {
+      const dono = prev[chaveDono];
+      if (!dono) return prev;
+      return {
+        ...prev,
+        [chaveDono]: { ...dono, juntar: (dono.juntar ?? []).filter((m) => m !== t.marcador) },
+      };
+    });
+    setMsg({
+      texto: "Linha separada: ela volta a ser texto fixo. Ajuste o template do campo e salve.",
+      erro: false,
+    });
   };
 
   const ocupado =
@@ -539,6 +592,40 @@ export function PapelariaModeloProvaPdfPanel({
                         </div>
                       );
                     }
+                    const chaveDono = juntados.get(chaveTexto(t));
+                    if (chaveDono) {
+                      const dono = campos[chaveDono];
+                      return (
+                        <div
+                          key={chaveTexto(t)}
+                          role="row"
+                          className="pw-map-row is-linked"
+                          data-testid={`papelaria-prova-pdf-juntado-${t.marcador}`}
+                        >
+                          <div className="pw-map-row__cell pw-map-row__source">
+                            <p className="font-medium text-slate-600">{t.marcador}</p>
+                            <p className="text-[10px] text-slate-500">
+                              {t.fonte} · {t.tamanho} pt · pág. {t.pagina}
+                            </p>
+                          </div>
+                          <div className="pw-map-row__cell flex flex-wrap items-center gap-2">
+                            <StatusPill tone="info">
+                              Faz parte do campo «{(dono?.marcador ?? "").slice(0, 40)}»
+                            </StatusPill>
+                            <button
+                              type="button"
+                              className="sagra-btn sagra-btn--outline sagra-btn--sm"
+                              onClick={() => separar(t, chaveDono)}
+                            >
+                              <Unlink className="size-3" aria-hidden />
+                              Separar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    const abaixo = proximaParaJuntar(t, c);
+                    const linhasJuntas = (c.juntar ?? []).length;
                     return (
                       <div key={chaveTexto(t)} role="row" className={cn("pw-map-row", ligado && "is-linked")}>
                         <div className="pw-map-row__cell pw-map-row__source">
@@ -562,6 +649,33 @@ export function PapelariaModeloProvaPdfPanel({
                             >
                               Estilos mistos · use **negrito**
                             </StatusPill>
+                          ) : null}
+                          {linhasJuntas ? (
+                            <div className="mt-1 space-y-0.5" data-testid={`papelaria-prova-pdf-bloco-${t.marcador}`}>
+                              {(c.juntar ?? []).map((m) => (
+                                <p key={m} className="truncate text-[11px] font-medium text-slate-700" title={m}>
+                                  ↳ {m}
+                                </p>
+                              ))}
+                              <StatusPill
+                                tone="info"
+                                title="As linhas formam um campo só: o template tem uma linha para cada linha do PDF e o bloco cresce como um todo. Um fio logo acima do campo acompanha o texto."
+                              >
+                                {linhasJuntas + 1} linhas num campo só
+                              </StatusPill>
+                            </div>
+                          ) : null}
+                          {abaixo ? (
+                            <button
+                              type="button"
+                              className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-secondary-blue hover:underline"
+                              title={`Junta «${abaixo.marcador}» a este campo — as linhas viram um bloco só (ex.: rodapé).`}
+                              onClick={() => juntarAbaixo(t, abaixo)}
+                              data-testid={`papelaria-prova-pdf-juntar-${t.marcador}`}
+                            >
+                              <Merge className="size-3" aria-hidden />
+                              Juntar com a linha de baixo
+                            </button>
                           ) : null}
                         </div>
                         {renderCampoControls(c, {

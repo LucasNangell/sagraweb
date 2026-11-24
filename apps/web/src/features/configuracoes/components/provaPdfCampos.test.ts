@@ -3,9 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { ProvaPdfModelo, ProvaPdfTexto } from "@/api/papelariaProvaPdf";
 
 import {
+  campoVazio,
   casarCampoComTexto,
   chaveTexto,
+  entrelinhaEntre,
   hidratarCampos,
+  juntadosPorDono,
+  juntarCampos,
+  textoAbaixo,
   variaveisDosTemplates,
 } from "./provaPdfCampos";
 
@@ -153,5 +158,44 @@ describe("variaveisDosTemplates", () => {
         },
       ]),
     ).toEqual(["nome", "email"]);
+  });
+});
+
+describe("juntar textos num campo só (rodapé)", () => {
+  const texto = (marcador: string, y_mm: number): ProvaPdfTexto => ({
+    marcador,
+    pagina: 1,
+    fonte: "Stone",
+    tamanho: 8,
+    cor: "#000",
+    x_mm: 50,
+    y_mm,
+    alinhamento_sugerido: "centro",
+    ancora_sugerida: "base",
+  });
+  const l1 = texto("Câmara dos Deputados | Anexo IV", 285.4);
+  const l2 = texto("Tels (61) 3215-5000", 289.1);
+  const longe = texto("Cabeçalho", 20);
+
+  it("acha a linha logo abaixo e calcula a entrelinha do modelo", () => {
+    expect(textoAbaixo(l1, [l1, l2, longe])).toBe(l2);
+    expect(textoAbaixo(l2, [l1, l2, longe])).toBeNull();
+    expect(entrelinhaEntre(l1, l2)).toBeCloseTo(1.31, 1);
+  });
+
+  it("junta template e textos; a linha de baixo deixa de ser campo", () => {
+    const dono = { ...campoVazio(l1), template: "Câmara | Gabinete {gabinete}" };
+    const baixo = { ...campoVazio(l2), template: "Tels {telefone}" };
+    const r = juntarCampos(dono, l1, l2, baixo);
+    expect(r.template).toBe("Câmara | Gabinete {gabinete}\nTels {telefone}");
+    expect(r.juntar).toEqual([l2.marcador]);
+    expect(r.entrelinha).toBeCloseTo(1.31, 1);
+    const mapa = { [chaveTexto(l1)]: r, [chaveTexto(l2)]: campoVazio(l2) };
+    expect(juntadosPorDono(mapa).get(chaveTexto(l2))).toBe(chaveTexto(l1));
+  });
+
+  it("sem template usa o próprio texto do PDF", () => {
+    const r = juntarCampos(campoVazio(l1), l1, l2, undefined);
+    expect(r.template).toBe(`${l1.marcador}\n${l2.marcador}`);
   });
 });

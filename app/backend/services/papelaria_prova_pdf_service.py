@@ -557,9 +557,18 @@ def _normalizar_campo(raw: Any, marcadores: set[str]) -> Optional[dict[str, Any]
         pagina = int(raw.get("pagina") or 0)
     except (TypeError, ValueError):
         pagina = 0
+    # Textos do PDF (abaixo deste) que formam um campo só com ele — ex.: as
+    # duas linhas do rodapé viram um bloco de várias linhas.
+    juntar: list[str] = []
+    for extra in raw.get("juntar") or []:
+        extra = str(extra or "").strip()
+        if extra and extra != marcador and extra in marcadores and extra not in juntar:
+            juntar.append(extra)
+    juntar = juntar[:10]
     return {
         "marcador": marcador,
         "pagina": pagina,  # 0 = qualquer página
+        "juntar": juntar,
         "template": template,
         "alinhamento": alinhamento,
         "ancora": ancora,
@@ -652,6 +661,9 @@ def salvar_campos(
             continue
         vistos.add(chave)
         normalizados.append(c)
+    # Texto juntado a outro campo deixa de ser campo próprio.
+    juntados = {(m, c["pagina"]) for c in normalizados for m in c.get("juntar") or []}
+    normalizados = [c for c in normalizados if (c["marcador"], c["pagina"]) not in juntados]
     # Evita apagar vínculos por payload vazio acidental (ex.: closure stale no admin).
     if not normalizados and existentes and not limpar:
         raise ProvaPdfError(
@@ -965,6 +977,192 @@ def _area_relativa(area: Any, largura: float, altura: float) -> list[float]:
     ]
 
 
+def _alvo_juntado(principal: dict[str, Any], extras: list[dict[str, Any]]) -> dict[str, Any]:
+    """Alvo de um campo com textos juntados: caixa única, redação de todos."""
+    import fitz
+
+    todos = [principal, *extras]
+    caixa = fitz.Rect(principal["bbox"])
+    for a in extras:
+        caixa |= a["bbox"]
+    primeiro = min(todos, key=lambda a: a["origem"].y)
+    ultimo = max(todos, key=lambda a: a["origem"].y)
+    return {
+        **principal,
+        "bbox": caixa,
+        "bboxes": [a["bbox"] for a in todos],
+        # Âncora «topo»: começa na primeira linha; «base»: termina na última.
+        "origem": fitz.Point(min(a["origem"].x for a in todos), primeiro["origem"].y),
+        "origem_base": fitz.Point(min(a["origem"].x for a in todos), ultimo["origem"].y),
+        "topo_y": primeiro["origem"].y,
+        "tamanho": primeiro["tamanho"],
+    }
+
+
+# Linha «acima do texto»: até esta distância (pt) acima do topo do campo.
+DISTANCIA_LINHA_ACIMA_PT = 20.0
+ESPESSURA_MAX_LINHA_PT = 2.0
+
+
+def _linhas_horizontais(page: Any) -> list[dict[str, Any]]:
+    """Fios horizontais simples da página (traço reto ou retângulo bem fino)."""
+    linhas: list[dict[str, Any]] = []
+    try:
+        desenhos = page.get_drawings()
+    except Exception:
+        return linhas
+    for d in desenhos:
+        itens = d.get("items") or []
+        r = d.get("rect")
+        if r is None or r.width < 20 or len(itens) != 1:
+            continue
+        tipo = itens[0][0]
+        if tipo == "l" and d.get("type") == "s":
+            p1, p2 = itens[0][1], itens[0][2]
+            if abs(p1.y - p2.y) > 0.5 or float(d.get("width") or 0) > ESPESSURA_MAX_LINHA_PT:
+                continue
+            linhas.append(
+                {
+                    "tipo": "l",
+                    "y": (p1.y + p2.y) / 2,
+                    "x0": min(p1.x, p2.x),
+                    "x1": max(p1.x, p2.x),
+                    "rect": r,
+                    "cor": d.get("color"),
+                    "largura": float(d.get("width") or 0.5),
+                }
+            )
+        elif tipo == "re" and d.get("type") == "f" and r.height <= ESPESSURA_MAX_LINHA_PT:
+            linhas.append(
+                {
+                    "tipo": "re",
+                    "y": (r.y0 + r.y1) / 2,
+                    "x0": r.x0,
+                    "x1": r.x1,
+                    "rect": r,
+                    "cor": d.get("fill"),
+                    "largura": r.height,
+                }
+            )
+    return linhas
+
+
+_NUM = r"(-?\d+(?:\.\d+)?|-?\.\d+)"
+_RE_TRACO = re.compile(_NUM + r"\s+" + _NUM + r"\s+m\s+" + _NUM + r"\s+" + _NUM + r"\s+l\s+S\b")
+_RE_RETANGULO = re.compile(_NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+" + _NUM + r"\s+re\s+f\*?\b")
+
+
+def _deslocar_no_conteudo(doc: Any, page: Any, linha: dict[str, Any], delta: float) -> bool:
+    """
+    Move o fio no próprio conteúdo da página (mesma cor, espessura e estado
+    gráfico): procura «x y m x y l S» / «x y w h re f» com as coordenadas do
+    fio (só bate quando não há transformação em volta) e troca o y.
+    """
+    import fitz
+
+    inv = ~page.transformation_matrix
+    a = fitz.Point(linha["x0"], linha["y"]) * inv
+    b = fitz.Point(linha["x1"], linha["y"]) * inv
+    tol = 0.6
+    for xref in page.get_contents():
+        bruto = doc.xref_stream(xref)
+        if not bruto:
+            continue
+        texto = bruto.decode("latin-1")
+        novo_texto = None
+        if linha["tipo"] == "l":
+            for m in _RE_TRACO.finditer(texto):
+                x1, y1, x2, y2 = (float(v) for v in m.groups())
+                if abs(y1 - y2) > 0.05 or abs(y1 - a.y) > tol:
+                    continue
+                if abs(min(x1, x2) - min(a.x, b.x)) > tol or abs(max(x1, x2) - max(a.x, b.x)) > tol:
+                    continue
+                ny = y1 - delta
+                troca = f"{x1:.4f} {ny:.4f} m\n{x2:.4f} {ny:.4f} l\nS"
+                novo_texto = texto[: m.start()] + troca + texto[m.end():]
+                break
+        else:
+            r = linha["rect"]
+            topo = fitz.Point(r.x0, r.y1) * inv  # canto inferior (PDF) do retângulo
+            for m in _RE_RETANGULO.finditer(texto):
+                x, y, w, h = (float(v) for v in m.groups())
+                y_min = min(y, y + h)
+                if abs(x - topo.x) > tol or abs(y_min - topo.y) > tol or abs(abs(w) - r.width) > tol:
+                    continue
+                fim = m.group(0)[m.group(0).rindex("re"):]
+                troca = f"{x:.4f} {y - delta:.4f} {w:.4f} {h:.4f} {fim}"
+                novo_texto = texto[: m.start()] + troca + texto[m.end():]
+                break
+        if novo_texto is not None:
+            doc.update_stream(xref, novo_texto.encode("latin-1"))
+            return True
+    return False
+
+
+def _cor_rgb(cor: Any) -> str:
+    if isinstance(cor, (list, tuple)) and len(cor) == 3:
+        return " ".join(f"{float(v):.4f}" for v in cor)
+    return "0 0 0"
+
+
+def _mover_linhas_acima(
+    doc: Any,
+    page: Any,
+    linhas: list[dict[str, Any]],
+    medidas: list[dict[str, Any]],
+) -> list[str]:
+    """
+    Fio logo acima de um campo acompanha o texto: se o texto ganhou (ou
+    perdeu) linhas para cima, o fio sobe (ou desce) o mesmo tanto, mantendo a
+    distância do modelo. Devolve operadores extras quando o fio precisou ser
+    redesenhado (fio que não pôde ser movido no próprio conteúdo).
+    """
+    import fitz
+
+    altura_pg = page.rect.height
+    ops: list[str] = []
+    redesenhar: list[tuple[dict[str, Any], float]] = []
+    for linha in linhas:
+        grupo = [
+            m
+            for m in medidas
+            if 0 < m["bbox"].y0 - linha["y"] <= DISTANCIA_LINHA_ACIMA_PT
+            and m["bbox"].x1 > linha["x0"]
+            and m["bbox"].x0 < linha["x1"]
+        ]
+        novos = [m["topo_novo"] for m in grupo if m["topo_novo"] is not None]
+        if not grupo or not novos:
+            continue
+        delta = min(novos) - min(m["topo_original"] for m in grupo)
+        if abs(delta) < 0.3:
+            continue
+        if not _deslocar_no_conteudo(doc, page, linha, delta):
+            redesenhar.append((linha, delta))
+    for linha, delta in redesenhar:
+        # Sem achar o fio no conteúdo: apaga só ele e desenha no lugar novo.
+        page.add_redact_annot(fitz.Rect(linha["rect"]) + (-0.6, -0.6, 0.6, 0.6), fill=False)
+    if redesenhar:
+        page.apply_redactions(
+            images=fitz.PDF_REDACT_IMAGE_NONE,
+            graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
+            text=fitz.PDF_REDACT_TEXT_NONE,
+        )
+        for linha, delta in redesenhar:
+            y = altura_pg - (linha["y"] + delta)
+            if linha["tipo"] == "l":
+                ops.append(
+                    f"q {_cor_rgb(linha['cor'])} RG {linha['largura']:.4f} w "
+                    f"{linha['x0']:.4f} {y:.4f} m {linha['x1']:.4f} {y:.4f} l S Q"
+                )
+            else:
+                h = linha["largura"]
+                ops.append(
+                    f"q {_cor_rgb(linha['cor'])} rg {linha['x0']:.4f} {y - h / 2:.4f} "
+                    f"{linha['x1'] - linha['x0']:.4f} {h:.4f} re f Q"
+                )
+    return ops
+
+
 def renderizar(
     pdf_modelo: Any,
     campos: list[dict[str, Any]],
@@ -993,18 +1191,24 @@ def renderizar(
     doc = _abrir(pdf_modelo)
     try:
         por_pagina: dict[int, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+        linhas_por_pagina: dict[int, list[dict[str, Any]]] = {}
         for pidx, page in enumerate(doc):
             fontes_pg = {
                 _nome_sem_subconjunto(f[3]): (f[0], f[4]) for f in page.get_fonts(full=True)
             }
             cores = _cores_por_trecho(page)
             originais = cores_originais_por_texto(doc, page)
-            def _campos_do_texto(texto: str, pagina: int = pidx + 1) -> list[dict[str, Any]]:
+            def _da_pagina(c: dict[str, Any], pagina: int = pidx + 1) -> bool:
+                return not (c.get("pagina") and int(c["pagina"]) != pagina)
+
+            # Textos juntados a outro campo não são campos por si.
+            juntados_pg = {m for c in campos if _da_pagina(c) for m in c.get("juntar") or []}
+
+            def _campos_do_texto(texto: str) -> list[dict[str, Any]]:
                 return [
                     c
                     for c in campos
-                    if c["marcador"] == texto
-                    and not (c.get("pagina") and int(c["pagina"]) != pagina)
+                    if c["marcador"] == texto and _da_pagina(c) and texto not in juntados_pg
                 ]
 
             def _alvo(
@@ -1031,13 +1235,18 @@ def renderizar(
                     "cor": originais.get(texto)
                     or originais.get(_texto_span(base).strip())
                     or _cor_do_span(cores, base["bbox"]),
+                    "topo_y": float(base["origin"][1]),
                 }
 
+            extras_pg: dict[str, dict[str, Any]] = {}
             for bloco in page.get_text("rawdict")["blocks"]:
                 for linha in bloco.get("lines", []):
                     for grupo in agrupar_spans_da_linha(linha["spans"]):
                         texto = _texto_do_grupo(grupo)
                         if not texto:
+                            continue
+                        if texto in juntados_pg and texto not in extras_pg:
+                            extras_pg[texto] = _alvo(grupo, texto)
                             continue
                         ligados = _campos_do_texto(texto)
                         if ligados:
@@ -1058,6 +1267,15 @@ def renderizar(
                             alvo = _alvo([span], texto_span)
                             for campo in ligados_span:
                                 por_pagina.setdefault(pidx, []).append((campo, alvo))
+            # Campo com textos juntados: um alvo só, do primeiro ao último.
+            if extras_pg:
+                itens_pg = por_pagina.get(pidx, [])
+                for i, (campo, alvo) in enumerate(itens_pg):
+                    extras = [extras_pg[m] for m in campo.get("juntar") or [] if m in extras_pg]
+                    if extras:
+                        itens_pg[i] = (campo, _alvo_juntado(alvo, extras))
+            # Linhas horizontais finas (ex.: fio acima do rodapé), antes de mexer na página.
+            linhas_por_pagina[pidx] = _linhas_horizontais(page)
         if not por_pagina:
             if not exigir_campos:
                 return doc.tobytes(garbage=3, deflate=True)
@@ -1135,7 +1353,8 @@ def renderizar(
                 planos.append(
                     (campo, alvo, fonte, texto, ranges_negrito, fonte_bold, bold_xref, bold_recurso, editado)
                 )
-                page.add_redact_annot(alvo["bbox"], fill=False)
+                for caixa in alvo.get("bboxes") or [alvo["bbox"]]:
+                    page.add_redact_annot(caixa, fill=False)
             page.apply_redactions(
                 images=fitz.PDF_REDACT_IMAGE_NONE,
                 graphics=fitz.PDF_REDACT_LINE_ART_NONE,
@@ -1147,9 +1366,17 @@ def renderizar(
                     garantir_recurso_fonte(doc, page, bold_recurso, bold_xref)
 
             ops = ["q"]
+            # Topo do texto (estimado pela linha de base) antes e depois, por campo.
+            medidas: list[dict[str, Any]] = []
             for campo, alvo, fonte, texto, ranges_negrito, fonte_bold, _bx, bold_recurso, editado in planos:
                 bbox: fitz.Rect = alvo["bbox"]
                 area = fitz.Rect(bbox)
+                medida: dict[str, Any] = {
+                    "bbox": fitz.Rect(bbox),
+                    "topo_original": alvo["topo_y"] - alvo["tamanho"] * 0.85,
+                    "topo_novo": None,
+                }
+                medidas.append(medida)
                 regiao: Optional[dict[str, Any]] = None
                 if regioes is not None:
                     regiao = {
@@ -1209,6 +1436,9 @@ def renderizar(
                 entrelinha = tam * float(campo.get("entrelinha") or 1.2)
                 n = len(segs_linhas)
                 base_y = alvo["origem"].y
+                if ancora == "base" and alvo.get("origem_base") is not None:
+                    # Campo juntado: a última linha fica onde estava a última do modelo.
+                    base_y = alvo["origem_base"].y
                 for i, segs in enumerate(segs_linhas):
                     if ancora == "base":
                         y = base_y - (n - 1 - i) * entrelinha
@@ -1225,6 +1455,9 @@ def renderizar(
                         x = alvo["origem"].x
                     if w > 0:
                         area |= fitz.Rect(x, y - tam * 0.85, x + w, y + tam * 0.25)
+                        topo = y - tam * 0.85
+                        if medida["topo_novo"] is None or topo < medida["topo_novo"]:
+                            medida["topo_novo"] = topo
                     cursor = x
                     for trecho, negrito in segs:
                         if not trecho:
@@ -1242,6 +1475,11 @@ def renderizar(
                 if regiao is not None:
                     regiao["area"] = _area_relativa(area, largura_pg, altura_pg)
             ops.append("Q")
+            ops_linhas = _mover_linhas_acima(
+                doc, page, linhas_por_pagina.get(pidx) or [], medidas
+            )
+            if ops_linhas:
+                ops.extend(ops_linhas)
             page.wrap_contents()
             novo = doc.get_new_xref()
             doc.update_object(novo, "<<>>")

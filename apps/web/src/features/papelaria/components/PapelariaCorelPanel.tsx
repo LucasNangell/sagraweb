@@ -2186,8 +2186,12 @@ function formatCampoAlteracaoValor(value: string): string {
   return value.trim() || "—";
 }
 
-function fieldWidthClass(field: PapelariaField): string {
+function fieldWidthClass(
+  field: PapelariaField,
+  options?: { pairNomeGenero?: boolean },
+): string {
   if (field.type === "textarea") return "w-full";
+  const pairNomeGenero = options?.pairNomeGenero ?? false;
   switch (field.key) {
     case "uf":
       return "w-[4.75rem]";
@@ -2200,10 +2204,16 @@ function fieldWidthClass(field: PapelariaField): string {
     case "email":
       return "w-[13rem] max-w-full";
     case "genero":
-      return "min-w-[9.5rem] flex-1 basis-[12rem]";
+      // Com Nome na mesma linha: 1/3 (desconta o gap-x-2).
+      return pairNomeGenero
+        ? "w-[calc((100%-0.5rem)/3)]"
+        : "min-w-[9.5rem] flex-1 basis-[12rem]";
     case "nome_deputado":
     case "nome_assessor":
-      return "min-w-[11rem] flex-1 basis-[14rem]";
+      // Com Gênero na mesma linha: 2/3.
+      return pairNomeGenero
+        ? "w-[calc((100%-0.5rem)*2/3)]"
+        : "min-w-[11rem] flex-1 basis-[14rem]";
     default:
       return "min-w-[8rem] flex-1 basis-[10rem]";
   }
@@ -2286,6 +2296,11 @@ function DynamicFields({
     );
   }
 
+  const fieldKeys = new Set(fields.map((field) => field.key));
+  const pairNomeGenero =
+    fieldKeys.has("genero") &&
+    (fieldKeys.has("nome_deputado") || fieldKeys.has("nome_assessor"));
+
   return (
     <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
       {fields.map((field) => {
@@ -2305,7 +2320,7 @@ function DynamicFields({
             key={field.key}
             className={cn(
               "min-w-0 rounded-md border border-transparent px-0.5 py-0 transition-colors",
-              fieldWidthClass(field),
+              fieldWidthClass(field, { pairNomeGenero }),
               alteracao && "border-amber-200 bg-amber-50/40 px-1.5 py-1",
               isExcluded && "bg-neutral-50/70 opacity-70",
             )}

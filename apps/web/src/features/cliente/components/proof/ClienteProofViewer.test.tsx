@@ -1,10 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const orientacao = vi.hoisted(() => ({ lerOrientacaoPdf: vi.fn() }));
+vi.mock("@/lib/pdfOrientacao", () => orientacao);
+
 import { ClienteProofViewer } from "./ClienteProofViewer";
 
 describe("ClienteProofViewer", () => {
   beforeEach(() => {
+    orientacao.lerOrientacaoPdf.mockReset();
+    orientacao.lerOrientacaoPdf.mockResolvedValue(null);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -64,7 +69,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-fit&navpanes=0&pagemode=none",
+        "blob:mock-pdf#page=1&view=Fit&zoom=page-fit&navpanes=0&pagemode=none",
       );
     });
   });
@@ -83,7 +88,7 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-height&navpanes=0&pagemode=none",
+        "blob:mock-pdf#page=1&view=FitV&zoom=page-height&navpanes=0&pagemode=none",
       );
     });
   });
@@ -102,7 +107,45 @@ describe("ClienteProofViewer", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
         "src",
-        "blob:mock-pdf#page=1&zoom=page-width&navpanes=0&pagemode=none",
+        "blob:mock-pdf#page=1&view=FitH&zoom=page-width&navpanes=0&pagemode=none",
+      );
+    });
+  });
+
+  it("orientação lida do PDF vence o ajuste do produto", async () => {
+    orientacao.lerOrientacaoPdf.mockResolvedValue("paisagem");
+    render(
+      <ClienteProofViewer
+        pdfUrl="/sagra/api/client/proof/2026/5946/pdf?token=abc"
+        osLabel="5946/26"
+        hasPdf
+        fillHeight
+        pdfFit="height"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
+        "src",
+        "blob:mock-pdf#page=1&view=FitH&zoom=page-width&navpanes=0&pagemode=none",
+      );
+    });
+    expect(orientacao.lerOrientacaoPdf).toHaveBeenCalledWith("blob:mock-pdf");
+  });
+
+  it("PDF em pé abre ajustado à altura", async () => {
+    orientacao.lerOrientacaoPdf.mockResolvedValue("retrato");
+    render(
+      <ClienteProofViewer
+        pdfUrl="/sagra/api/client/proof/2026/5946/pdf?token=abc"
+        osLabel="5946/26"
+        hasPdf
+        fillHeight
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTitle("Prova 5946/26")).toHaveAttribute(
+        "src",
+        "blob:mock-pdf#page=1&view=FitV&zoom=page-height&navpanes=0&pagemode=none",
       );
     });
   });

@@ -114,3 +114,16 @@ describe("validateRequiredFields", () => {
   });
 });
 
+describe("papelariaProofPdfFit", () => {
+  it("orientação do PDF decide: retrato → altura, paisagem → largura", async () => {
+    const { papelariaProofPdfFit, papelariaProofPdfViewerSrc } = await import("./papelariaSession");
+    expect(papelariaProofPdfFit("Ct Visita", "paisagem")).toBe("FitH");
+    expect(papelariaProofPdfFit("Pasta Avulso c/ Bolso", "retrato")).toBe("FitV");
+    // Sem orientação lida: regra do produto.
+    expect(papelariaProofPdfFit("Pasta Avulso c/ Bolso", null)).toBe("FitH");
+    expect(papelariaProofPdfFit("Ct Visita", null)).toBe("FitV");
+    expect(papelariaProofPdfViewerSrc("/api/x.pdf#y", "Ct Visita", "paisagem")).toBe(
+      "/api/x.pdf#view=FitH&navpanes=0&pagemode=none",
+    );
+  });
+});

@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@sagra/ui";
 
 import { apiUrl } from "@/api/client";
+import { usePdfOrientacao } from "@/lib/pdfOrientacao";
 import {
   fetchPapelariaCorelModelo,
   fetchPapelariaJobPreviewPages,
@@ -29,6 +30,7 @@ import {
 import { extractProvaVersionFromFilename } from "@/features/email/utils/proofFilePicker";
 import {
   isPastaAvulsoProduct,
+  papelariaProofPdfFit,
   papelariaProofPdfViewerSrc,
 } from "../papelariaSession";
 import {
@@ -293,14 +295,19 @@ export function PapelariaProofPanel({
     !jobImposicaoPdfUrl && Boolean(folderImposicaoPdfUrl);
   const produtoParaPdf = produto || activeJob?.produto || "";
   const pastaAvulsoPdf = isPastaAvulsoProduct(produtoParaPdf);
-  const provaPdfViewerSrc = papelariaProofPdfViewerSrc(
-    provaPdfUrl,
-    produtoParaPdf,
+  // Orientação real da página 1: retrato abre pela altura, paisagem pela largura.
+  const provaOrientacao = usePdfOrientacao(viewMode === "prova" ? provaPdfUrl : null);
+  const imposicaoOrientacao = usePdfOrientacao(
+    viewMode === "imposicao" ? imposicaoPdfUrl : null,
   );
-  const imposicaoPdfViewerSrc = papelariaProofPdfViewerSrc(
-    imposicaoPdfUrl,
-    produtoParaPdf,
-  );
+  const provaAjuste = papelariaProofPdfFit(produtoParaPdf, provaOrientacao.orientacao);
+  const imposicaoAjuste = papelariaProofPdfFit(produtoParaPdf, imposicaoOrientacao.orientacao);
+  const provaPdfViewerSrc = provaOrientacao.pronta
+    ? papelariaProofPdfViewerSrc(provaPdfUrl, produtoParaPdf, provaOrientacao.orientacao)
+    : "";
+  const imposicaoPdfViewerSrc = imposicaoOrientacao.pronta
+    ? papelariaProofPdfViewerSrc(imposicaoPdfUrl, produtoParaPdf, imposicaoOrientacao.orientacao)
+    : "";
 
   const jobModeloQuery = useQuery({
     queryKey: queryKeys.papelaria.corelModelo(activeJob?.modelo_id ?? 0),
@@ -518,8 +525,8 @@ export function PapelariaProofPanel({
               <iframe
                 key={
                   jobImposicaoPdfUrl && activeJob
-                    ? `imp-${activeJob.id}-${activeJob.concluido_em ?? "pdf"}`
-                    : `imp-folder-${folderImposicaoLabel ?? imposicaoPdfUrl}`
+                    ? `imp-${activeJob.id}-${activeJob.concluido_em ?? "pdf"}-${imposicaoAjuste}`
+                    : `imp-folder-${folderImposicaoLabel ?? imposicaoPdfUrl}-${imposicaoAjuste}`
                 }
                 title={
                   jobImposicaoPdfUrl && activeJob
@@ -728,7 +735,7 @@ export function PapelariaProofPanel({
                     </span>
                   ) : (
                     <span className="font-normal normal-case tracking-normal text-neutral-400">
-                      {pastaAvulsoPdf ? "ajuste à largura" : "ajuste à altura"}
+                      {provaAjuste === "FitH" ? "ajuste à largura" : "ajuste à altura"}
                     </span>
                   )}
                 </h3>
@@ -755,8 +762,8 @@ export function PapelariaProofPanel({
             <iframe
               key={
                 showPdf && activeJob
-                  ? `${activeJob.id}-${provaDisplay?.fileLabel ?? "pdf"}-${activeJob.concluido_em ?? "pdf"}-${pastaAvulsoPdf ? "w" : "h"}`
-                  : `${folderProofLabel ?? provaPdfUrl}-${pastaAvulsoPdf ? "w" : "h"}`
+                  ? `${activeJob.id}-${provaDisplay?.fileLabel ?? "pdf"}-${activeJob.concluido_em ?? "pdf"}-${provaAjuste}`
+                  : `${folderProofLabel ?? provaPdfUrl}-${provaAjuste}`
               }
               title={
                 showPdf && activeJob

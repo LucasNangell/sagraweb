@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@sagra/ui";
 
+import { lerOrientacaoPdf, type PdfOrientacao } from "@/lib/pdfOrientacao";
+
 /** Ajuste do visualizador PDF embutido (Chrome/Edge PDFium). */
 export type PdfViewerFit = "height" | "width" | "page-fit";
 
@@ -14,7 +16,10 @@ interface ClienteProofViewerProps {
   arquivoNome?: string;
   /** Ocupa altura disponível do container (páginas de aprovação). */
   fillHeight?: boolean;
-  /** Retrato → altura; paisagem → largura. Só aplicado com fillHeight. */
+  /**
+   * Ajuste quando a orientação do PDF não pôde ser lida (retrato → altura;
+   * paisagem → largura). Só aplicado com fillHeight.
+   */
   pdfFit?: PdfViewerFit;
 }
 
@@ -34,14 +39,28 @@ async function loadPdfBlobUrl(pdfUrl: string): Promise<string> {
 /** Sem a coluna de miniaturas: `navpanes=0` (Chrome/Edge) e `pagemode=none` (Firefox). */
 const SEM_MINIATURAS = "navpanes=0&pagemode=none";
 
-/** URL do iframe — zoom nativo do visualizador PDF (Chrome/Edge), só a página. */
+/** Ajuste pela orientação real da página: retrato → altura; paisagem → largura. */
+export function ajustePorOrientacao(
+  orientacao: PdfOrientacao | null,
+  padrao: PdfViewerFit,
+): PdfViewerFit {
+  if (orientacao === "retrato") return "height";
+  if (orientacao === "paisagem") return "width";
+  return padrao;
+}
+
+/**
+ * URL do iframe, só a página: `view` (Chrome/Edge) e `zoom` (Firefox/pdf.js)
+ * com o mesmo ajuste.
+ */
 function pdfIframeSrc(blobUrl: string, fit: PdfViewerFit | null): string {
   if (!fit) {
     return `${blobUrl}#${SEM_MINIATURAS}`;
   }
+  const view = fit === "height" ? "FitV" : fit === "width" ? "FitH" : "Fit";
   const zoom =
     fit === "height" ? "page-height" : fit === "width" ? "page-width" : "page-fit";
-  return `${blobUrl}#page=1&zoom=${zoom}&${SEM_MINIATURAS}`;
+  return `${blobUrl}#page=1&view=${view}&zoom=${zoom}&${SEM_MINIATURAS}`;
 }
 
 export function ClienteProofViewer({
@@ -56,6 +75,25 @@ export function ClienteProofViewer({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
+  /** Orientação da página 1 (undefined = ainda lendo). */
+  const [orientacao, setOrientacao] = useState<PdfOrientacao | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!blobUrl || !fillHeight) {
+      setOrientacao(null);
+      return;
+    }
+    let cancelado = false;
+    setOrientacao(undefined);
+    lerOrientacaoPdf(blobUrl)
+      .catch(() => null)
+      .then((o) => {
+        if (!cancelado) setOrientacao(o);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [blobUrl, fillHeight]);
 
   useEffect(() => {
     if (!hasPdf || !pdfUrl) {
@@ -99,7 +137,8 @@ export function ClienteProofViewer({
     };
   }, [hasPdf, pdfUrl]);
 
-  const showLoading = Boolean(loading) || fetching;
+  const showLoading =
+    Boolean(loading) || fetching || (Boolean(blobUrl) && orientacao === undefined);
 
   if (showLoading) {
     return (
@@ -132,7 +171,7 @@ export function ClienteProofViewer({
   }
 
   const downloadName = arquivoNome || "prova.pdf";
-  const iframeFit = fillHeight ? pdfFit : null;
+  const iframeFit = fillHeight ? ajustePorOrientacao(orientacao ?? null, pdfFit) : null;
 
   return (
     <div

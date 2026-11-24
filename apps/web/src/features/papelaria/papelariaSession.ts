@@ -95,18 +95,33 @@ export function isPreImpressoImposicaoProduct(
 }
 
 /**
- * Fragmento do visualizador PDF embutido:
- * pastas avulso → FitH (largura); demais → FitV (altura).
- * Sem a coluna de miniaturas: `navpanes=0` (Chrome/Edge) e `pagemode=none` (Firefox).
+ * Ajuste do visualizador: página em pé (retrato) → pela altura (FitV);
+ * deitada (paisagem) → pela largura (FitH). Sem a orientação lida do PDF,
+ * vale a regra do produto (pastas avulso → largura; demais → altura).
+ */
+export function papelariaProofPdfFit(
+  product?: string | null,
+  orientacao?: "retrato" | "paisagem" | null,
+): "FitH" | "FitV" {
+  if (orientacao === "paisagem") return "FitH";
+  if (orientacao === "retrato") return "FitV";
+  return isPastaAvulsoProduct(product) ? "FitH" : "FitV";
+}
+
+/**
+ * Fragmento do visualizador PDF embutido, com o ajuste de
+ * {@link papelariaProofPdfFit} e sem a coluna de miniaturas:
+ * `navpanes=0` (Chrome/Edge) e `pagemode=none` (Firefox).
  */
 export function papelariaProofPdfViewerSrc(
   pdfUrl: string,
   product?: string | null,
+  orientacao?: "retrato" | "paisagem" | null,
 ): string {
   const raw = pdfUrl.trim();
   if (!raw) return "";
   const base = raw.split("#", 1)[0] ?? raw;
-  const fit = isPastaAvulsoProduct(product) ? "FitH" : "FitV";
+  const fit = papelariaProofPdfFit(product, orientacao);
   return `${base}#view=${fit}&navpanes=0&pagemode=none`;
 }
 

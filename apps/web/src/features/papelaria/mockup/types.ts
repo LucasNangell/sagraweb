@@ -52,6 +52,14 @@ export type PapelariaMockupBolsoConfig = {
   cortes?: Array<[number, number, number, number]>;
   /** Cor do papel do bolso (padrão: branco levemente sombreado). */
   cor?: string;
+  /** Tamanho real da face (mm), para o cartão manter a proporção. Padrão: 100 × 100. */
+  larguraMm?: number;
+  alturaMm?: number;
+  /**
+   * Cartão de visita genérico encaixado nas duas fendas (canto inferior
+   * esquerdo na fenda de baixo, superior direito na de cima).
+   */
+  cartao?: { larguraMm?: number; alturaMm?: number; texto?: string } | false;
 };
 
 export type PapelariaMockupFaceConfig = {

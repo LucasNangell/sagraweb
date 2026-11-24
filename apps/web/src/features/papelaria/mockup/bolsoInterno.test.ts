@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { aplicarBolsoPadrao, BOLSO_PASTA_AVULSO, produtoTemBolso, resolverBolso } from "./bolsoInterno";
+import {
+  aplicarBolsoPadrao,
+  BOLSO_PASTA_AVULSO,
+  encaixarCartao,
+  produtoTemBolso,
+  resolverBolso,
+} from "./bolsoInterno";
 import { getPapelariaMockupConfig } from "./getPapelariaMockupConfig";
 import type { PapelariaMockupConfig } from "./types";
 
@@ -73,5 +79,39 @@ describe("resolverBolso", () => {
   it("faca da pasta: duas fendas e boca subindo para a direita", () => {
     expect(BOLSO_PASTA_AVULSO.cortes).toHaveLength(2);
     expect(BOLSO_PASTA_AVULSO.contorno.startsWith("M 0 100")).toBe(true);
+  });
+});
+
+describe("encaixarCartao", () => {
+  const cortesMm = (BOLSO_PASTA_AVULSO.cortes ?? []).map(
+    ([x1, y1, x2, y2]) => [x1 * 2.2, y1 * 3.2, x2 * 2.2, y2 * 3.2] as [number, number, number, number],
+  );
+
+  it("cartão 90 × 50 quase reto, entre as duas fendas da pasta", () => {
+    const e = encaixarCartao(cortesMm, 90, 50)!;
+    expect(Math.abs(e.rotacaoGraus)).toBeLessThan(2);
+    expect(e.cx).toBeCloseTo(140.9, 0);
+    expect(e.cy).toBeCloseTo(274.7, 0);
+    // Canto inferior esquerdo some na fenda de baixo (normal para baixo/esquerda).
+    expect(e.fendas[0]!.canto[0]).toBeLessThan(0);
+    expect(e.fendas[0]!.canto[1]).toBeGreaterThan(0);
+  });
+
+  it("cantos escondidos cabem nas fendas (cateto ≈ 19 mm < fenda de 29 mm)", () => {
+    const e = encaixarCartao(cortesMm, 90, 50)!;
+    const rad = (e.rotacaoGraus * Math.PI) / 180;
+    const bl = [
+      e.cx + (-45 * Math.cos(rad) - 25 * Math.sin(rad)),
+      e.cy + (-45 * Math.sin(rad) + 25 * Math.cos(rad)),
+    ];
+    const [x1, y1, x2, y2] = cortesMm[1]!;
+    const meio = [(x1 + x2) / 2, (y1 + y2) / 2];
+    const entra = Math.hypot(bl[0]! - meio[0]!, bl[1]! - meio[1]!);
+    expect(entra).toBeGreaterThan(10);
+    expect(entra * Math.SQRT2).toBeLessThan(29);
+  });
+
+  it("sem duas fendas não encaixa", () => {
+    expect(encaixarCartao([cortesMm[0]!], 90, 50)).toBeNull();
   });
 });

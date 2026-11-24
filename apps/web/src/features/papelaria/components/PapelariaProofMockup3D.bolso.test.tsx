@@ -27,7 +27,10 @@ describe("PapelariaProofMockup3D — bolso interno", () => {
     );
     const bolso = screen.getByTestId("mockup-bolso");
     expect(bolso.closest("[title='Interior']")).not.toBeNull();
-    expect(bolso.querySelectorAll("line")).toHaveLength(2);
+    // Fendas como corte (sombra + brilho), não traço preto único.
+    expect(screen.getAllByTestId("mockup-bolso-corte")).toHaveLength(2);
+    // Cartão genérico encaixado nas fendas.
+    expect(screen.getByTestId("mockup-bolso-cartao")).toHaveTextContent("Cartão de Visita");
   });
 
   it("pasta s/ bolso não desenha bolso", () => {

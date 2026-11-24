@@ -17,7 +17,73 @@ export const BOLSO_PASTA_AVULSO: PapelariaMockupBolsoConfig = {
     [75.32, 77.65, 84.64, 84.06],
     [43.46, 87.63, 52.77, 94.04],
   ],
+  larguraMm: 220,
+  alturaMm: 320,
+  cartao: { larguraMm: 90, alturaMm: 50, texto: "Cartão de Visita" },
 };
+
+type Ponto = [number, number];
+
+/** Posição do cartão encaixado: centro e rotação (graus), em mm da face. */
+export type EncaixeCartao = {
+  cx: number;
+  cy: number;
+  rotacaoGraus: number;
+  largura: number;
+  altura: number;
+  /** Fendas em mm e a direção (unitária) para o lado do canto escondido. */
+  fendas: Array<{ a: Ponto; b: Ponto; canto: Ponto }>;
+};
+
+/**
+ * Encaixa um cartão L × A nas duas fendas: o canto inferior esquerdo entra na
+ * fenda de baixo e o superior direito na de cima, o mesmo tanto em cada uma.
+ * Resolve |(A − B) − 2t·n| = diagonal do cartão (n = normal da fenda, para
+ * fora do cartão) e gira o cartão para a diagonal coincidir.
+ */
+export function encaixarCartao(
+  cortesMm: Array<[number, number, number, number]>,
+  largura: number,
+  altura: number,
+): EncaixeCartao | null {
+  if (cortesMm.length < 2 || !(largura > 0) || !(altura > 0)) return null;
+  const meio = (c: [number, number, number, number]): Ponto => [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2];
+  const ordenados = [...cortesMm].sort((p, q) => meio(p)[1] - meio(q)[1]);
+  const cima = ordenados[0]!;
+  const baixo = ordenados[ordenados.length - 1]!;
+  const A = meio(cima);
+  const B = meio(baixo);
+  const dx = baixo[2] - baixo[0];
+  const dy = baixo[3] - baixo[1];
+  const len = Math.hypot(dx, dy);
+  if (!len) return null;
+  // Normal da fenda de baixo apontando para baixo/esquerda (canto do cartão).
+  let n: Ponto = [-dy / len, dx / len];
+  if (n[0] > 0 || (n[0] === 0 && n[1] < 0)) n = [-n[0], -n[1]];
+  const ax = A[0] - B[0];
+  const ay = A[1] - B[1];
+  const diag = Math.hypot(largura, altura);
+  const a = 4 * (n[0] ** 2 + n[1] ** 2);
+  const b = -4 * (ax * n[0] + ay * n[1]);
+  const c = ax * ax + ay * ay - diag * diag;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  const t = (-b + Math.sqrt(disc)) / (2 * a);
+  const bl: Ponto = [B[0] + t * n[0], B[1] + t * n[1]];
+  const tr: Ponto = [A[0] - t * n[0], A[1] - t * n[1]];
+  const rot = Math.atan2(tr[1] - bl[1], tr[0] - bl[0]) - Math.atan2(-altura, largura);
+  return {
+    cx: (bl[0] + tr[0]) / 2,
+    cy: (bl[1] + tr[1]) / 2,
+    rotacaoGraus: (rot * 180) / Math.PI,
+    largura,
+    altura,
+    fendas: [
+      { a: [baixo[0], baixo[1]], b: [baixo[2], baixo[3]], canto: n },
+      { a: [cima[0], cima[1]], b: [cima[2], cima[3]], canto: [-n[0], -n[1]] },
+    ],
+  };
+}
 
 const BOLSOS_PADRAO: Record<string, PapelariaMockupBolsoConfig> = {
   pasta_avulso: BOLSO_PASTA_AVULSO,

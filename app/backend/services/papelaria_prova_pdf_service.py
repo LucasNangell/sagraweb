@@ -1853,49 +1853,76 @@ def renderizar_base_repeticao(
             regioes.append({**r, "modelo_id": MODELO_ID_REPETICAO, "pagina_saida": int(r["pagina"]) - 1})
     editados = len(locais)
 
-    composicao = composicao_do_job({"dados": brutos})
-    with fitz.open(stream=conteudo, filetype="pdf") as doc_base:
-        so_frente = doc_base.page_count == 1
-    if not (so_frente and composicao):
+    from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
+
+    try:
+        composicao = normalizar_composicao(brutos.get("__composicao"), permitir_repeticao=True)
+    except ComposicaoError:
+        composicao = None
+    if composicao is None:
         return conteudo, editados
 
-    # Verso do modelo escolhido (a OS antiga não tinha verso).
+    # Frente e verso montados face a face: da base da repetição (modelo 0) ou
+    # de um modelo escolhido na lista (com os dados do formulário).
     from services.papelaria_corel_dados_service import preparar_dados
     from services import papelaria_models_service as models_svc
 
-    vm, vp = int(composicao["verso"]["modelo_id"]), int(composicao["verso"]["pagina"])
-    pdf_v = caminho_pdf(vm)
-    if not pdf_v.is_file():
-        raise ProvaPdfError("O modelo do verso não tem PDF configurado.")
-    modelo_v = models_svc.get_modelo_by_id(vm) or {}
-    dados_v = preparar_dados({k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo_v)
-    campos_v = [
-        c
-        for c in carregar_config(vm).get("campos") or []
-        if c.get("template") and int(c.get("pagina") or 0) in (0, vp)
-    ]
-    prefixo_v = f"{vm}:"
-    textos_v = {k[len(prefixo_v):]: v for k, v in textos.items() if k.startswith(prefixo_v)}
-    regioes_v: list[dict[str, Any]] = []
-    verso = (
-        renderizar(pdf_v, campos_v, dados_v, avisos=avisos, exigir_campos=False, textos=textos_v, regioes=regioes_v)
-        if campos_v
-        else pdf_v.read_bytes()
-    )
-    verso = _aplicar_redes(
-        vm, verso, selecao_redes_dos_dados(brutos), avisos, estilo=estilo_redes_dos_dados(brutos)
-    )
-    final = fitz.open(stream=conteudo, filetype="pdf")
+    if regioes is not None:
+        regioes.clear()
+    final = fitz.open()
     try:
-        with fitz.open(stream=verso, filetype="pdf") as src:
-            if vp > src.page_count:
-                raise ProvaPdfError(f"O PDF do modelo do verso não tem a página {vp}.")
-            final.insert_pdf(src, from_page=vp - 1, to_page=vp - 1)
-        if regioes is not None:
-            for r in regioes_v:
-                if int(r["pagina"]) == vp:
-                    regioes.append({**r, "modelo_id": vm, "pagina_saida": 1})
-        return final.tobytes(garbage=3, deflate=True), editados + len(textos_v)
+        with fitz.open(stream=conteudo, filetype="pdf") as doc_base:
+            for saida, face in enumerate(("frente", "verso")):
+                mid, pag = int(composicao[face]["modelo_id"]), int(composicao[face]["pagina"])
+                if mid == MODELO_ID_REPETICAO:
+                    if pag > doc_base.page_count:
+                        raise ProvaPdfError(
+                            "A OS repetida não tem "
+                            + ("frente" if face == "frente" else "verso")
+                            + " — escolha um modelo para essa face."
+                        )
+                    final.insert_pdf(doc_base, from_page=pag - 1, to_page=pag - 1)
+                    if regioes is not None:
+                        for r in regioes_base:
+                            if int(r["pagina"]) == pag:
+                                regioes.append({**r, "modelo_id": MODELO_ID_REPETICAO, "pagina_saida": saida})
+                    continue
+                pdf_m = caminho_pdf(mid)
+                if not pdf_m.is_file():
+                    raise ProvaPdfError(f"O modelo do {face} não tem PDF configurado.")
+                modelo_m = models_svc.get_modelo_by_id(mid) or {}
+                dados_m = preparar_dados(
+                    {k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo_m
+                )
+                campos_m = [
+                    c
+                    for c in carregar_config(mid).get("campos") or []
+                    if c.get("template") and int(c.get("pagina") or 0) in (0, pag)
+                ]
+                prefixo_m = f"{mid}:"
+                textos_m = {k[len(prefixo_m):]: v for k, v in textos.items() if k.startswith(prefixo_m)}
+                editados += len(textos_m)
+                regioes_m: list[dict[str, Any]] = []
+                parte = (
+                    renderizar(
+                        pdf_m, campos_m, dados_m, avisos=avisos, exigir_campos=False,
+                        textos=textos_m, regioes=regioes_m,
+                    )
+                    if campos_m
+                    else pdf_m.read_bytes()
+                )
+                parte = _aplicar_redes(
+                    mid, parte, selecao_redes_dos_dados(brutos), avisos, estilo=estilo_redes_dos_dados(brutos)
+                )
+                with fitz.open(stream=parte, filetype="pdf") as src:
+                    if pag > src.page_count:
+                        raise ProvaPdfError(f"O PDF do modelo do {face} não tem a página {pag}.")
+                    final.insert_pdf(src, from_page=pag - 1, to_page=pag - 1)
+                if regioes is not None:
+                    for r in regioes_m:
+                        if int(r["pagina"]) == pag:
+                            regioes.append({**r, "modelo_id": mid, "pagina_saida": saida})
+        return final.tobytes(garbage=3, deflate=True), editados
     finally:
         final.close()
 

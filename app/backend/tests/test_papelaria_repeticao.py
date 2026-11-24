@@ -217,7 +217,7 @@ def test_os_antiga_so_frente_recebe_verso_do_modelo(tmp_path, monkeypatch):
     pdf_svc.salvar_campos(9, [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_assessor}"}])
     monkeypatch.setattr(models_svc, "get_modelo_by_id", lambda mid: {"id": mid, "campos": {}})
 
-    comp = {"frente": {"modelo_id": 9, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}}
+    comp = {"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}}
     dados = {"__repeticao": "2026-6300", "__composicao": json.dumps(comp), "nome_assessor": "Joelson"}
     final, _ = pdf_svc.renderizar_pdf_final(1, dados, {})
     textos = _textos(final)
@@ -230,3 +230,41 @@ def test_os_antiga_so_frente_recebe_verso_do_modelo(tmp_path, monkeypatch):
     # Sem verso escolhido: só a frente.
     so_frente, _ = pdf_svc.renderizar_pdf_final(1, {"__repeticao": "2026-6300"}, {})
     assert len(_textos(so_frente)) == 1
+
+
+def test_frente_e_verso_misturam_repeticao_e_modelo(tmp_path, monkeypatch):
+    """Origem frente e verso: cada face vem da repetição (modelo 0) ou de um modelo."""
+    from services import papelaria_models_service as models_svc
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+    from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
+    from tests.test_papelaria_prova_pdf import _pdf_modelo
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    base, _ = rep.montar_base(_prova_a4(), (85, 50), 2)
+    campos, _ = rep.campos_editaveis(base)
+    pasta = rep._pasta_base(2026, 6301)
+    pasta.mkdir(parents=True)
+    rep.caminho_base(2026, 6301).write_bytes(base)
+    (pasta / "config.json").write_text(json.dumps({"campos": campos}), encoding="utf-8")
+    pdf_svc.salvar_pdf_modelo(9, filename="frente.pdf", content=_pdf_modelo())
+    pdf_svc.salvar_campos(9, [{"marcador": "NOMETITULAR", "pagina": 1, "template": "{nome_deputado}"}])
+    monkeypatch.setattr(models_svc, "get_modelo_by_id", lambda mid: {"id": mid, "campos": {}})
+
+    def render(comp):
+        dados = {"__repeticao": "2026-6301", "__composicao": json.dumps(comp), "nome_deputado": "Ana"}
+        return _textos(pdf_svc.renderizar_pdf_final(1, dados, {})[0])
+
+    # Frente do modelo + verso da repetição.
+    t = render({"frente": {"modelo_id": 9, "pagina": 1}, "verso": {"modelo_id": 0, "pagina": 2}})
+    assert "Ana" in t[0] and t[1] == ["Texto da Verso"]
+    # Frente da repetição + verso do modelo.
+    t = render({"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}})
+    assert t[0] == ["Texto da Frente"] and "Ana" in t[1]
+    # As duas da repetição.
+    t = render({"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 0, "pagina": 2}})
+    assert t == [["Texto da Frente"], ["Texto da Verso"]]
+    # Modelo 0 só vale com repetição.
+    with pytest.raises(ComposicaoError):
+        normalizar_composicao({"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}})
+

@@ -239,8 +239,14 @@ def remover_face(modelo_id: int, face: str) -> dict[str, Any]:
     return {"excluido": False, "modelo_id": int(modelo_id), "modelo": models_svc.get_modelo_by_id(int(modelo_id))}
 
 
-def normalizar_composicao(raw: Any) -> Optional[dict[str, dict[str, int]]]:
-    """Valida o formato {"frente": {"modelo_id", "pagina"}, "verso": {...}}."""
+def normalizar_composicao(
+    raw: Any, *, permitir_repeticao: bool = False
+) -> Optional[dict[str, dict[str, int]]]:
+    """
+    Valida o formato {"frente": {"modelo_id", "pagina"}, "verso": {...}}.
+    Com ``permitir_repeticao``, ``modelo_id`` 0 é a face da base da repetição
+    de SP (página 1 = Frente, 2 = Verso da prova antiga).
+    """
     if raw in (None, "", {}):
         return None
     if isinstance(raw, str):
@@ -260,23 +266,28 @@ def normalizar_composicao(raw: Any) -> Optional[dict[str, dict[str, int]]]:
             pagina = int(parte.get("pagina") or 0)
         except (TypeError, ValueError) as exc:
             raise ComposicaoError(f"Composição: {face} inválida.") from exc
-        if mid <= 0 or pagina <= 0:
+        if mid < 0 or (mid == 0 and not permitir_repeticao) or pagina <= 0:
             raise ComposicaoError(f"Composição: {face} inválida.")
         out[face] = {"modelo_id": mid, "pagina": pagina}
     return out
 
 
-def validar_composicao(raw: Any, modelo_base: dict[str, Any]) -> Optional[dict[str, dict[str, int]]]:
+def validar_composicao(
+    raw: Any, modelo_base: dict[str, Any], *, permitir_repeticao: bool = False
+) -> Optional[dict[str, dict[str, int]]]:
     """
     Confere se frente e verso pertencem ao recorte do modelo base, servem para
-    a face pedida e têm PDF do modelo configurado.
+    a face pedida e têm PDF do modelo configurado. Faces da repetição de SP
+    (``modelo_id`` 0) vêm da base da própria OS e não passam por aqui.
     """
-    comp = normalizar_composicao(raw)
+    comp = normalizar_composicao(raw, permitir_repeticao=permitir_repeticao)
     if comp is None:
         return None
     fontes = listar_fontes(modelo_base.get("produto") or "", modelo_base.get("cores") or "")
     for face in FACES:
         alvo = comp[face]
+        if alvo["modelo_id"] == 0:
+            continue
         achada = next(
             (
                 f
@@ -293,7 +304,7 @@ def validar_composicao(raw: Any, modelo_base: dict[str, Any]) -> Optional[dict[s
             raise ComposicaoError(
                 f"O {face} escolhido ({achada['rotulo']}) não tem PDF do modelo configurado."
             )
-    if comp[FACE_FRENTE]["modelo_id"] != int(modelo_base.get("id") or 0):
+    if comp[FACE_FRENTE]["modelo_id"] not in (0, int(modelo_base.get("id") or 0)):
         raise ComposicaoError("A frente da composição deve ser o modelo da prova.")
     return comp
 
@@ -301,7 +312,10 @@ def validar_composicao(raw: Any, modelo_base: dict[str, Any]) -> Optional[dict[s
 def composicao_do_job(job: dict[str, Any]) -> Optional[dict[str, dict[str, int]]]:
     """Composição gravada nos dados do job (ou None para o fluxo normal)."""
     try:
-        return normalizar_composicao((job.get("dados") or {}).get(COMPOSICAO_DADOS_KEY))
+        dados = job.get("dados") or {}
+        return normalizar_composicao(
+            dados.get(COMPOSICAO_DADOS_KEY), permitir_repeticao="__repeticao" in dados
+        )
     except ComposicaoError:
         logger.warning("Job %s: composição frente/verso inválida — ignorada.", job.get("id"))
         return None

@@ -341,7 +341,7 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
 
             try:
-                comp = normalizar_composicao(value)
+                comp = normalizar_composicao(value, permitir_repeticao="__repeticao" in dados)
             except ComposicaoError as exc:
                 raise ValueError(str(exc)) from exc
             if comp:
@@ -561,7 +561,9 @@ def create_job(
         if tipo_job != TIPO_JOB_CREATE or get_modo() != MODO_PROVA_PDF:
             raise ValueError("Frente e verso independentes exigem o modo de geração Prova PDF.")
         try:
-            comp = validar_composicao(dados_clean["__composicao"], modelo)
+            comp = validar_composicao(
+                dados_clean["__composicao"], modelo, permitir_repeticao="__repeticao" in dados_clean
+            )
         except ComposicaoError as exc:
             raise ValueError(str(exc)) from exc
         if comp is None:

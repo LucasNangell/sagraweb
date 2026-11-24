@@ -67,11 +67,18 @@ export function composicaoMantendoVerso(
   if (!inicial) return null;
   const valida = (lista: PapelariaFaceFonte[], r: PapelariaFaceRef | null | undefined) =>
     Boolean(r && lista.some((f) => f.tem_pdf && mesma(f, r)));
+  // Face da repetição de SP (modelo 0) fica até o usuário escolher outra.
+  const daRepeticao = (r: PapelariaFaceRef | null | undefined) => r?.modelo_id === 0;
   const frente =
-    anterior && anterior.frente.modelo_id === modeloId && valida(faces.frente, anterior.frente)
+    anterior &&
+    (daRepeticao(anterior.frente) ||
+      (anterior.frente.modelo_id === modeloId && valida(faces.frente, anterior.frente)))
       ? anterior.frente
       : inicial.frente;
-  const verso = anterior && valida(faces.verso, anterior.verso) ? anterior.verso : inicial.verso;
+  const verso =
+    anterior && (daRepeticao(anterior.verso) || valida(faces.verso, anterior.verso))
+      ? anterior.verso
+      : inicial.verso;
   return { frente, verso };
 }
 

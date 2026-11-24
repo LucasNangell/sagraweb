@@ -325,10 +325,38 @@ export function PapelariaCorelPanel({
   );
   const modelosExtrasIds = useMemo(() => {
     if (!composicao) return [];
+    // Modelo 0 = face da repetição de SP (não é um modelo do cadastro).
     return [...new Set([composicao.frente.modelo_id, composicao.verso.modelo_id])].filter(
-      (id) => id !== selectedModelId,
+      (id) => id !== selectedModelId && id !== 0,
     );
   }, [composicao, selectedModelId]);
+  /** Repetição em uso: card único (só frente) ou alguma face da composição vinda dela. */
+  const repeticaoAtiva =
+    usarRepeticao ||
+    Boolean(composicao && (composicao.frente.modelo_id === 0 || composicao.verso.modelo_id === 0));
+  const repeticaoAmbasFaces = Boolean(
+    composicao && composicao.frente.modelo_id === 0 && composicao.verso.modelo_id === 0,
+  );
+  // Origem frente e verso: a composição abre com as faces da repetição.
+  const repeticaoComposicaoAplicada = useRef(false);
+  useEffect(() => {
+    if (repeticaoComposicaoAplicada.current) return;
+    const ctx = contextQuery.data;
+    const base = ctx?.repeticao?.base;
+    if (!base || ctx?.cliente_alteracao || !composicao) return;
+    repeticaoComposicaoAplicada.current = true;
+    const faces = (base.faces ?? []).map((f) => f.face);
+    setUsarRepeticao(false);
+    setComposicao((c) =>
+      c
+        ? {
+            frente: faces.includes("frente") ? { modelo_id: 0, pagina: 1 } : c.frente,
+            verso: faces.includes("verso") ? { modelo_id: 0, pagina: 2 } : c.verso,
+          }
+        : c,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextQuery.data, composicao]);
   const modelosExtrasQueries = useQueries({
     queries: modelosExtrasIds.map((id) => ({
       queryKey: queryKeys.papelaria.corelModelo(id),
@@ -775,14 +803,12 @@ export function PapelariaCorelPanel({
     if (ctx.repeticao?.base && !ctx.cliente_alteracao) setUsarRepeticao(true);
   }, [contextQuery.data]);
 
-  /** OS antiga só frente: a base é a Frente e o Verso vem de um modelo. */
-  const repeticaoSoFrente = (contextQuery.data?.repeticao?.base?.faces?.length ?? 0) === 1;
-
   const replicarMutation = useMutation({
     mutationFn: (origem: { ano: number; nro: number } | null) => replicarSp(anoNum, nroNum, origem),
     onSuccess: () => {
       setTextosEditados({});
       setUsarRepeticao(true);
+      repeticaoComposicaoAplicada.current = false;
       setViewMode("previa");
       void queryClient.invalidateQueries({ queryKey: ["papelaria-repeticao"] });
       void contextQuery.refetch();
@@ -885,10 +911,12 @@ export function PapelariaCorelPanel({
   /** Frente escolhida na lista: troca o modelo (se for outro) e mantém o verso. */
   const handleSelectFrente = (fonte: PapelariaFaceFonte) => {
     const ref = { modelo_id: fonte.modelo_id, pagina: fonte.pagina };
-    if (fonte.modelo_id === selectedModelId) {
+    // Frente da repetição (modelo 0) ou do próprio modelo: só troca a face.
+    if (fonte.modelo_id === 0 || fonte.modelo_id === selectedModelId) {
       setComposicao((c) => (c ? { ...c, frente: ref } : c));
       return;
     }
+    setComposicao((c) => (c ? { ...c, frente: ref } : c));
     handleSelectModel({ id: fonte.modelo_id });
   };
 
@@ -1016,7 +1044,7 @@ export function PapelariaCorelPanel({
 
   const validateFormForAction = (): boolean => {
     if (!selectedModelId) return false;
-    if (usarRepeticao) {
+    if (repeticaoAmbasFaces || usarRepeticao) {
       // Repetição: os textos vêm da prova antiga (editados na prévia).
       setFormError(null);
       return true;
@@ -1075,13 +1103,13 @@ export function PapelariaCorelPanel({
     }
     const textos = textosParaDados(textosEditados);
     if (textos) base[TEXTOS_DADOS_KEY] = textos;
-    if (usarRepeticao) {
-      // Repetição de SP: a prova sai da base recortada da prova antiga.
-      // A composição só vale para o verso quando a OS antiga era só frente.
+    if (repeticaoAtiva) {
+      // Repetição de SP: a prova sai da base recortada da prova antiga; cada
+      // face da composição vem dela (modelo 0) ou de um modelo escolhido.
       base[REPETICAO_DADOS_KEY] = `${anoNum}-${nroNum}`;
     }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, usarRepeticao]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, repeticaoAtiva]);
 
   const valoresPrevia = useMemo(() => {
     const textos = textosParaDados(textosEditados);
@@ -1103,7 +1131,7 @@ export function PapelariaCorelPanel({
     Boolean(modelDetailQuery.data?.tem_prova_pdf) ||
     provaPdfServidor ||
     Boolean(composicao) ||
-    usarRepeticao;
+    repeticaoAtiva;
 
   const camposEditaveisPrevia = useMemo(
     () => new Set((camposFormulario ?? []).map((f) => f.key)),
@@ -1174,7 +1202,7 @@ export function PapelariaCorelPanel({
       modelo_id:
         gerarCorel && !temProvaPdfModelo
           ? selectedModelId
-          : (composicao?.frente.modelo_id ?? selectedModelId),
+          : (composicao?.frente.modelo_id || selectedModelId),
       dados,
       lancar_andamento: lancarAndamento,
       manter_dados_corel: manterDadosCorelRef.current,
@@ -1827,7 +1855,7 @@ export function PapelariaCorelPanel({
                     </h2>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-                    {usarRepeticao && !repeticaoSoFrente ? (
+                    {usarRepeticao || repeticaoAmbasFaces ? (
                       <p className="p-4 text-center text-xs text-neutral-500" data-testid="papelaria-repeticao-aviso-campos">
                         Repetição da SP {contextQuery.data?.repeticao?.rotulo ?? ""}: os textos vêm da prova
                         antiga — clique neles na prévia para editar.
@@ -2080,7 +2108,7 @@ export function PapelariaCorelPanel({
             onEditarTextoPrevia={handleEditarTextoPrevia}
             onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
             provaStatus={contextQuery.data?.prova_status ?? null}
-            previaRepeticao={usarRepeticao ? { ano: anoNum, nro: nroNum } : null}
+            previaRepeticao={repeticaoAtiva ? { ano: anoNum, nro: nroNum } : null}
             topoPrevia={
               clienteAlteracaoPendente ? (
                 <PapelariaAlteracoesCliente
@@ -2132,8 +2160,7 @@ export function PapelariaCorelPanel({
                       handleSelectFrente(f);
                     }}
                     onSelectVerso={(f) => {
-                      // Repetição só frente: o verso escolhido completa a base.
-                      if (!(usarRepeticao && repeticaoSoFrente)) setUsarRepeticao(false);
+                      setUsarRepeticao(false);
                       handleSelectVerso(f);
                     }}
                     repeticao={
@@ -2141,7 +2168,9 @@ export function PapelariaCorelPanel({
                         ? {
                             rotulo: contextQuery.data.repeticao.rotulo ?? "",
                             ativo: usarRepeticao,
-                            versoLivre: repeticaoSoFrente,
+                            faces: (contextQuery.data.repeticao.base.faces ?? []).map(
+                              (f) => f.face as "frente" | "verso",
+                            ),
                             onSelect: () => {
                               setUsarRepeticao(true);
                               setTextosEditados({});

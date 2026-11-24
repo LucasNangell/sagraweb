@@ -92,3 +92,62 @@ describe("PapelariaModelosLista — repetição", () => {
     expect(screen.getByTestId("papelaria-modelo-15")).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("Repetição frente e verso nas listas", () => {
+  const faces = {
+    disponivel: true,
+    frente: [{ modelo_id: 15, pagina: 1, rotulo: "Ct Visita F", tem_pdf: true }],
+    verso: [{ modelo_id: 28, pagina: 1, rotulo: "Verso assessor", tem_pdf: true }],
+    padrao: { frente: null, verso: null },
+  } as never;
+
+  it("Repetição — Frente e Repetição — Verso; escolher manda a face da repetição (modelo 0)", () => {
+    const onSelectFrente = vi.fn();
+    const onSelectVerso = vi.fn();
+    render(
+      <PapelariaModelosLista
+        modelos={[]}
+        selectedModelId={15}
+        onSelectModel={vi.fn()}
+        faces={faces}
+        composicao={{ frente: { modelo_id: 0, pagina: 1 }, verso: { modelo_id: 28, pagina: 1 } }}
+        onSelectFrente={onSelectFrente}
+        onSelectVerso={onSelectVerso}
+        repeticao={{ rotulo: "6254/26", ativo: false, onSelect: vi.fn(), faces: ["frente", "verso"] }}
+      />,
+    );
+    expect(screen.getByTestId("papelaria-frente-repeticao")).toHaveTextContent("Repetição da SP 6254/26 — Frente");
+    expect(screen.getByTestId("papelaria-frente-repeticao")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("papelaria-frente-15")).toHaveAttribute("aria-pressed", "false");
+    // Verso do modelo escolhido junto com a frente da repetição.
+    expect(screen.getByTestId("papelaria-verso-28")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByTestId("papelaria-verso-repeticao"));
+    expect(onSelectVerso).toHaveBeenCalledWith(expect.objectContaining({ modelo_id: 0, pagina: 2 }));
+    fireEvent.click(screen.getByTestId("papelaria-frente-repeticao"));
+    expect(onSelectFrente).toHaveBeenCalledWith(expect.objectContaining({ modelo_id: 0, pagina: 1 }));
+  });
+
+  it("OS repetida só frente: não oferece Repetição — Verso", () => {
+    render(
+      <PapelariaModelosLista
+        modelos={[]}
+        selectedModelId={15}
+        onSelectModel={vi.fn()}
+        faces={faces}
+        composicao={{ frente: { modelo_id: 0, pagina: 1 }, verso: { modelo_id: 28, pagina: 1 } }}
+        repeticao={{ rotulo: "6254/26", ativo: false, onSelect: vi.fn(), faces: ["frente"] }}
+      />,
+    );
+    expect(screen.getByTestId("papelaria-frente-repeticao")).toBeInTheDocument();
+    expect(screen.queryByTestId("papelaria-verso-repeticao")).not.toBeInTheDocument();
+  });
+
+  it("a composição mantém as faces da repetição quando a lista recarrega", async () => {
+    const { composicaoMantendoVerso } = await import("./PapelariaFrenteVersoPicker");
+    const r = composicaoMantendoVerso(faces, 15, "auto", {
+      frente: { modelo_id: 0, pagina: 1 },
+      verso: { modelo_id: 0, pagina: 2 },
+    });
+    expect(r).toEqual({ frente: { modelo_id: 0, pagina: 1 }, verso: { modelo_id: 0, pagina: 2 } });
+  });
+});

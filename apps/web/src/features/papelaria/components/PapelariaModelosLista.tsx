@@ -49,6 +49,16 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
   );
 }
 
+/** Face da base da repetição de SP como opção da lista (modelo 0). */
+function faceDaRepeticao(pagina: 1 | 2, rotulo: string): PapelariaFaceFonte {
+  return {
+    modelo_id: 0,
+    pagina,
+    rotulo: `Repetição da SP ${rotulo} — ${pagina === 1 ? "Frente" : "Verso"}`,
+    tem_pdf: true,
+  } as PapelariaFaceFonte;
+}
+
 /** Subtítulo do cabeçalho da lista. */
 export function resumoListaModelos(
   modelos: PapelariaCorelModelSummary[],
@@ -88,10 +98,11 @@ export function PapelariaModelosLista({
   /** Repetição de SP: base recortada da prova antiga, no topo da lista. */
   repeticao?: {
     rotulo: string;
+    /** Produto só frente: card único da repetição escolhido. */
     ativo: boolean;
     onSelect: () => void;
-    /** OS antiga só frente: o verso continua escolhível (modelo) junto com a repetição. */
-    versoLivre?: boolean;
+    /** Faces que a OS repetida tem (frente e verso viram opções nas listas). */
+    faces?: Array<"frente" | "verso">;
   } | null;
 }) {
   // Com a repetição escolhida, nenhum modelo aparece selecionado.
@@ -111,24 +122,39 @@ export function PapelariaModelosLista({
     const versos = faces.verso.filter((f) => f.tem_pdf);
     return (
       <div className="space-y-3" data-testid="papelaria-lista-frentes-versos">
-        {cardRepeticao}
         <Secao titulo="Frentes">
+          {repeticao?.faces?.includes("frente") ? (
+            <CardModelo
+              nome={`Repetição da SP ${repeticao.rotulo} — Frente`}
+              ativo={composicao.frente.modelo_id === 0}
+              onClick={() => onSelectFrente?.(faceDaRepeticao(1, repeticao.rotulo))}
+              testId="papelaria-frente-repeticao"
+            />
+          ) : null}
           {frentes.map((f) => (
             <CardModelo
               key={`f-${f.modelo_id}-${f.pagina}`}
               nome={f.rotulo}
-              ativo={outrosAtivos && mesma(composicao.frente, f)}
+              ativo={mesma(composicao.frente, f)}
               onClick={() => onSelectFrente?.(f)}
               testId={`papelaria-frente-${f.modelo_id}`}
             />
           ))}
         </Secao>
         <Secao titulo="Versos">
+          {repeticao?.faces?.includes("verso") ? (
+            <CardModelo
+              nome={`Repetição da SP ${repeticao.rotulo} — Verso`}
+              ativo={composicao.verso.modelo_id === 0}
+              onClick={() => onSelectVerso?.(faceDaRepeticao(2, repeticao.rotulo))}
+              testId="papelaria-verso-repeticao"
+            />
+          ) : null}
           {versos.map((f) => (
             <CardModelo
               key={`v-${f.modelo_id}-${f.pagina}`}
               nome={f.rotulo}
-              ativo={(outrosAtivos || Boolean(repeticao?.versoLivre)) && mesma(composicao.verso, f)}
+              ativo={mesma(composicao.verso, f)}
               onClick={() => onSelectVerso?.(f)}
               testId={`papelaria-verso-${f.modelo_id}`}
             />

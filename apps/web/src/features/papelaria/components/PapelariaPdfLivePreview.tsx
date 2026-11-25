@@ -85,6 +85,13 @@ export type MoverCampoExtraPayload = {
   y_pt: number;
 };
 
+/** Arraste de campo padrão do modelo → `__campos_estilo` x_pt/y_pt. */
+export type MoverCampoModeloPayload = {
+  chave: string;
+  x_pt: number;
+  y_pt: number;
+};
+
 const DRAG_THRESHOLD_PX = 4;
 const GUIDE_TOLERANCE_PX = 3;
 
@@ -94,7 +101,8 @@ const ZOOM_STEP = 0.25;
 
 type DragState = {
   chave: string;
-  extraId: string;
+  kind: "extra" | "modelo";
+  extraId?: string;
   pagina: number;
   startX: number;
   startY: number;
@@ -248,6 +256,7 @@ export function PapelariaPdfLivePreview({
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
   onMoverCampoExtra,
+  onMoverCampoModelo,
   extrasMeta,
 }: {
   modeloId: number;
@@ -271,6 +280,8 @@ export function PapelariaPdfLivePreview({
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
   onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
+  /** Arraste de campos padrão do modelo (posição em `__campos_estilo`). */
+  onMoverCampoModelo?: (payload: MoverCampoModeloPayload) => void;
   /** Metadados locais dos extras (align/tamanho/posição) para o editor. */
   extrasMeta?: Record<string, ExtraEditorMeta>;
 }) {
@@ -826,6 +837,7 @@ export function PapelariaPdfLivePreview({
                     {regioesPagina.map((r) => {
                       const isExtra =
                         r.tipo === "campo_extra" || r.tipo === "rede_extra";
+                      const isModeloPadrao = !isExtra && r.tipo !== "rede";
                       const extraId =
                         r.extra_id ?? (r.chave.startsWith("extra:") ? r.chave.slice(6) : null);
                       const area =
@@ -839,6 +851,11 @@ export function PapelariaPdfLivePreview({
                         extraId && conteudosOtimistas[extraId]
                           ? conteudosOtimistas[extraId]
                           : null;
+                      const podeArrastarExtra =
+                        isExtra && menuExtrasAtivo && Boolean(extraId) && Boolean(onMoverCampoExtra);
+                      const podeArrastarModelo =
+                        isModeloPadrao && editavel && Boolean(onMoverCampoModelo);
+                      const podeArrastar = podeArrastarExtra || podeArrastarModelo;
                       if (bloqueada) {
                         return (
                           <div
@@ -854,18 +871,22 @@ export function PapelariaPdfLivePreview({
                       const botaoProps = {
                         type: "button" as const,
                         "aria-label": `Editar texto: ${r.texto || r.marcador}`,
-                        title: menuExtrasAtivo
-                          ? isExtra
-                            ? "Arraste para mover · clique para editar · botão direito para opções"
-                            : "Clique para editar · botão direito para campos extras"
-                          : r.editado
-                            ? "Texto editado — clique para alterar"
-                            : "Clique para editar",
+                        title: podeArrastar
+                          ? menuExtrasAtivo
+                            ? isExtra
+                              ? "Arraste para mover · clique para editar · botão direito para opções"
+                              : "Arraste para mover · clique para editar · botão direito para campos extras"
+                            : "Arraste para mover · clique para editar"
+                          : menuExtrasAtivo
+                            ? "Clique para editar · botão direito para campos extras"
+                            : r.editado
+                              ? "Texto editado — clique para alterar"
+                              : "Clique para editar",
                         "data-testid": "papelaria-previa-regiao",
                         "data-editado": r.editado ? ("true" as const) : undefined,
                         className: cn(
                           "absolute rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
-                          isExtra && menuExtrasAtivo ? "cursor-grab active:cursor-grabbing" : "cursor-text",
+                          podeArrastar ? "cursor-grab active:cursor-grabbing" : "cursor-text",
                           arrastandoEsta && "z-20 cursor-grabbing",
                           outroArrasteAtivo && "pointer-events-none",
                           ativa
@@ -884,117 +905,123 @@ export function PapelariaPdfLivePreview({
                           }
                           setEditando(r.chave);
                         },
-                        onPointerDown:
-                          isExtra && menuExtrasAtivo && extraId && onMoverCampoExtra
-                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
-                                if (e.button !== 0) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Arraste e edição não convivem.
-                                setEditando(null);
-                                try {
-                                  e.currentTarget.setPointerCapture(e.pointerId);
-                                } catch {
-                                  /* jsdom / captura indisponível */
-                                }
-                                const orig = [...r.area] as AreaFrac;
-                                const align_h = r.align_h ?? "esquerda";
-                                const align_v = r.align_v ?? "topo";
-                                const metaExtra = extrasMeta?.[extraId];
-                                setDrag({
-                                  chave: r.chave,
-                                  extraId,
-                                  pagina: i,
-                                  startX: e.clientX,
-                                  startY: e.clientY,
-                                  orig,
-                                  cur: orig,
-                                  pageW: r.page_w || 595,
-                                  pageH: r.page_h || 842,
-                                  moved: false,
-                                  committed: false,
-                                  align_h: metaExtra?.align_h ?? align_h,
-                                  align_v: metaExtra?.align_v ?? align_v,
-                                  cropDataUrl: null,
-                                });
+                        onPointerDown: podeArrastar
+                          ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                              if (e.button !== 0) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              // Arraste e edição não convivem.
+                              setEditando(null);
+                              try {
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                              } catch {
+                                /* jsdom / captura indisponível */
                               }
-                            : undefined,
-                        onPointerMove:
-                          isExtra && menuExtrasAtivo
-                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
-                                setDrag((prev) => {
-                                  if (!prev || prev.chave !== r.chave || prev.committed) {
-                                    return prev;
-                                  }
-                                  const dxPx = e.clientX - prev.startX;
-                                  const dyPx = e.clientY - prev.startY;
-                                  const moved =
-                                    prev.moved ||
-                                    Math.hypot(dxPx, dyPx) >= DRAG_THRESHOLD_PX;
-                                  if (!moved) return prev;
-                                  e.stopPropagation();
-                                  const dx = dxPx / caixa.width;
-                                  const dy = dyPx / caixa.height;
-                                  const [a0, a1, a2, a3] = prev.orig;
-                                  const w = a2 - a0;
-                                  const h = a3 - a1;
-                                  let nx0 = a0 + dx;
-                                  let ny0 = a1 + dy;
-                                  nx0 = Math.max(0, Math.min(1 - w, nx0));
-                                  ny0 = Math.max(0, Math.min(1 - h, ny0));
-                                  const cur: AreaFrac = [nx0, ny0, nx0 + w, ny0 + h];
-                                  calcGuides(i, cur, r.chave, caixa);
-                                  let cropDataUrl = prev.cropDataUrl;
-                                  if (!cropDataUrl) {
-                                    const img = imgRefs.current[i];
-                                    if (img) {
-                                      const mascaras = regioesPagina
-                                        .filter((o) => o.chave !== r.chave)
-                                        .map((o) => o.area as AreaFrac)
-                                        .filter((a) => intersecaoAreaFrac(prev.orig, a));
-                                      cropDataUrl = cropRegiaoDaImagem(
-                                        img,
-                                        prev.orig,
-                                        mascaras,
-                                      );
-                                    }
-                                  }
-                                  return { ...prev, cur, moved: true, cropDataUrl };
-                                });
-                              }
-                            : undefined,
-                        onPointerUp:
-                          isExtra && menuExtrasAtivo
-                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
-                                try {
-                                  e.currentTarget.releasePointerCapture(e.pointerId);
-                                } catch {
-                                  /* ignore */
+                              const orig = [...r.area] as AreaFrac;
+                              const align_h = r.align_h ?? "esquerda";
+                              const align_v = r.align_v ?? "topo";
+                              const metaLocal =
+                                (extraId ? extrasMeta?.[extraId] : undefined) ??
+                                extrasMeta?.[r.chave];
+                              setDrag({
+                                chave: r.chave,
+                                kind: isExtra ? "extra" : "modelo",
+                                extraId: extraId ?? undefined,
+                                pagina: i,
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                orig,
+                                cur: orig,
+                                pageW: r.page_w || 595,
+                                pageH: r.page_h || 842,
+                                moved: false,
+                                committed: false,
+                                align_h: metaLocal?.align_h ?? align_h,
+                                align_v: metaLocal?.align_v ?? align_v,
+                                cropDataUrl: null,
+                              });
+                            }
+                          : undefined,
+                        onPointerMove: podeArrastar
+                          ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                              setDrag((prev) => {
+                                if (!prev || prev.chave !== r.chave || prev.committed) {
+                                  return prev;
                                 }
+                                const dxPx = e.clientX - prev.startX;
+                                const dyPx = e.clientY - prev.startY;
+                                const moved =
+                                  prev.moved ||
+                                  Math.hypot(dxPx, dyPx) >= DRAG_THRESHOLD_PX;
+                                if (!moved) return prev;
                                 e.stopPropagation();
-                                setDrag((prev) => {
-                                  if (!prev || prev.chave !== r.chave) return prev;
-                                  setGuides({ v: [], h: [] });
-                                  if (!prev.moved) return null;
-                                  if (onMoverCampoExtra) {
-                                    const ancora = ancoraPtDeAreaFrac(
-                                      prev.cur,
-                                      prev.pageW,
-                                      prev.pageH,
-                                      prev.align_h,
-                                      prev.align_v,
+                                const dx = dxPx / caixa.width;
+                                const dy = dyPx / caixa.height;
+                                const [a0, a1, a2, a3] = prev.orig;
+                                const w = a2 - a0;
+                                const h = a3 - a1;
+                                let nx0 = a0 + dx;
+                                let ny0 = a1 + dy;
+                                nx0 = Math.max(0, Math.min(1 - w, nx0));
+                                ny0 = Math.max(0, Math.min(1 - h, ny0));
+                                const cur: AreaFrac = [nx0, ny0, nx0 + w, ny0 + h];
+                                calcGuides(i, cur, r.chave, caixa);
+                                let cropDataUrl = prev.cropDataUrl;
+                                if (!cropDataUrl) {
+                                  const img = imgRefs.current[i];
+                                  if (img) {
+                                    const mascaras = regioesPagina
+                                      .filter((o) => o.chave !== r.chave)
+                                      .map((o) => o.area as AreaFrac)
+                                      .filter((a) => intersecaoAreaFrac(prev.orig, a));
+                                    cropDataUrl = cropRegiaoDaImagem(
+                                      img,
+                                      prev.orig,
+                                      mascaras,
                                     );
-                                    onMoverCampoExtra({
-                                      extraId: prev.extraId,
-                                      x_pt: ancora.x_pt,
-                                      y_pt: ancora.y_pt,
-                                    });
                                   }
-                                  // Mantém cur até !atualizando (sem snap-back).
-                                  return { ...prev, moved: true, committed: true };
-                                });
+                                }
+                                return { ...prev, cur, moved: true, cropDataUrl };
+                              });
+                            }
+                          : undefined,
+                        onPointerUp: podeArrastar
+                          ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                              try {
+                                e.currentTarget.releasePointerCapture(e.pointerId);
+                              } catch {
+                                /* ignore */
                               }
-                            : undefined,
+                              e.stopPropagation();
+                              setDrag((prev) => {
+                                if (!prev || prev.chave !== r.chave) return prev;
+                                setGuides({ v: [], h: [] });
+                                if (!prev.moved) return null;
+                                const ancora = ancoraPtDeAreaFrac(
+                                  prev.cur,
+                                  prev.pageW,
+                                  prev.pageH,
+                                  prev.align_h,
+                                  prev.align_v,
+                                );
+                                if (prev.kind === "extra" && prev.extraId && onMoverCampoExtra) {
+                                  onMoverCampoExtra({
+                                    extraId: prev.extraId,
+                                    x_pt: ancora.x_pt,
+                                    y_pt: ancora.y_pt,
+                                  });
+                                } else if (prev.kind === "modelo" && onMoverCampoModelo) {
+                                  onMoverCampoModelo({
+                                    chave: prev.chave,
+                                    x_pt: ancora.x_pt,
+                                    y_pt: ancora.y_pt,
+                                  });
+                                }
+                                // Mantém cur até !atualizando (sem snap-back).
+                                return { ...prev, moved: true, committed: true };
+                              });
+                            }
+                          : undefined,
                       };
                       const overlayOtimista =
                         otimista &&

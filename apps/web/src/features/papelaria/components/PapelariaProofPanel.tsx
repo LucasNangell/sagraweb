@@ -67,6 +67,7 @@ import {
   PapelariaPdfLivePreview,
   type AdicionarCampoExtraPayload,
   type MoverCampoExtraPayload,
+  type MoverCampoModeloPayload,
   type RedeCatalogoItem,
 } from "./PapelariaPdfLivePreview";
 import type { ExtraEditorMeta } from "./PapelariaTextoEditor";
@@ -128,6 +129,7 @@ type Props = {
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
   onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
+  onMoverCampoModelo?: (payload: MoverCampoModeloPayload) => void;
   extrasMeta?: Record<string, ExtraEditorMeta>;
   /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
   ladoEsquerdo?: ReactNode;
@@ -202,6 +204,7 @@ export function PapelariaProofPanel({
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
   onMoverCampoExtra,
+  onMoverCampoModelo,
   extrasMeta,
   ladoEsquerdo,
   provaStatus = null,
@@ -985,6 +988,7 @@ export function PapelariaProofPanel({
               onAdicionarCampoExtra={onAdicionarCampoExtra}
               onRemoverCampoExtra={onRemoverCampoExtra}
               onMoverCampoExtra={onMoverCampoExtra}
+              onMoverCampoModelo={onMoverCampoModelo}
               extrasMeta={extrasMeta}
               className="min-h-0 flex-1"
             />

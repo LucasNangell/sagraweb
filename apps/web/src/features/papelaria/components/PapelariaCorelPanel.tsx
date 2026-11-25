@@ -77,6 +77,7 @@ import {
 import type {
   AdicionarCampoExtraPayload,
   MoverCampoExtraPayload,
+  MoverCampoModeloPayload,
 } from "./PapelariaPdfLivePreview";
 import type { ExtraEditorMeta } from "./PapelariaTextoEditor";
 
@@ -1269,6 +1270,8 @@ export function PapelariaCorelPanel({
         tamanho_pt: est.tamanho_pt ?? map[chave]?.tamanho_pt,
         align_h: est.align_h ?? map[chave]?.align_h,
         align_v: est.align_v ?? map[chave]?.align_v,
+        x_pt: est.x_pt ?? map[chave]?.x_pt,
+        y_pt: est.y_pt ?? map[chave]?.y_pt,
       };
     }
     return map;
@@ -1352,9 +1355,12 @@ export function PapelariaCorelPanel({
         setCamposEstilo((prev) => ({
           ...prev,
           [regiao.chave]: {
-            tamanho_pt: meta.tamanho_pt ?? null,
-            align_h: meta.align_h,
-            align_v: meta.align_v,
+            ...(prev[regiao.chave] ?? {}),
+            tamanho_pt: meta.tamanho_pt ?? prev[regiao.chave]?.tamanho_pt ?? null,
+            align_h: meta.align_h ?? prev[regiao.chave]?.align_h,
+            align_v: meta.align_v ?? prev[regiao.chave]?.align_v,
+            ...(meta.x_pt !== undefined ? { x_pt: meta.x_pt } : {}),
+            ...(meta.y_pt !== undefined ? { y_pt: meta.y_pt } : {}),
           },
         }));
       }
@@ -1454,6 +1460,17 @@ export function PapelariaCorelPanel({
           : e,
       ),
     );
+  }, []);
+
+  const handleMoverCampoModelo = useCallback((payload: MoverCampoModeloPayload) => {
+    setCamposEstilo((prev) => ({
+      ...prev,
+      [payload.chave]: {
+        ...(prev[payload.chave] ?? {}),
+        x_pt: payload.x_pt,
+        y_pt: payload.y_pt,
+      },
+    }));
   }, []);
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
@@ -2386,6 +2403,7 @@ export function PapelariaCorelPanel({
             onAdicionarCampoExtra={handleAdicionarCampoExtra}
             onRemoverCampoExtra={handleRemoverCampoExtra}
             onMoverCampoExtra={handleMoverCampoExtra}
+            onMoverCampoModelo={handleMoverCampoModelo}
             extrasMeta={extrasMeta}
             provaStatus={contextQuery.data?.prova_status ?? null}
             previaRepeticao={repeticaoAtiva ? { ano: anoNum, nro: nroNum } : null}

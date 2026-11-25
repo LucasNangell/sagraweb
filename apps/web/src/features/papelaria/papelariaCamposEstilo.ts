@@ -8,7 +8,17 @@ export type CampoEstilo = {
   tamanho_pt?: number | null;
   align_h?: CampoExtraAlignH;
   align_v?: CampoExtraAlignV;
+  /** Âncora absoluta na página (pt), mesmo semântica dos extras. */
+  x_pt?: number | null;
+  y_pt?: number | null;
 };
+
+function coordEstilo(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < -5000 || n > 5000) return null;
+  return n;
+}
 
 export function camposEstiloParaDados(mapa: Record<string, CampoEstilo>): string | null {
   const limpo: Record<string, CampoEstilo> = {};
@@ -20,7 +30,19 @@ export function camposEstiloParaDados(mapa: Record<string, CampoEstilo>): string
     }
     if (est.align_h) entry.align_h = est.align_h;
     if (est.align_v) entry.align_v = est.align_v;
-    if (entry.tamanho_pt != null || entry.align_h || entry.align_v) limpo[chave] = entry;
+    const x = coordEstilo(est.x_pt);
+    const y = coordEstilo(est.y_pt);
+    if (x != null) entry.x_pt = x;
+    if (y != null) entry.y_pt = y;
+    if (
+      entry.tamanho_pt != null ||
+      entry.align_h ||
+      entry.align_v ||
+      entry.x_pt != null ||
+      entry.y_pt != null
+    ) {
+      limpo[chave] = entry;
+    }
   }
   return Object.keys(limpo).length ? JSON.stringify(limpo) : null;
 }
@@ -47,7 +69,19 @@ export function normalizarCamposEstilo(raw: unknown): Record<string, CampoEstilo
     if (ah === "esquerda" || ah === "centro" || ah === "direita") entry.align_h = ah;
     const av = String(v.align_v ?? "").toLowerCase();
     if (av === "topo" || av === "meio" || av === "base") entry.align_v = av;
-    if (entry.tamanho_pt != null || entry.align_h || entry.align_v) out[chave] = entry;
+    const x = coordEstilo(v.x_pt);
+    const y = coordEstilo(v.y_pt);
+    if (x != null) entry.x_pt = x;
+    if (y != null) entry.y_pt = y;
+    if (
+      entry.tamanho_pt != null ||
+      entry.align_h ||
+      entry.align_v ||
+      entry.x_pt != null ||
+      entry.y_pt != null
+    ) {
+      out[chave] = entry;
+    }
   }
   return out;
 }

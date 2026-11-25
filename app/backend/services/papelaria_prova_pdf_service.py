@@ -1096,9 +1096,12 @@ def _empilhar_grupos(layouts: list[dict[str, Any]], altura_pg: float) -> None:
     descem e/ou os de cima sobem conforme a âncora do grupo (topo: tudo desce;
     base: tudo sobe; centro: o meio do grupo fica onde estava). Campo vazio
     some com o espaço dele.
+    Campos com posição absoluta (``__campos_estilo`` x_pt/y_pt) ficam de fora.
     """
     grupos: dict[str, list[dict[str, Any]]] = {}
     for lay in layouts:
+        if lay.get("pos_abs"):
+            continue
         gid = lay["campo"].get("grupo")
         if gid:
             grupos.setdefault(str(gid), []).append(lay)
@@ -1580,6 +1583,10 @@ def renderizar(
                 regiao: Optional[dict[str, Any]] = None
                 chave_estilo = f"{pidx + 1}:{campo['marcador']}"
                 estilo_campo = (estilos or {}).get(chave_estilo) or {}
+                pos_abs = (
+                    estilo_campo.get("x_pt") is not None
+                    and estilo_campo.get("y_pt") is not None
+                )
                 if regioes is not None:
                     regiao = {
                         "pagina": pidx + 1,
@@ -1591,6 +1598,8 @@ def renderizar(
                         "editado": editado,
                         "bloquear_edicao": bool(campo.get("bloquear_edicao")),
                         "fonte": getattr(fonte, "nome", None),
+                        "page_w": largura_pg,
+                        "page_h": altura_pg,
                     }
                     regioes.append(regiao)
                 lay: dict[str, Any] = {
@@ -1604,6 +1613,7 @@ def renderizar(
                     "area": fitz.Rect(bbox),
                     "vazio": not texto,
                     "estilo": estilo_campo,
+                    "pos_abs": pos_abs,
                 }
                 layouts.append(lay)
                 if not texto:
@@ -1677,6 +1687,60 @@ def renderizar(
             # 2º passo: grupos empilhados — cada campo respeita os outros e o
             # alinhamento vertical (topo/centro/base) é do grupo.
             _empilhar_grupos(layouts, altura_pg)
+            # 2b: posição absoluta de `__campos_estilo` (arraste na prévia).
+            if any(lay.get("pos_abs") for lay in layouts):
+                from services.papelaria_campos_extras_service import _box_from_ancora
+
+                for lay in layouts:
+                    if not lay.get("pos_abs"):
+                        continue
+                    estilo_abs = lay.get("estilo") or {}
+                    try:
+                        ax = float(estilo_abs["x_pt"])
+                        ay = float(estilo_abs["y_pt"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    alinhar_abs = str(
+                        estilo_abs.get("align_h") or lay.get("alinhar") or "esquerda"
+                    )
+                    if alinhar_abs not in ("esquerda", "centro", "direita"):
+                        alinhar_abs = "esquerda"
+                    av_ui = "topo"
+                    if estilo_abs.get("align_v"):
+                        av_ui = str(estilo_abs["align_v"])
+                    elif lay.get("ancora"):
+                        av_ui = align_v_de_ancora(lay.get("ancora"))
+                    if av_ui not in ("topo", "meio", "base"):
+                        av_ui = "topo"
+                    tam_abs = float(lay.get("tam") or lay["alvo"]["tamanho"])
+                    entrelinha_abs = float(lay.get("entrelinha") or tam_abs * 1.2)
+                    segs_abs = lay.get("segs_linhas") or []
+                    n_abs = max(1, len(segs_abs)) if not lay.get("vazio") else 1
+                    fonte_abs = lay["fonte"]
+                    fonte_bold_abs = lay.get("fonte_bold")
+                    tc_abs = float(lay.get("tc") or 0.0)
+                    if lay.get("vazio") or not segs_abs:
+                        w_abs = max(8.0, float(lay["alvo"]["bbox"].width))
+                    else:
+                        w_abs = max(
+                            (
+                                _largura_segmentos(
+                                    segs, fonte_abs, fonte_bold_abs, tam_abs, tc_abs
+                                )
+                                for segs in segs_abs
+                            ),
+                            default=8.0,
+                        )
+                        w_abs = max(8.0, w_abs)
+                    h_abs = tam_abs * 1.1 + (n_abs - 1) * entrelinha_abs
+                    box_abs = _box_from_ancora(
+                        ax, ay, w_abs, h_abs, alinhar_abs, av_ui, largura_pg, altura_pg
+                    )
+                    lay["ancora"] = "topo"
+                    lay["alinhar"] = alinhar_abs
+                    lay["base_y"] = float(box_abs.y0) + tam_abs * 0.85
+                    lay["caixa_x"] = (float(box_abs.x0), float(box_abs.x1))
+                    lay["area"] = fitz.Rect(box_abs)
             # 3º passo: desenha.
             for lay in layouts:
                 if lay["vazio"]:
@@ -1759,6 +1823,8 @@ def renderizar(
                             "valores": {},
                             "editado": False,
                             "bloquear_edicao": bool(campo.get("bloquear_edicao")),
+                            "page_w": largura_pg,
+                            "page_h": altura_pg,
                             "area": _area_relativa(alvo["bbox"], largura_pg, altura_pg),
                         }
                     )

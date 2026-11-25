@@ -54,6 +54,16 @@ def normalizar_campos_estilo(raw: Any) -> dict[str, dict[str, Any]]:
             if av not in ALIGN_V:
                 raise CamposEstiloError("Alinhamento vertical de estilo inválido.")
             entry["align_v"] = av
+        for eixo in ("x_pt", "y_pt"):
+            if eixo not in valor or valor.get(eixo) in (None, ""):
+                continue
+            try:
+                coord = float(valor[eixo])
+            except (TypeError, ValueError) as exc:
+                raise CamposEstiloError("Posição de estilo inválida.") from exc
+            if not (-5000.0 <= coord <= 5000.0):
+                raise CamposEstiloError("Posição de estilo fora da faixa.")
+            entry[eixo] = coord
         if entry:
             out[f"{int(partes[0])}:{int(partes[1])}:{partes[2]}"] = entry
     return out

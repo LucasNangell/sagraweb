@@ -21,6 +21,16 @@ describe("papelariaCamposEstilo", () => {
     });
   });
 
+  it("serializa posição absoluta x_pt/y_pt", () => {
+    const raw = camposEstiloParaDados({
+      "7:1:NOME": { x_pt: 120.5, y_pt: 40 },
+    });
+    expect(normalizarCamposEstilo(raw)["7:1:NOME"]).toEqual({
+      x_pt: 120.5,
+      y_pt: 40,
+    });
+  });
+
   it("ignora tamanho fora da faixa", () => {
     expect(normalizarCamposEstilo({ "7:1:NOME": { tamanho_pt: 200 } })).toEqual({});
   });

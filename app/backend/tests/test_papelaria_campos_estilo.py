@@ -13,12 +13,16 @@ def test_normalizar_campos_estilo_ok():
                 "tamanho_pt": 14,
                 "align_h": "centro",
                 "align_v": "meio",
+                "x_pt": 100,
+                "y_pt": 50.5,
             }
         }
     )
     assert out["7:1:NOME"]["tamanho_pt"] == 14.0
     assert out["7:1:NOME"]["align_h"] == "centro"
     assert out["7:1:NOME"]["align_v"] == "meio"
+    assert out["7:1:NOME"]["x_pt"] == 100.0
+    assert out["7:1:NOME"]["y_pt"] == 50.5
 
 
 def test_normalizar_campos_estilo_rejeita_invalido():

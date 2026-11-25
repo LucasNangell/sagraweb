@@ -18,14 +18,17 @@ import { useMatchMedia } from "@/hooks/useMatchMedia";
 import {
   formatDimensionMm,
   formatProvaLabel,
-  resolveProductDimensionsMm,
+  resolveProofMockupDimensionsMm,
 } from "./resolveProductDimensionsMm";
+
+import { ClienteProofRelevoSecoBanner } from "./ClienteProofPortalExtras";
 
 /** Padding de .proof-mockup-root--portal-fit + faixas topo (Prova N) e base (dimensões). */
 const MOCKUP_ROOT_PAD_X = 32;
 const MOCKUP_ROOT_PAD_Y = 40;
 const MOCKUP_DIMENSIONS_BAND_PX = 28;
 const MOCKUP_PROVA_BAND_PX = 28;
+const MOCKUP_RELEVO_BAND_PX = 36;
 
 interface ClienteProofMockupPanelProps {
   previewData: ProofPreviewPagesData | undefined;
@@ -34,6 +37,8 @@ interface ClienteProofMockupPanelProps {
   produtoFallback?: string;
   /** Número/versão da prova (ex.: "1" → "Prova 1"). */
   versao?: string | number | null;
+  /** Exibe aviso de relevo seco abaixo da versão da prova. */
+  showRelevoSecoNotice?: boolean;
   fillHeight?: boolean;
   className?: string;
 }
@@ -42,6 +47,7 @@ type ReadyProps = {
   previewData: ProofPreviewPagesData;
   produtoFallback?: string;
   versao?: string | number | null;
+  showRelevoSecoNotice: boolean;
   fillHeight: boolean;
   className?: string;
 };
@@ -50,6 +56,7 @@ function ClienteProofMockupPanelReady({
   previewData,
   produtoFallback,
   versao,
+  showRelevoSecoNotice,
   fillHeight,
   className,
 }: ReadyProps) {
@@ -58,17 +65,18 @@ function ClienteProofMockupPanelReady({
   const [sceneBasePx, setSceneBasePx] = useState(PAPELARIA_MOCKUP_SCENE_BASE_PX);
 
   const pageUrls = proofPreviewPageUrls(previewData);
-  const mockupResolved = getPapelariaMockupConfig({
+  const mockupInput = {
     produto: previewData.produto || produtoFallback,
     arquivoModelo: previewData.arquivoModelo,
     frenteVerso: previewData.frenteVerso,
     pageCount: pageUrls.length,
     mockupConfigJson: previewData.mockupConfigJson,
-  });
+  };
+  const mockupResolved = getPapelariaMockupConfig(mockupInput);
 
   const foldOpen = mockupResolved.config.aberturaInicial ?? 0.35;
   const hasFold = configUsesFold(mockupResolved.config);
-  const { widthMm, heightMm } = resolveProductDimensionsMm(mockupResolved.config);
+  const { widthMm, heightMm } = resolveProofMockupDimensionsMm(mockupInput);
   const dimensionsLabel = `${formatDimensionMm(widthMm)} × ${formatDimensionMm(heightMm)} mm`;
   const provaLabel = formatProvaLabel(versao);
 
@@ -92,7 +100,8 @@ function ClienteProofMockupPanelReady({
       const verticalBands =
         MOCKUP_ROOT_PAD_Y +
         MOCKUP_DIMENSIONS_BAND_PX +
-        (provaLabel ? MOCKUP_PROVA_BAND_PX : 0);
+        (provaLabel ? MOCKUP_PROVA_BAND_PX : 0) +
+        (showRelevoSecoNotice ? MOCKUP_RELEVO_BAND_PX : 0);
       const fitted = resolveSceneBasePx(
         mockupResolved.config,
         hasFold ? foldOpen : 0,
@@ -107,7 +116,15 @@ function ClienteProofMockupPanelReady({
     const observer = new ResizeObserver(updateSize);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [fillHeight, mockupResolved.config, hasFold, foldOpen, isNarrowViewport, provaLabel]);
+  }, [
+    fillHeight,
+    mockupResolved.config,
+    hasFold,
+    foldOpen,
+    isNarrowViewport,
+    provaLabel,
+    showRelevoSecoNotice,
+  ]);
 
   return (
     <MockupPanelShell
@@ -116,6 +133,7 @@ function ClienteProofMockupPanelReady({
       stageRef={stageRef}
       dimensionsLabel={dimensionsLabel}
       provaLabel={provaLabel}
+      showRelevoSecoNotice={showRelevoSecoNotice}
     >
       <PapelariaProofMockup3D
         pages={pageUrls}
@@ -139,6 +157,7 @@ function MockupPanelShell({
   stageRef,
   dimensionsLabel,
   provaLabel,
+  showRelevoSecoNotice,
   children,
 }: {
   fillHeight: boolean;
@@ -146,6 +165,7 @@ function MockupPanelShell({
   stageRef: RefObject<HTMLDivElement | null>;
   dimensionsLabel?: string;
   provaLabel?: string | null;
+  showRelevoSecoNotice?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -168,14 +188,22 @@ function MockupPanelShell({
         )}
       >
         {children}
-        {provaLabel ? (
-          <p
-            data-tour="proof-mockup-prova"
-            className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-center px-3 pb-1 pt-2 text-center text-xs font-semibold tabular-nums tracking-wide text-secondary-blue"
-            aria-label={provaLabel}
+        {provaLabel || showRelevoSecoNotice ? (
+          <div
+            data-tour="proof-mockup-top-labels"
+            className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col items-center gap-0.5 px-3 pb-1 pt-2"
           >
-            {provaLabel}
-          </p>
+            {provaLabel ? (
+              <p
+                data-tour="proof-mockup-prova"
+                className="text-center text-xs font-semibold tabular-nums tracking-wide text-secondary-blue"
+                aria-label={provaLabel}
+              >
+                {provaLabel}
+              </p>
+            ) : null}
+            {showRelevoSecoNotice ? <ClienteProofRelevoSecoBanner /> : null}
+          </div>
         ) : null}
         {dimensionsLabel ? (
           <p
@@ -200,6 +228,7 @@ export function ClienteProofMockupPanel({
   isError,
   produtoFallback,
   versao,
+  showRelevoSecoNotice = false,
   fillHeight = false,
   className,
 }: ClienteProofMockupPanelProps) {
@@ -238,6 +267,7 @@ export function ClienteProofMockupPanel({
       previewData={previewData}
       produtoFallback={produtoFallback}
       versao={versao}
+      showRelevoSecoNotice={showRelevoSecoNotice}
       fillHeight={fillHeight}
       className={className}
     />

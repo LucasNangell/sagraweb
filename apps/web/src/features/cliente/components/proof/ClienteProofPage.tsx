@@ -24,14 +24,6 @@ import {
   textosParaDados,
 } from "@/features/papelaria/papelariaTextosEditados";
 import { REDES_DADOS_KEY, REDES_ESTILO_DADOS_KEY } from "@/features/papelaria/components/PapelariaRedesPicker";
-import {
-  hasSeenPortalAprovacaoAlteracoesTour,
-  hasSeenPortalAprovacaoTour,
-  PORTAL_APROVACAO_ALTERACOES_TOUR_ID,
-  PORTAL_APROVACAO_TOUR_ID,
-} from "@/features/guided-tour/tourSeen";
-import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
-
 import { ClienteProofActions } from "./ClienteProofActions";
 import { ClienteProofDecisionModal } from "./ClienteProofDecisionModal";
 import { ClienteProofFlipbookPanel } from "./ClienteProofFlipbookPanel";
@@ -40,9 +32,9 @@ import { ClienteProofPapelariaEditPanel } from "./ClienteProofPapelariaEditPanel
 import {
   ClienteProofAlteracoesDescriptionForm,
   ClienteProofExampleFileModal,
-  ClienteProofPortalInstructionBanner,
-  ClienteProofRelevoSecoBanner,
   isRelevoSecoCores,
+  PORTAL_ALTERACAO_CONFIRMACAO,
+  primeirosDoisNomes,
 } from "./ClienteProofPortalExtras";
 import {
   ClienteProofPontoInput,
@@ -215,8 +207,6 @@ export function ClienteProofPage({
     isRelevoSecoCores(papelaria?.cores ?? proofQuery.data?.cores);
   const hasEditableFields =
     Boolean(isPapelaria && (papelaria?.campos_formulario?.length ?? 0) > 0);
-  const portalTourStartedRef = useRef(false);
-  const portalAlteracoesTourStartedRef = useRef(false);
 
   const { pending: nomeLookupPending, lockNome: nomeLocked } = useProofGalNomeLookup({
     enabled: Boolean(publicPortal && token && osId && ano && !done),
@@ -227,64 +217,6 @@ export function ClienteProofPage({
     nomeCliente,
     onNomeChange: setNomeCliente,
   });
-
-  useEffect(() => {
-    if (!publicPortal || !proofQuery.data || done || alteracoesRequestMode) {
-      return;
-    }
-    if (hasSeenPortalAprovacaoTour() || portalTourStartedRef.current) {
-      return;
-    }
-    const tour = useGuidedTourStore.getState();
-    if (tour.tourId) {
-      return;
-    }
-    portalTourStartedRef.current = true;
-    tour.start(PORTAL_APROVACAO_TOUR_ID);
-  }, [publicPortal, proofQuery.data, done, alteracoesRequestMode]);
-
-  useEffect(() => {
-    if (!publicPortal || !proofQuery.data || done || !alteracoesRequestMode) {
-      return;
-    }
-    if (
-      hasSeenPortalAprovacaoAlteracoesTour() ||
-      portalAlteracoesTourStartedRef.current
-    ) {
-      return;
-    }
-    const tour = useGuidedTourStore.getState();
-    portalAlteracoesTourStartedRef.current = true;
-    if (tour.tourId === PORTAL_APROVACAO_TOUR_ID) {
-      tour.complete();
-    }
-    useGuidedTourStore.getState().start(PORTAL_APROVACAO_ALTERACOES_TOUR_ID);
-  }, [publicPortal, proofQuery.data, done, alteracoesRequestMode]);
-
-  useEffect(() => {
-    if (alteracoesRequestMode) {
-      return;
-    }
-    const tour = useGuidedTourStore.getState();
-    if (tour.tourId !== PORTAL_APROVACAO_ALTERACOES_TOUR_ID) {
-      return;
-    }
-    tour.stop();
-    portalAlteracoesTourStartedRef.current = false;
-  }, [alteracoesRequestMode]);
-
-  useEffect(() => {
-    if (!done) {
-      return;
-    }
-    const tour = useGuidedTourStore.getState();
-    if (
-      tour.tourId === PORTAL_APROVACAO_TOUR_ID ||
-      tour.tourId === PORTAL_APROVACAO_ALTERACOES_TOUR_ID
-    ) {
-      tour.complete();
-    }
-  }, [done]);
 
   const previewQuery = useQuery({
     queryKey: ["portal", "aprovacao", "preview-pages", token, osId, ano],
@@ -633,6 +565,12 @@ export function ClienteProofPage({
           <p className="mt-2 text-sm text-neutral-600">
             OS {osLabel} — sua resposta foi registrada e a equipe técnica será notificada.
           </p>
+          {publicPortal && done === "rejected" ? (
+            <p className="mx-auto mt-6 max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left text-sm leading-relaxed text-amber-950">
+              <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
+              {PORTAL_ALTERACAO_CONFIRMACAO}
+            </p>
+          ) : null}
         </div>
         {publicPortal && summary ? (
           <dl className="mt-8 space-y-4 text-left text-sm">
@@ -758,9 +696,15 @@ export function ClienteProofPage({
             "flex shrink-0 flex-col gap-4",
             fillHeight
               ? editMode && isPapelaria
-                ? "w-full border-b border-sagra-border/80 p-4 lg:h-full lg:w-72 lg:max-w-xs lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5"
-                : "w-full border-b border-sagra-border/80 p-4 lg:w-[min(100%,22rem)] lg:max-w-md lg:border-b-0 lg:border-r lg:p-5"
-              : "w-full lg:w-[min(100%,22rem)] lg:max-w-md",
+                ? publicPortal
+                  ? "w-full border-b border-sagra-border/80 p-4 lg:h-full lg:w-[23.4rem] lg:max-w-none lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5"
+                  : "w-full border-b border-sagra-border/80 p-4 lg:h-full lg:w-72 lg:max-w-xs lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5"
+                : publicPortal
+                  ? "w-full border-b border-sagra-border/80 p-4 lg:w-[min(100%,28.6rem)] lg:max-w-none lg:border-b-0 lg:border-r lg:p-5"
+                  : "w-full border-b border-sagra-border/80 p-4 lg:w-[min(100%,22rem)] lg:max-w-md lg:border-b-0 lg:border-r lg:p-5"
+              : publicPortal
+                ? "w-full lg:w-[min(100%,28.6rem)] lg:max-w-none"
+                : "w-full lg:w-[min(100%,22rem)] lg:max-w-md",
             editMode && isPapelaria && "lg:self-stretch",
             !editMode && "overflow-y-auto",
           )}
@@ -789,13 +733,31 @@ export function ClienteProofPage({
                 </button>
               ) : null}
               <h2 className="text-base font-bold text-secondary-blue">
-                Solicitação de alterações
+                Solicitação de alterações{publicPortal ? ":" : ""}
               </h2>
-              <p className="mt-1 text-sm text-neutral-600">
-                {publicPortal
-                  ? "Ajuste os dados na prévia e envie quando terminar."
-                  : "Identifique-se e envie quando terminar de ajustar os dados na prévia."}
-              </p>
+              {publicPortal ? (
+                <>
+                  <p className="mt-3 text-sm text-neutral-900">
+                    Ponto: {formatProofPontoDisplay(ponto, true)}
+                  </p>
+                  <p className="text-sm text-neutral-900">
+                    Nome: {primeirosDoisNomes(nomeCliente)}
+                  </p>
+                  <p className="mt-4 text-sm leading-relaxed text-neutral-700">
+                    Você pode alterar os textos da prova clicando diretamente sobre eles na prévia
+                    e editando os valores.
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-neutral-700">
+                    Caso as alterações desejadas não possam ser feitas na prévia, descreva-as no
+                    campo abaixo:
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-neutral-600">
+                  Identifique-se e envie quando terminar de ajustar os dados na prévia.
+                </p>
+              )}
+              {publicPortal ? null : (
               <div className="mt-4 space-y-3">
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-neutral-700">
@@ -841,6 +803,7 @@ export function ClienteProofPage({
                   </label>
                 ) : null}
               </div>
+              )}
               {publicPortal ? (
                 <ClienteProofAlteracoesDescriptionForm
                   value={alteracoesAdicionais}
@@ -851,6 +814,8 @@ export function ClienteProofPage({
                   onSubmit={handleConfirmReject}
                   onCancel={handleCancelAlteracoes}
                   onExampleFile={handleOpenExampleFile}
+                  hideFieldLabel
+                  fileLead="Você pode também enviar um arquivo modelo clicando aqui:"
                 />
               ) : (
                 <>
@@ -873,9 +838,23 @@ export function ClienteProofPage({
           ) : alteracoesRequestMode && publicPortal && !isPapelaria ? (
             <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5">
               <h2 className="text-base font-bold text-secondary-blue">
-                Solicitação de alterações
+                Solicitação de alterações:
               </h2>
+              <p className="mt-3 text-sm text-neutral-900">
+                Ponto: {formatProofPontoDisplay(ponto, true)}
+              </p>
+              <p className="text-sm text-neutral-900">Nome: {primeirosDoisNomes(nomeCliente)}</p>
+              <p className="mt-4 text-sm leading-relaxed text-neutral-700">
+                Você pode alterar os textos da prova clicando diretamente sobre eles na prévia e
+                editando os valores.
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-neutral-700">
+                Caso as alterações desejadas não possam ser feitas na prévia, descreva-as no campo
+                abaixo:
+              </p>
               <ClienteProofAlteracoesDescriptionForm
+                hideFieldLabel
+                fileLead="Você pode também enviar um arquivo modelo clicando aqui:"
                 value={alteracoesAdicionais}
                 loading={respondMutation.isPending}
                 errorMsg={errorMsg}
@@ -919,7 +898,6 @@ export function ClienteProofPage({
                 : "min-h-0",
           )}
         >
-          {showRelevoSecoNotice ? <ClienteProofRelevoSecoBanner /> : null}
           {editMode && isPapelaria ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-5">
               <article
@@ -958,13 +936,11 @@ export function ClienteProofPage({
                     </p>
                   )}
                 </div>
-                {publicPortal ? (
-                  <ClienteProofPortalInstructionBanner fiel={temProvaPdf} />
-                ) : (
+                {!publicPortal ? (
                   <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     {temProvaPdf ? PREVIEW_DISCLAIMER_PDF : PREVIEW_DISCLAIMER_EDIT}
                   </div>
-                )}
+                ) : null}
               </article>
             </div>
           ) : showFlipbook ? (
@@ -992,6 +968,7 @@ export function ClienteProofPage({
                 isError={previewQuery.isError}
                 produtoFallback={data?.produto}
                 versao={data?.versao}
+                showRelevoSecoNotice={showRelevoSecoNotice}
                 fillHeight={fillHeight}
               />
             </div>
@@ -1022,9 +999,16 @@ export function ClienteProofPage({
         open={modal === "reject"}
         title="Confirmar solicitação de alterações"
         description={
-          isPapelaria && editMode
-            ? "Confirma o envio das alterações informadas? Você receberá uma nova prova para aprovação."
-            : "Confirma a solicitação de alterações? A equipe responsável será notificada para revisar a prova."
+          publicPortal ? (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 leading-relaxed text-amber-950">
+              <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
+              {PORTAL_ALTERACAO_CONFIRMACAO}
+            </p>
+          ) : isPapelaria && editMode ? (
+            "Confirma o envio das alterações informadas? Você receberá uma nova prova para aprovação."
+          ) : (
+            "Confirma a solicitação de alterações? A equipe responsável será notificada para revisar a prova."
+          )
         }
         confirmLabel="Sim, solicitar alterações"
         variant="reject"

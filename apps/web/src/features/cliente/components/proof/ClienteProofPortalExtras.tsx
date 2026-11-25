@@ -239,20 +239,22 @@ export function isRelevoSecoCores(cores?: string | null): boolean {
   return /relev/i.test((cores ?? "").trim());
 }
 
-export function ClienteProofRelevoSecoBanner() {
+/** Aviso de relevo seco — usado dentro do box do mockup, abaixo da versão. */
+export function ClienteProofRelevoSecoBanner({ className }: { className?: string } = {}) {
   return (
-    <div
-      className="shrink-0 border-b border-sagra-border bg-white px-4 py-2.5 text-sm leading-relaxed text-neutral-800 sm:px-5"
+    <p
       role="status"
       data-testid="cliente-proof-relevo-seco-banner"
+      className={cn(
+        "pointer-events-none text-center text-[11px] leading-snug text-neutral-700 sm:text-xs",
+        className,
+      )}
     >
-      <p>
-        O contorno em{" "}
-        <strong className="font-bold" style={{ color: "#A52B48" }}>
-          Vermelho
-        </strong>{" "}
-        indica aplicação de Relevo Seco
-      </p>
-    </div>
+      O contorno em{" "}
+      <strong className="font-bold" style={{ color: "#A52B48" }}>
+        Vermelho
+      </strong>{" "}
+      indica aplicação de Relevo Seco
+    </p>
   );
 }

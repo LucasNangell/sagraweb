@@ -247,7 +247,7 @@ export function createManutencaoMaquina(body: MaquinaInput) {
 }
 
 export function updateManutencaoMaquina(id: number, body: MaquinaInput) {
-  return apiFetch<ManutencaoMaquina>(`/manutencao/maquinas/${id}`, json("PATCH", body));
+  return apiFetch<ManutencaoMaquina>(`/manutencao/maquinas/${id}`, json("POST", body));
 }
 
 export function fetchManutencaoRecorrentes(includeInactive = false) {
@@ -263,7 +263,7 @@ export function createManutencaoRecorrente(body: RecorrenteInput) {
 export function updateManutencaoRecorrente(id: number, body: RecorrenteInput) {
   return apiFetch<ManutencaoRecorrente>(
     `/manutencao/recorrentes/${id}`,
-    json("PATCH", body),
+    json("POST", body),
   );
 }
 
@@ -296,11 +296,11 @@ export function updateManutencaoPedido(
   id: number,
   body: Partial<Pick<PedidoInput, "titulo" | "descricao" | "prioridade" | "maquina_parada">>,
 ) {
-  return apiFetch<ManutencaoPedido>(`/manutencao/pedidos/${id}`, json("PATCH", body));
+  return apiFetch<ManutencaoPedido>(`/manutencao/pedidos/${id}`, json("POST", body));
 }
 
 export function reorderManutencaoFila(ids: number[]) {
-  return apiFetch<{ items: ManutencaoPedido[] }>("/manutencao/fila/ordem", json("PUT", { ids }));
+  return apiFetch<{ items: ManutencaoPedido[] }>("/manutencao/fila/ordem", json("POST", { ids }));
 }
 
 export function cancelarManutencaoPedido(id: number, motivo: string) {
@@ -320,7 +320,7 @@ export function salvarProgressoManutencao(
 ) {
   return apiFetch<ManutencaoPedido>(
     `/manutencao/pedidos/${id}/progresso`,
-    json("PUT", body),
+    json("POST", body),
   );
 }
 

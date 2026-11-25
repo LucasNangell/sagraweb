@@ -129,6 +129,8 @@ function ExecucaoBody({
 }) {
   const [diagnostico, setDiagnostico] = useState(pedido.diagnostico ?? "");
   const [passos, setPassos] = useState<string[]>(pedido.solucao_passos);
+  /** Passo digitado e ainda não adicionado: conta como passo ao salvar, pausar e concluir. */
+  const [novoPasso, setNovoPasso] = useState("");
   const [modo, setModo] = useState<Modo>("editar");
   const [motivo, setMotivo] = useState("");
   const [conclusao, setConclusao] = useState("");
@@ -139,13 +141,18 @@ function ExecucaoBody({
   const pausado = pedido.status === "pausado";
   const meu = cleanPonto(pedido.iniciado_por) === cleanPonto(ponto);
 
+  const passosLimpos = () => [...passos, novoPasso].map((p) => p.trim()).filter(Boolean);
+  /** Move o passo digitado para a lista (depois de salvo ou ao abrir a conclusão). */
+  const consolidarNovoPasso = () => {
+    if (!novoPasso.trim()) return;
+    setPassos(passosLimpos());
+    setNovoPasso("");
+  };
+
   const dirty =
     (diagnostico.trim() || "") !== (pedido.diagnostico ?? "").trim() ||
-    JSON.stringify(passos.map((p) => p.trim()).filter(Boolean)) !==
-      JSON.stringify(pedido.solucao_passos);
+    JSON.stringify(passosLimpos()) !== JSON.stringify(pedido.solucao_passos);
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-
-  const passosLimpos = () => passos.map((p) => p.trim()).filter(Boolean);
 
   const salvar = useManutencaoMutation(
     () =>
@@ -153,7 +160,7 @@ function ExecucaoBody({
         diagnostico: diagnostico.trim(),
         passos: passosLimpos(),
       }),
-    { success: "Progresso salvo" },
+    { success: "Progresso salvo", onSuccess: consolidarNovoPasso },
   );
   const pausar = useManutencaoMutation(
     async () => {
@@ -165,7 +172,13 @@ function ExecucaoBody({
       }
       return pausarManutencaoPedido(pedido.id, motivo.trim());
     },
-    { success: "Serviço pausado", onSuccess: () => setModo("editar") },
+    {
+      success: "Serviço pausado",
+      onSuccess: () => {
+        consolidarNovoPasso();
+        setModo("editar");
+      },
+    },
   );
   const retomar = useManutencaoMutation(() => iniciarManutencaoPedido(pedido.id), {
     success: "Serviço retomado",
@@ -252,7 +265,13 @@ function ExecucaoBody({
             title="Passo a passo da solução"
             hint="Registre cada ação executada, na ordem. Isso vira o histórico técnico da máquina."
           />
-          <PassosEditor passos={passos} onChange={setPassos} disabled={!ativo} />
+          <PassosEditor
+            passos={passos}
+            onChange={setPassos}
+            novo={novoPasso}
+            onNovoChange={setNovoPasso}
+            disabled={!ativo}
+          />
         </section>
 
         {ativo && modo === "editar" ? (
@@ -270,7 +289,10 @@ function ExecucaoBody({
               type="button"
               className={cn(sagraBtn("success", "lg"), "justify-center sm:ml-auto")}
               disabled={busy}
-              onClick={() => setModo("concluir")}
+              onClick={() => {
+                consolidarNovoPasso();
+                setModo("concluir");
+              }}
             >
               <CheckCircle2 className="h-5 w-5" aria-hidden />
               Concluir serviço
@@ -490,12 +512,19 @@ export function PassosEditor({
   passos,
   onChange,
   disabled,
+  novo: novoControlado,
+  onNovoChange,
 }: {
   passos: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
+  /** Rascunho do próximo passo controlado pelo pai (para salvá-lo sem clicar em Adicionar). */
+  novo?: string;
+  onNovoChange?: (value: string) => void;
 }) {
-  const [novo, setNovo] = useState("");
+  const [novoInterno, setNovoInterno] = useState("");
+  const novo = novoControlado ?? novoInterno;
+  const setNovo = onNovoChange ?? setNovoInterno;
   const adicionar = () => {
     const t = novo.trim();
     if (!t) return;
@@ -556,11 +585,7 @@ export function PassosEditor({
             </li>
           ))}
         </ol>
-      ) : (
-        <p className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500">
-          Nenhum passo registrado ainda.
-        </p>
-      )}
+      ) : null}
       {!disabled ? (
         <div className="flex gap-2">
           <span className="mt-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-300 text-xs font-bold text-slate-400">

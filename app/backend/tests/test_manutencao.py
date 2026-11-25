@@ -449,3 +449,23 @@ def test_push_teste_exige_sessao_e_permissao():
     ):
         assert routes.post_push_teste(_req({"sb_manutencao_operador": True}))["enviados"] == 1
     fn.assert_called_once_with("555")
+
+
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        "/manutencao/maquinas/{maquina_id}",
+        "/manutencao/recorrentes/{rec_id}",
+        "/manutencao/pedidos/{pedido_id}",
+        "/manutencao/fila/ordem",
+        "/manutencao/pedidos/{pedido_id}/progresso",
+    ],
+)
+def test_edicoes_aceitam_post_pelo_endereco_publico(caminho):
+    """O proxy do endereço público bloqueia PUT/PATCH: o app/celular precisa de POST."""
+    metodos = set()
+    for rota in routes.router.routes:
+        if getattr(rota, "path", None) == caminho:
+            metodos |= set(rota.methods)
+    assert "POST" in metodos
+    assert metodos & {"PUT", "PATCH"}  # compatibilidade com telas antigas

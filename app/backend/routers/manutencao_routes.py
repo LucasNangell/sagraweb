@@ -252,6 +252,9 @@ def post_maquina(body: MaquinaCreate, request: Request):
     return _run(lambda: svc.create_maquina(body.model_dump(), _ponto(request)))
 
 
+# Edições também aceitam POST: o proxy do endereço público (internet/app Android)
+# bloqueia PUT/PATCH/DELETE. PATCH/PUT ficam por compatibilidade.
+@router.post("/maquinas/{maquina_id}")
 @router.patch("/maquinas/{maquina_id}")
 def patch_maquina(maquina_id: int, body: MaquinaUpdate, request: Request):
     _require_gerencia(request)
@@ -266,6 +269,7 @@ def post_recorrente(body: RecorrenteCreate, request: Request):
     return _run(lambda: svc.create_recorrente(body.model_dump(), _ponto(request)))
 
 
+@router.post("/recorrentes/{rec_id}")
 @router.patch("/recorrentes/{rec_id}")
 def patch_recorrente(rec_id: int, body: RecorrenteUpdate, request: Request):
     _require_gerencia(request)
@@ -280,6 +284,7 @@ def post_pedido(body: PedidoCreate, request: Request):
     return _run(lambda: svc.criar_pedido(body.model_dump(), _ponto(request)))
 
 
+@router.post("/pedidos/{pedido_id}")
 @router.patch("/pedidos/{pedido_id}")
 def patch_pedido(pedido_id: int, body: PedidoUpdate, request: Request):
     _require_gerencia(request)
@@ -290,6 +295,7 @@ def patch_pedido(pedido_id: int, body: PedidoUpdate, request: Request):
     )
 
 
+@router.post("/fila/ordem")
 @router.put("/fila/ordem")
 def put_fila_ordem(body: FilaOrdem, request: Request):
     _require_gerencia(request)
@@ -311,6 +317,7 @@ def post_iniciar(pedido_id: int, request: Request):
     return _run(lambda: svc.iniciar_pedido(pedido_id, _ponto(request)))
 
 
+@router.post("/pedidos/{pedido_id}/progresso")
 @router.put("/pedidos/{pedido_id}/progresso")
 def put_progresso(pedido_id: int, body: ProgressoPayload, request: Request):
     _require_operador(request)

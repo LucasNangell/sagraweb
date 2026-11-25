@@ -32,9 +32,16 @@ import {
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import {
   DIRECOES_EXTRA,
+  segmentosComNegrito,
   type CampoExtraDirecao,
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
+import {
+  cropRegiaoDaImagem,
+  delayPreviaParaChave,
+  type AreaFrac,
+  type ConteudoOtimistaExtra,
+} from "@/features/papelaria/papelariaPreviaOtimista";
 
 import { PapelariaTextoEditor, type ExtraEditorMeta } from "./PapelariaTextoEditor";
 
@@ -58,10 +65,26 @@ export type MoverCampoExtraPayload = {
 const DRAG_THRESHOLD_PX = 4;
 const GUIDE_TOLERANCE_PX = 3;
 
-const DEBOUNCE_MS = 450;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
+
+type DragState = {
+  chave: string;
+  extraId: string;
+  pagina: number;
+  startX: number;
+  startY: number;
+  orig: AreaFrac;
+  cur: AreaFrac;
+  pageW: number;
+  pageH: number;
+  moved: boolean;
+  /** Após soltar: mantém área até a prévia nova confirmar. */
+  committed?: boolean;
+  /** Recorte PNG da posição original (clone visual). */
+  cropDataUrl?: string | null;
+};
 
 /**
  * Gate da prévia PDF ao vivo (pipeline Ct Visita): vale para qualquer produto
@@ -129,13 +152,39 @@ function chaveValores(values: Record<string, string>): string {
   return JSON.stringify(ordenado);
 }
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
+/** Debounce dual: ação (extras/textos) imediata; digitação de form ~250ms. */
+function useDebouncedChave(chave: string): string {
+  const [v, setV] = useState(chave);
+  const prevRef = useRef(chave);
   useEffect(() => {
-    const t = window.setTimeout(() => setV(value), ms);
+    const delay = delayPreviaParaChave(prevRef.current, chave);
+    prevRef.current = chave;
+    if (delay <= 0) {
+      setV(chave);
+      return;
+    }
+    const t = window.setTimeout(() => setV(chave), delay);
     return () => window.clearTimeout(t);
-  }, [value, ms]);
+  }, [chave]);
   return v;
+}
+
+function estiloAreaFrac(area: AreaFrac, caixa: Caixa) {
+  const [x0, y0, x1, y1] = area;
+  return {
+    left: x0 * caixa.width,
+    top: y0 * caixa.height,
+    width: Math.max(8, (x1 - x0) * caixa.width),
+    height: Math.max(8, (y1 - y0) * caixa.height),
+  };
+}
+
+function fonteCssPreview(nome: string | null | undefined): string | undefined {
+  const limpo = String(nome || "")
+    .replace(/^[A-Z]{6}\+/, "")
+    .trim();
+  if (!limpo) return undefined;
+  return `"${limpo.replace(/"/g, "")}", Arial, Helvetica, sans-serif`;
 }
 
 function tituloPagina(indice: number): string {
@@ -198,7 +247,7 @@ export function PapelariaPdfLivePreview({
   extrasMeta?: Record<string, ExtraEditorMeta>;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
-  const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
+  const chaveDebounced = useDebouncedChave(chave);
   const chaveComposicao = composicao
     ? `${composicao.frente.modelo_id}:${composicao.frente.pagina}|${composicao.verso.modelo_id}:${composicao.verso.pagina}`
     : "";
@@ -249,26 +298,28 @@ export function PapelariaPdfLivePreview({
     direcao: CampoExtraDirecao;
   } | null>(null);
   const [textoNovo, setTextoNovo] = useState("");
-  const [drag, setDrag] = useState<{
-    chave: string;
-    extraId: string;
-    pagina: number;
-    startX: number;
-    startY: number;
-    orig: [number, number, number, number];
-    cur: [number, number, number, number];
-    pageW: number;
-    pageH: number;
-    moved: boolean;
-  } | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+  const [conteudosOtimistas, setConteudosOtimistas] = useState<
+    Record<string, ConteudoOtimistaExtra>
+  >({});
 
   useEffect(() => {
     setEditando(null);
     setRedeDialog(null);
     setTextoDialog(null);
     setDrag(null);
+    setConteudosOtimistas({});
   }, [modeloId]);
+
+  // Mantém posição otimista até a prévia confirmar (evita snap-back).
+  useEffect(() => {
+    if (drag?.committed && !atualizando) setDrag(null);
+  }, [drag?.committed, atualizando]);
+
+  useEffect(() => {
+    if (!atualizando) setConteudosOtimistas({});
+  }, [atualizando]);
 
   const menuExtrasAtivo =
     permitirCamposExtras && Boolean(onAdicionarCampoExtra) && editavel;
@@ -578,7 +629,7 @@ export function PapelariaPdfLivePreview({
                         atualizando && "opacity-80",
                       )}
                     />
-                    {drag && drag.pagina === i
+                    {drag && drag.pagina === i && !drag.committed
                       ? [
                           ...guides.v.map((xf, gi) => (
                             <div
@@ -598,6 +649,27 @@ export function PapelariaPdfLivePreview({
                           )),
                         ]
                       : null}
+                    {drag &&
+                    drag.pagina === i &&
+                    drag.moved &&
+                    drag.cropDataUrl ? (
+                      <>
+                        <div
+                          aria-hidden
+                          data-testid="papelaria-extra-tapa-origem"
+                          className="pointer-events-none absolute bg-white"
+                          style={estiloAreaFrac(drag.orig, caixa)}
+                        />
+                        <img
+                          aria-hidden
+                          data-testid="papelaria-extra-clone"
+                          src={drag.cropDataUrl}
+                          alt=""
+                          className="pointer-events-none absolute object-fill"
+                          style={estiloAreaFrac(drag.cur, caixa)}
+                        />
+                      </>
+                    ) : null}
                     {regioesPagina.map((r) => {
                       const isExtra =
                         r.tipo === "campo_extra" || r.tipo === "rede_extra";
@@ -605,15 +677,13 @@ export function PapelariaPdfLivePreview({
                         r.extra_id ?? (r.chave.startsWith("extra:") ? r.chave.slice(6) : null);
                       const area =
                         drag && drag.chave === r.chave ? drag.cur : r.area;
-                      const [x0, y0, x1, y1] = area;
                       const bloqueada = Boolean(r.bloquear_edicao);
                       const ativa = !bloqueada && r.chave === editando;
-                      const estiloArea = {
-                        left: x0 * caixa.width,
-                        top: y0 * caixa.height,
-                        width: Math.max(8, (x1 - x0) * caixa.width),
-                        height: Math.max(8, (y1 - y0) * caixa.height),
-                      };
+                      const estiloArea = estiloAreaFrac(area, caixa);
+                      const otimista =
+                        extraId && conteudosOtimistas[extraId]
+                          ? conteudosOtimistas[extraId]
+                          : null;
                       if (bloqueada) {
                         return (
                           <div
@@ -659,18 +729,25 @@ export function PapelariaPdfLivePreview({
                           isExtra && menuExtrasAtivo && extraId && onMoverCampoExtra
                             ? (e: ReactPointerEvent<HTMLButtonElement>) => {
                                 if (e.button !== 0) return;
-                                e.currentTarget.setPointerCapture(e.pointerId);
+                                try {
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                } catch {
+                                  /* jsdom / captura indisponível */
+                                }
+                                const orig = [...r.area] as AreaFrac;
                                 setDrag({
                                   chave: r.chave,
                                   extraId,
                                   pagina: i,
                                   startX: e.clientX,
                                   startY: e.clientY,
-                                  orig: [...r.area] as [number, number, number, number],
-                                  cur: [...r.area] as [number, number, number, number],
+                                  orig,
+                                  cur: orig,
                                   pageW: r.page_w || 595,
                                   pageH: r.page_h || 842,
                                   moved: false,
+                                  committed: false,
+                                  cropDataUrl: null,
                                 });
                               }
                             : undefined,
@@ -678,7 +755,9 @@ export function PapelariaPdfLivePreview({
                           isExtra && menuExtrasAtivo
                             ? (e: ReactPointerEvent<HTMLButtonElement>) => {
                                 setDrag((prev) => {
-                                  if (!prev || prev.chave !== r.chave) return prev;
+                                  if (!prev || prev.chave !== r.chave || prev.committed) {
+                                    return prev;
+                                  }
                                   const dxPx = e.clientX - prev.startX;
                                   const dyPx = e.clientY - prev.startY;
                                   const moved =
@@ -694,14 +773,14 @@ export function PapelariaPdfLivePreview({
                                   let ny0 = a1 + dy;
                                   nx0 = Math.max(0, Math.min(1 - w, nx0));
                                   ny0 = Math.max(0, Math.min(1 - h, ny0));
-                                  const cur: [number, number, number, number] = [
-                                    nx0,
-                                    ny0,
-                                    nx0 + w,
-                                    ny0 + h,
-                                  ];
+                                  const cur: AreaFrac = [nx0, ny0, nx0 + w, ny0 + h];
                                   calcGuides(i, cur, r.chave, caixa);
-                                  return { ...prev, cur, moved: true };
+                                  let cropDataUrl = prev.cropDataUrl;
+                                  if (!cropDataUrl) {
+                                    const img = imgRefs.current[i];
+                                    if (img) cropDataUrl = cropRegiaoDaImagem(img, prev.orig);
+                                  }
+                                  return { ...prev, cur, moved: true, cropDataUrl };
                                 });
                               }
                             : undefined,
@@ -715,26 +794,73 @@ export function PapelariaPdfLivePreview({
                                 }
                                 setDrag((prev) => {
                                   if (!prev || prev.chave !== r.chave) return prev;
-                                  if (prev.moved && onMoverCampoExtra) {
+                                  setGuides({ v: [], h: [] });
+                                  if (!prev.moved) return null;
+                                  if (onMoverCampoExtra) {
                                     onMoverCampoExtra({
                                       extraId: prev.extraId,
                                       x_pt: prev.cur[0] * prev.pageW,
                                       y_pt: prev.cur[1] * prev.pageH,
                                     });
                                   }
-                                  setGuides({ v: [], h: [] });
-                                  // delay clear so click handler sees moved
-                                  window.setTimeout(() => setDrag(null), 0);
-                                  return prev.moved ? { ...prev, moved: true } : null;
+                                  // Mantém cur até !atualizando (sem snap-back).
+                                  return { ...prev, moved: true, committed: true };
                                 });
                               }
                             : undefined,
                       };
+                      const overlayOtimista =
+                        otimista &&
+                        r.tipo === "campo_extra" &&
+                        !(drag && drag.chave === r.chave && drag.moved) ? (
+                          <>
+                            <div
+                              aria-hidden
+                              className="pointer-events-none absolute bg-white"
+                              style={estiloArea}
+                              data-testid="papelaria-extra-tapa-conteudo"
+                            />
+                            <div
+                              aria-hidden
+                              data-testid="papelaria-extra-conteudo-otimista"
+                              className="pointer-events-none absolute overflow-hidden whitespace-pre leading-none text-neutral-900"
+                              style={{
+                                ...estiloArea,
+                                fontSize: `${Math.max(4, Math.min(72, otimista.tamanho_pt))}pt`,
+                                fontFamily: fonteCssPreview(otimista.fonte ?? r.fonte),
+                                textAlign:
+                                  otimista.align_h === "centro"
+                                    ? "center"
+                                    : otimista.align_h === "direita"
+                                      ? "right"
+                                      : "left",
+                              }}
+                            >
+                              {segmentosComNegrito(otimista.texto || " ", otimista.negrito).map(
+                                (seg, si) => (
+                                  <span
+                                    key={si}
+                                    style={{ fontWeight: seg.negrito ? 700 : 400 }}
+                                  >
+                                    {seg.texto}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          </>
+                        ) : null;
                       if (!menuExtrasAtivo) {
-                        return <button key={r.chave} {...botaoProps} />;
+                        return (
+                          <div key={r.chave} className="contents">
+                            {overlayOtimista}
+                            <button {...botaoProps} />
+                          </div>
+                        );
                       }
                       return (
-                        <ContextMenu key={r.chave}>
+                        <div key={r.chave} className="contents">
+                          {overlayOtimista}
+                          <ContextMenu>
                           <ContextMenuTrigger asChild>
                             <button {...botaoProps} />
                           </ContextMenuTrigger>
@@ -789,6 +915,7 @@ export function PapelariaPdfLivePreview({
                             ) : null}
                           </ContextMenuContent>
                         </ContextMenu>
+                        </div>
                       );
                     })}
                     {regiaoEditada &&
@@ -812,13 +939,35 @@ export function PapelariaPdfLivePreview({
                           const y = r.top + img.clientTop;
                           const h = img.clientHeight || caixaEditada.height;
                           const w = img.clientWidth || caixaEditada.width;
+                          const area =
+                            drag && drag.chave === regiaoEditada.chave
+                              ? drag.cur
+                              : regiaoEditada.area;
                           return {
-                            left: x + regiaoEditada.area[0] * w,
-                            top: y + regiaoEditada.area[1] * h,
-                            bottom: y + regiaoEditada.area[3] * h,
+                            left: x + area[0] * w,
+                            top: y + area[1] * h,
+                            bottom: y + area[3] * h,
                           };
                         }}
                         onAplicar={(texto, meta) => {
+                          const eid =
+                            regiaoEditada.extra_id ??
+                            (regiaoEditada.chave.startsWith("extra:")
+                              ? regiaoEditada.chave.slice(6)
+                              : null);
+                          if (eid && regiaoEditada.tipo === "campo_extra" && meta) {
+                            setConteudosOtimistas((prev) => ({
+                              ...prev,
+                              [eid]: {
+                                texto,
+                                tamanho_pt: meta.tamanho_pt ?? regiaoEditada.tamanho_pt ?? 11,
+                                negrito: meta.negrito ?? [],
+                                align_h: meta.align_h ?? "esquerda",
+                                align_v: meta.align_v ?? "topo",
+                                fonte: regiaoEditada.fonte,
+                              },
+                            }));
+                          }
                           setEditando(null);
                           onEditarTexto(regiaoEditada, texto, meta);
                         }}

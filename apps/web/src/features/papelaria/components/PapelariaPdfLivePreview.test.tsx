@@ -370,3 +370,61 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(screen.queryByTestId("papelaria-previa-extras-menu")).not.toBeInTheDocument();
   });
 });
+
+describe("PapelariaPdfLivePreview — drag otimista", () => {
+  const regiaoExtra = {
+    chave: "extra:extra_1",
+    modelo_id: 7,
+    pagina: 1,
+    pagina_saida: 0,
+    marcador: "__extra:extra_1",
+    area: [0.1, 0.2, 0.4, 0.3] as [number, number, number, number],
+    texto: "Cargo",
+    negrito: [] as Array<[number, number]>,
+    template: "",
+    valores: {},
+    editado: true,
+    tipo: "campo_extra" as const,
+    extra_id: "extra_1",
+    page_w: 100,
+    page_h: 100,
+    tamanho_pt: 12,
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    api.previaPdfAoVivo.mockReset();
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,AAA"],
+      ms: 5,
+      regioes: [regiaoExtra],
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("mudança só em __campos_extras dispara fetch sem esperar 250ms", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview modeloId={7} values={{ nome_deputado: "Ana" }} />
+      </QueryClientProvider>,
+    );
+    await screen.findByAltText("Prévia da página 1");
+    const calls = api.previaPdfAoVivo.mock.calls.length;
+    rerender(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview
+          modeloId={7}
+          values={{
+            nome_deputado: "Ana",
+            __campos_extras: '[{"id":"extra_1","tipo":"texto","ancora_chave":"7:1:NOME","direcao":"abaixo","texto":"X"}]',
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(api.previaPdfAoVivo.mock.calls.length).toBeGreaterThan(calls);
+  });
+});

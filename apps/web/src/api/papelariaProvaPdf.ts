@@ -172,10 +172,16 @@ export interface ProvaPdfRegiao {
   tipo?: "campo" | "rede" | "campo_extra" | "rede_extra";
   /** Chave do catálogo de redes (`instagram`, `x`, …). */
   rede_chave?: string;
+  /** Redes empilhadas no extra (`rede_extra`). */
+  redes?: Array<{ chave: string; valor: string }>;
   /** Id do item em `__campos_extras` (regiões `campo_extra` / `rede_extra`). */
   extra_id?: string;
   /** Tamanho efetivo do extra (pt). */
   tamanho_pt?: number;
+  /** Tamanho efetivo da logo (pt). */
+  icone_pt?: number;
+  /** Variante de logo aplicada. */
+  estilo?: string | null;
   /** Nome da fonte do PDF (quando disponível). */
   fonte?: string | null;
   align_h?: "esquerda" | "centro" | "direita";

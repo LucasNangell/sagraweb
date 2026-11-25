@@ -20,6 +20,7 @@ TIPOS = frozenset({"texto", "rede"})
 ALIGN_H = frozenset({"esquerda", "centro", "direita"})
 ALIGN_V = frozenset({"topo", "meio", "base"})
 EXTRAS_MAX = 40
+REDES_POR_EXTRA_MAX = 8
 TEXTO_MAX = 2000
 GAP_PT = 5.0
 TAMANHO_MIN = 4.0
@@ -55,6 +56,39 @@ def _normalizar_negrito(raw: Any, texto_len: int) -> list[list[int]]:
             continue
         if b > a:
             out.append([a, b])
+    return out
+
+
+def _normalizar_redes_lista(
+    raw: Any,
+    *,
+    fallback_chave: str = "",
+    fallback_valor: str = "",
+) -> list[dict[str, str]]:
+    """Lista ``[{chave, valor}]``; cai no par legado se ``raw`` estiver vazio."""
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            chave = str(item.get("chave") or "").strip().lower()
+            valor = str(item.get("valor") or "").strip()
+            if not chave or len(chave) > 64 or chave in seen:
+                continue
+            if len(valor) > 200:
+                raise CamposExtrasError("Handle da rede extra longo demais.")
+            seen.add(chave)
+            out.append({"chave": chave, "valor": valor})
+            if len(out) >= REDES_POR_EXTRA_MAX:
+                break
+    if not out:
+        chave = str(fallback_chave or "").strip().lower()
+        valor = str(fallback_valor or "").strip()
+        if chave and len(chave) <= 64:
+            if len(valor) > 200:
+                raise CamposExtrasError("Handle da rede extra longo demais.")
+            out.append({"chave": chave, "valor": valor})
     return out
 
 
@@ -105,6 +139,9 @@ def normalizar_campos_extras(raw: Any) -> list[dict[str, Any]]:
         tamanho = _float_or_none(item.get("tamanho_pt"))
         if tamanho is not None and not (TAMANHO_MIN <= tamanho <= TAMANHO_MAX):
             raise CamposExtrasError("Tamanho de fonte do campo extra inválido.")
+        icone_pt = _float_or_none(item.get("icone_pt"))
+        if icone_pt is not None and not (TAMANHO_MIN <= icone_pt <= TAMANHO_MAX):
+            raise CamposExtrasError("Tamanho da logo do campo extra inválido.")
         entry: dict[str, Any] = {
             "id": eid,
             "tipo": tipo,
@@ -113,6 +150,9 @@ def normalizar_campos_extras(raw: Any) -> list[dict[str, Any]]:
             "texto": "",
             "rede_chave": "",
             "rede_valor": "",
+            "redes": [],
+            "estilo": None,
+            "icone_pt": None,
             "x_pt": x_pt,
             "y_pt": y_pt,
             "offset_x_pt": offset_x,
@@ -129,14 +169,22 @@ def normalizar_campos_extras(raw: Any) -> list[dict[str, Any]]:
             entry["texto"] = texto
             entry["negrito"] = _normalizar_negrito(item.get("negrito"), len(texto))
         else:
-            rede_chave = str(item.get("rede_chave") or "").strip()
-            rede_valor = str(item.get("rede_valor") or "").strip()
-            if not rede_chave or len(rede_chave) > 64:
+            from services import papelaria_redes_service as redes_svc
+
+            redes = _normalizar_redes_lista(
+                item.get("redes"),
+                fallback_chave=str(item.get("rede_chave") or ""),
+                fallback_valor=str(item.get("rede_valor") or ""),
+            )
+            if not redes:
                 raise CamposExtrasError("Rede do campo extra inválida.")
-            if len(rede_valor) > 200:
-                raise CamposExtrasError("Handle da rede extra longo demais.")
-            entry["rede_chave"] = rede_chave
-            entry["rede_valor"] = rede_valor
+            estilo_raw = str(item.get("estilo") or "").strip().lower()
+            estilo = estilo_raw if estilo_raw in redes_svc.ESTILOS_IDS else None
+            entry["redes"] = redes
+            entry["rede_chave"] = redes[0]["chave"]
+            entry["rede_valor"] = redes[0]["valor"]
+            entry["estilo"] = estilo
+            entry["icone_pt"] = icone_pt
         out.append(entry)
     return out
 
@@ -558,103 +606,165 @@ def aplicar_campos_extras(
                 por_chave[reg["chave"]] = reg
                 continue
 
-            # Rede
+            # Rede (uma ou várias empilhadas verticalmente).
             catalogo = redes_svc.por_chave()
-            rede = catalogo.get(extra["rede_chave"])
-            if not rede or not rede.get("ativo"):
-                if avisos is not None:
-                    avisos.append(
-                        f"Campo extra «{extra['id']}»: rede "
-                        f"«{extra['rede_chave']}» indisponível."
-                    )
-                # Ainda tenta desenhar placeholder se tipografia existir
-                if not rede:
+            itens_rede = list(extra.get("redes") or [])
+            if not itens_rede:
+                itens_rede = [
+                    {
+                        "chave": str(extra.get("rede_chave") or ""),
+                        "valor": str(extra.get("rede_valor") or ""),
+                    }
+                ]
+            linhas_ok: list[dict[str, Any]] = []
+            for item_r in itens_rede:
+                chave_r = str(item_r.get("chave") or "").strip().lower()
+                valor_r = str(item_r.get("valor") or "").strip()
+                rede = catalogo.get(chave_r)
+                if not rede or not rede.get("ativo"):
+                    if avisos is not None:
+                        avisos.append(
+                            f"Campo extra «{extra['id']}»: rede «{chave_r}» indisponível."
+                        )
                     continue
-            valor = str(extra.get("rede_valor") or "").strip()
-            icone = tam * 1.15
-            gap_i = max(2.0, tam * 0.25)
-            tw_txt = (
-                fonte.largura(valor, tam, 0.0)
-                if valor and fonte is not None and not fonte.faltando(valor)
-                else 0.0
+                linhas_ok.append({"rede": rede, "chave": chave_r, "valor": valor_r})
+            if not linhas_ok:
+                continue
+
+            icone = (
+                float(extra["icone_pt"])
+                if extra.get("icone_pt") is not None
+                else tam * 1.15
             )
-            tw = icone + (gap_i + tw_txt if tw_txt else 0.0)
+            icone = max(TAMANHO_MIN, min(TAMANHO_MAX, icone))
+            gap_i = max(2.0, tam * 0.25)
+            gap_linha = max(2.0, tam * 0.35)
+            estilo_pedido = str(extra.get("estilo") or "").strip().lower()
+            estilo_logo = (
+                estilo_pedido
+                if estilo_pedido in redes_svc.ESTILOS_IDS
+                else (estilo_redes if estilo_redes in redes_svc.ESTILOS_IDS else None)
+            )
+
+            medidas: list[dict[str, Any]] = []
+            tw_max = 24.0
+            for lin in linhas_ok:
+                valor = lin["valor"]
+                tw_txt = (
+                    fonte.largura(valor, tam, 0.0)
+                    if valor and fonte is not None and not fonte.faltando(valor)
+                    else 0.0
+                )
+                tw_lin = icone + (gap_i + tw_txt if tw_txt else 0.0)
+                tw_max = max(tw_max, tw_lin)
+                medidas.append({"valor": valor, "tw_txt": tw_txt, "tw": tw_lin, "rede": lin["rede"], "chave": lin["chave"]})
+
+            n = len(medidas)
+            th_linha = max(icone, tam * 1.05)
+            th_grupo = n * th_linha + max(0, n - 1) * gap_linha
             box = _bbox_relativo(
                 ancora_box,
                 extra["direcao"],
                 largura_pg,
                 altura_pg,
-                linha_h=max(linha_h, icone),
-                largura_conteudo=max(tw, 24.0),
+                linha_h=th_grupo,
+                largura_conteudo=tw_max,
                 align_h=align_h,
                 align_v=align_v,
             )
             box = _aplicar_offsets(
                 box, extra, largura_pg, altura_pg, align_h=align_h, align_v=align_v
             )
-            th = max(icone, tam * 1.05)
-            cx, cy = _pos_conteudo(box, tw, th, align_h, align_v)
-            centro = cy + th / 2
-            caixa_logo = fitz.Rect(cx, centro - icone / 2, cx + icone, centro + icone / 2)
-            estilo_logo = estilo_redes if estilo_redes in redes_svc.ESTILOS_IDS else None
-            logo = redes_svc.caminho_logo(rede, estilo_logo, permitir_outro=True) if rede else None
-            if logo is not None:
-                try:
-                    if logo.suffix.lower() == ".png":
-                        page.insert_image(
-                            caixa_logo, filename=str(logo), keep_proportion=True
-                        )
-                    else:
-                        with fitz.open(str(logo)) as ld:
-                            page.show_pdf_page(caixa_logo, ld, 0, keep_proportion=True)
-                except Exception as exc:
-                    logger.warning("Logo extra %s falhou: %s", rede.get("chave"), exc)
-            elif avisos is not None and rede:
-                avisos.append(f"Campo extra «{extra['id']}»: logo da rede indisponível.")
+            cx, cy = _pos_conteudo(box, tw_max, th_grupo, align_h, align_v)
             if estilo is None and avisos is not None:
                 avisos.append(
                     f"Campo extra «{extra['id']}»: tipografia da âncora "
                     "indisponível — só o logo foi aplicado."
                 )
-            tx = caixa_logo.x1 + gap_i
-            base_y = centro + tam * 0.15
-            if valor and fonte is not None and recurso is not None and not fonte.faltando(valor):
-                _append_ops(
-                    doc,
-                    page,
-                    [
-                        "q",
-                        (
-                            f"BT {cor} /{recurso} {tam:.4f} Tf 0 Tc "
-                            f"1 0 0 1 {tx:.4f} {altura_pg - base_y:.4f} Tm "
-                            f"<{fonte.codificar(valor)}> Tj ET"
-                        ),
-                        "Q",
-                    ],
+
+            area_union: Optional[Any] = None
+            textos_reg: list[str] = []
+            for i_lin, m in enumerate(medidas):
+                y0 = cy + i_lin * (th_linha + gap_linha)
+                centro = y0 + th_linha / 2
+                caixa_logo = fitz.Rect(
+                    cx, centro - icone / 2, cx + icone, centro + icone / 2
                 )
-                texto_box = fitz.Rect(
-                    caixa_logo.x0,
-                    min(caixa_logo.y0, base_y - tam * 0.85),
-                    tx + max(tw_txt, 1.0),
-                    max(caixa_logo.y1, base_y + tam * 0.2),
+                logo = redes_svc.caminho_logo(
+                    m["rede"], estilo_logo, permitir_outro=True
                 )
-            else:
-                texto_box = caixa_logo
+                if logo is not None:
+                    try:
+                        if logo.suffix.lower() == ".png":
+                            page.insert_image(
+                                caixa_logo, filename=str(logo), keep_proportion=True
+                            )
+                        else:
+                            with fitz.open(str(logo)) as ld:
+                                page.show_pdf_page(
+                                    caixa_logo, ld, 0, keep_proportion=True
+                                )
+                    except Exception as exc:
+                        logger.warning(
+                            "Logo extra %s falhou: %s", m["chave"], exc
+                        )
+                elif avisos is not None:
+                    avisos.append(
+                        f"Campo extra «{extra['id']}»: logo de «{m['chave']}» indisponível."
+                    )
+                valor = m["valor"]
+                textos_reg.append(valor)
+                tx = caixa_logo.x1 + gap_i
+                base_y = centro + tam * 0.15
+                lin_box = fitz.Rect(caixa_logo)
+                if (
+                    valor
+                    and fonte is not None
+                    and recurso is not None
+                    and not fonte.faltando(valor)
+                ):
+                    _append_ops(
+                        doc,
+                        page,
+                        [
+                            "q",
+                            (
+                                f"BT {cor} /{recurso} {tam:.4f} Tf 0 Tc "
+                                f"1 0 0 1 {tx:.4f} {altura_pg - base_y:.4f} Tm "
+                                f"<{fonte.codificar(valor)}> Tj ET"
+                            ),
+                            "Q",
+                        ],
+                    )
+                    lin_box = fitz.Rect(
+                        caixa_logo.x0,
+                        min(caixa_logo.y0, base_y - tam * 0.85),
+                        tx + max(m["tw_txt"], 1.0),
+                        max(caixa_logo.y1, base_y + tam * 0.2),
+                    )
+                area_union = lin_box if area_union is None else (area_union | lin_box)
+
+            texto_box = area_union if area_union is not None else box
             reg = {
                 "pagina": pidx + 1,
                 "pagina_saida": pidx,
                 "modelo_id": int(modelo_id),
                 "marcador": f"__extra_rede:{extra['id']}",
                 "chave": f"extra:{extra['id']}",
-                "texto": valor,
+                "texto": "\n".join(textos_reg),
                 "negrito": [],
                 "template": "",
                 "valores": {},
                 "editado": True,
                 "tipo": "rede_extra",
                 "extra_id": extra["id"],
-                "rede_chave": extra["rede_chave"],
+                "rede_chave": medidas[0]["chave"],
+                "redes": [
+                    {"chave": m["chave"], "valor": m["valor"]} for m in medidas
+                ],
                 "tamanho_pt": tam,
+                "icone_pt": icone,
+                "estilo": estilo_logo,
                 "fonte": getattr(fonte, "nome", None) if fonte is not None else None,
                 "align_h": align_h,
                 "align_v": align_v,

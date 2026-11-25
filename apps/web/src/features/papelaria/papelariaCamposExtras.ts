@@ -1,11 +1,22 @@
 /** Campos de texto/rede extras na prévia PDF (só operador) — `dados.__campos_extras`. */
 
+import type { PapelariaRedeEstilo } from "@/features/papelaria/types";
+
 export const CAMPOS_EXTRAS_DADOS_KEY = "__campos_extras";
+export const REDES_EXTRA_MAX = 8;
+export const ESTILOS_LOGO_EXTRA: PapelariaRedeEstilo[] = [
+  "quadrado_policromia",
+  "quadrado_pb",
+  "policromia",
+  "pb",
+];
 
 export type CampoExtraDirecao = "acima" | "abaixo" | "esquerda" | "direita";
 export type CampoExtraTipo = "texto" | "rede";
 export type CampoExtraAlignH = "esquerda" | "centro" | "direita";
 export type CampoExtraAlignV = "topo" | "meio" | "base";
+
+export type CampoExtraRedeItem = { chave: string; valor: string };
 
 export type CampoExtra = {
   id: string;
@@ -13,8 +24,15 @@ export type CampoExtra = {
   ancora_chave: string;
   direcao: CampoExtraDirecao;
   texto: string;
+  /** Compat / espelho do primeiro item de ``redes``. */
   rede_chave: string;
   rede_valor: string;
+  /** Lista de redes no mesmo extra (vertical). Vazia quando tipo texto. */
+  redes: CampoExtraRedeItem[];
+  /** Variante da logo; null = herdar ``__redes_estilo``. */
+  estilo: PapelariaRedeEstilo | null;
+  /** Tamanho da logo em pt; null = ``tamanho_pt × 1.15``. */
+  icone_pt: number | null;
   x_pt: number | null;
   y_pt: number | null;
   offset_x_pt: number;
@@ -86,6 +104,45 @@ function alignV(v: unknown): CampoExtraAlignV {
   return "topo";
 }
 
+function estiloLogo(v: unknown): PapelariaRedeEstilo | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if ((ESTILOS_LOGO_EXTRA as string[]).includes(s)) return s as PapelariaRedeEstilo;
+  return null;
+}
+
+/** Lista de redes do extra (compat com ``rede_chave``/``rede_valor`` legados). */
+export function normalizarRedesDoExtra(raw: unknown, fallbackChave = "", fallbackValor = ""): CampoExtraRedeItem[] {
+  const out: CampoExtraRedeItem[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const chave = String(o.chave ?? "").trim().toLowerCase();
+      const valor = String(o.valor ?? "").trim();
+      if (!chave || chave.length > 64 || seen.has(chave)) continue;
+      if (valor.length > 200) continue;
+      seen.add(chave);
+      out.push({ chave, valor });
+      if (out.length >= REDES_EXTRA_MAX) break;
+    }
+  }
+  if (!out.length) {
+    const chave = String(fallbackChave ?? "").trim().toLowerCase();
+    const valor = String(fallbackValor ?? "").trim();
+    if (chave && chave.length <= 64 && valor.length <= 200) out.push({ chave, valor });
+  }
+  return out;
+}
+
+export function espelhoRedePrincipal(redes: CampoExtraRedeItem[]): {
+  rede_chave: string;
+  rede_valor: string;
+} {
+  const first = redes[0];
+  return { rede_chave: first?.chave ?? "", rede_valor: first?.valor ?? "" };
+}
+
 export function normalizarCamposExtras(raw: unknown): CampoExtra[] {
   if (raw == null || raw === "") return [];
   let lista: unknown = raw;
@@ -114,14 +171,25 @@ export function normalizarCamposExtras(raw: unknown): CampoExtra[] {
     const texto = tipo === "texto" ? String(o.texto ?? "") : "";
     let tamanho = numOuNull(o.tamanho_pt);
     if (tamanho != null && (tamanho < 4 || tamanho > 72)) tamanho = null;
+    let icone = numOuNull(o.icone_pt);
+    if (icone != null && (icone < 4 || icone > 72)) icone = null;
+    const redes =
+      tipo === "rede"
+        ? normalizarRedesDoExtra(o.redes, String(o.rede_chave ?? ""), String(o.rede_valor ?? ""))
+        : [];
+    if (tipo === "rede" && !redes.length) continue;
+    const espelho = espelhoRedePrincipal(redes);
     out.push({
       id,
       tipo,
       ancora_chave: ancora,
       direcao: direcao as CampoExtraDirecao,
       texto,
-      rede_chave: tipo === "rede" ? String(o.rede_chave ?? "").trim() : "",
-      rede_valor: tipo === "rede" ? String(o.rede_valor ?? "").trim() : "",
+      rede_chave: espelho.rede_chave,
+      rede_valor: espelho.rede_valor,
+      redes,
+      estilo: tipo === "rede" ? estiloLogo(o.estilo) : null,
+      icone_pt: tipo === "rede" ? icone : null,
       x_pt: numOuNull(o.x_pt),
       y_pt: numOuNull(o.y_pt),
       offset_x_pt: numOuZero(o.offset_x_pt),
@@ -139,26 +207,34 @@ export function normalizarCamposExtras(raw: unknown): CampoExtra[] {
 export function camposExtrasParaDados(extras: CampoExtra[]): string | null {
   if (!extras.length) return null;
   return JSON.stringify(
-    extras.map((e) => ({
-      id: e.id,
-      tipo: e.tipo,
-      ancora_chave: e.ancora_chave,
-      direcao: e.direcao,
-      texto: e.tipo === "texto" ? e.texto : "",
-      rede_chave: e.tipo === "rede" ? e.rede_chave : "",
-      rede_valor: e.tipo === "rede" ? e.rede_valor : "",
-      x_pt: e.x_pt,
-      y_pt: e.y_pt,
-      offset_x_pt: e.offset_x_pt,
-      offset_y_pt: e.offset_y_pt,
-      align_h: e.align_h,
-      align_v: e.align_v,
-      tamanho_pt: e.tamanho_pt,
-      negrito: e.tipo === "texto" ? e.negrito : [],
-    })),
+    extras.map((e) => {
+      const redes = e.tipo === "rede" ? e.redes : [];
+      const espelho = espelhoRedePrincipal(redes);
+      return {
+        id: e.id,
+        tipo: e.tipo,
+        ancora_chave: e.ancora_chave,
+        direcao: e.direcao,
+        texto: e.tipo === "texto" ? e.texto : "",
+        rede_chave: e.tipo === "rede" ? espelho.rede_chave : "",
+        rede_valor: e.tipo === "rede" ? espelho.rede_valor : "",
+        ...(e.tipo === "rede" && redes.length
+          ? { redes: redes.map((r) => ({ chave: r.chave, valor: r.valor })) }
+          : {}),
+        ...(e.tipo === "rede" && e.estilo ? { estilo: e.estilo } : {}),
+        ...(e.tipo === "rede" && e.icone_pt != null ? { icone_pt: e.icone_pt } : {}),
+        x_pt: e.x_pt,
+        y_pt: e.y_pt,
+        offset_x_pt: e.offset_x_pt,
+        offset_y_pt: e.offset_y_pt,
+        align_h: e.align_h,
+        align_v: e.align_v,
+        tamanho_pt: e.tamanho_pt,
+        negrito: e.tipo === "texto" ? e.negrito : [],
+      };
+    }),
   );
 }
-
 export function extraIdDaRegiao(chave: string, extraId?: string): string | null {
   if (extraId) return extraId;
   if (chave.startsWith("extra:")) return chave.slice("extra:".length);

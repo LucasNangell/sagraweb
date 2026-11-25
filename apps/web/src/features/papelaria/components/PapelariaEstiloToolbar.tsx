@@ -16,6 +16,10 @@ export type PapelariaEstiloToolbarProps = {
   mostrarNegrito?: boolean;
   negritoAtivo?: boolean;
   onNegrito?: () => void;
+  /** Tamanho da logo (redes). null/omit = herdar do texto. */
+  mostrarIconePt?: boolean;
+  iconePt?: number | null;
+  onIconePt?: (v: number | null) => void;
   /** Posição em mm (extras). */
   mostrarMm?: boolean;
   xMm?: number;
@@ -40,6 +44,9 @@ export function PapelariaEstiloToolbar({
   mostrarNegrito = false,
   negritoAtivo = false,
   onNegrito,
+  mostrarIconePt = false,
+  iconePt = null,
+  onIconePt,
   mostrarMm = false,
   xMm = 0,
   yMm = 0,
@@ -55,7 +62,7 @@ export function PapelariaEstiloToolbar({
       )}
     >
       <label className="inline-flex h-7 items-center gap-1.5">
-        <span className={rotuloCls}>pt</span>
+        <span className={rotuloCls}>Texto</span>
         <input
           type="number"
           min={4}
@@ -66,7 +73,35 @@ export function PapelariaEstiloToolbar({
           className={cn(campoCls, "w-14 tabular-nums")}
           onChange={(e) => onTamanhoPt(Number(e.target.value) || 11)}
         />
+        <span className="text-[10px] text-neutral-400">pt</span>
       </label>
+
+      {mostrarIconePt && onIconePt ? (
+        <label className="inline-flex h-7 items-center gap-1.5">
+          <span className={rotuloCls}>Logo</span>
+          <input
+            type="number"
+            min={4}
+            max={72}
+            step={0.5}
+            value={iconePt ?? ""}
+            placeholder={String(Number((tamanhoPt * 1.15).toFixed(1)))}
+            data-testid="papelaria-extra-icone"
+            title="Vazio = 1,15 × tamanho do texto"
+            className={cn(campoCls, "w-14 tabular-nums")}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") {
+                onIconePt(null);
+                return;
+              }
+              const n = Number(raw);
+              onIconePt(Number.isFinite(n) ? Math.max(4, Math.min(72, n)) : null);
+            }}
+          />
+          <span className="text-[10px] text-neutral-400">pt</span>
+        </label>
+      ) : null}
 
       {mostrarNegrito && onNegrito ? (
         <button

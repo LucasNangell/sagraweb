@@ -29,10 +29,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import type { PapelariaComposicao } from "@/features/papelaria/types";
+import type { PapelariaComposicao, PapelariaRedeEstilo } from "@/features/papelaria/types";
 import {
   DIRECOES_EXTRA,
   ancoraPtDeAreaFrac,
+  espelhoRedePrincipal,
   mmParaPt,
   segmentosComNegrito,
   selecaoEstaEmNegrito,
@@ -40,6 +41,7 @@ import {
   type CampoExtraAlignH,
   type CampoExtraAlignV,
   type CampoExtraDirecao,
+  type CampoExtraRedeItem,
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
 import {
@@ -51,9 +53,13 @@ import {
 } from "@/features/papelaria/papelariaPreviaOtimista";
 
 import { PapelariaEstiloToolbar } from "./PapelariaEstiloToolbar";
+import {
+  PapelariaRedeExtraEditor,
+  type RedeExtraCatalogoItem,
+} from "./PapelariaRedeExtraEditor";
 import { PapelariaTextoEditor, type ExtraEditorMeta } from "./PapelariaTextoEditor";
 
-export type RedeCatalogoItem = { chave: string; nome: string };
+export type RedeCatalogoItem = RedeExtraCatalogoItem;
 
 export type AdicionarCampoExtraPayload = {
   tipo: CampoExtraTipo;
@@ -62,6 +68,9 @@ export type AdicionarCampoExtraPayload = {
   texto?: string;
   rede_chave?: string;
   rede_valor?: string;
+  redes?: CampoExtraRedeItem[];
+  estilo?: PapelariaRedeEstilo | null;
+  icone_pt?: number | null;
   tamanho_pt?: number | null;
   negrito?: Array<[number, number]>;
   align_h?: CampoExtraAlignH;
@@ -235,6 +244,7 @@ export function PapelariaPdfLivePreview({
   /** Menu de contexto para campos extras (operador). Portal passa `false`. */
   permitirCamposExtras = true,
   redesCatalogo = [],
+  redesEstilos,
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
   onMoverCampoExtra,
@@ -256,6 +266,8 @@ export function PapelariaPdfLivePreview({
   layout?: "stack" | "row";
   permitirCamposExtras?: boolean;
   redesCatalogo?: RedeCatalogoItem[];
+  /** Estilos de logo disponíveis no bloco do modelo. */
+  redesEstilos?: Array<{ id: PapelariaRedeEstilo; rotulo: string }>;
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
   onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
@@ -307,8 +319,11 @@ export function PapelariaPdfLivePreview({
     ancora_chave: string;
     direcao: CampoExtraDirecao;
   } | null>(null);
-  const [redeChave, setRedeChave] = useState("");
-  const [redeValor, setRedeValor] = useState("");
+  const [redeLinhas, setRedeLinhas] = useState<CampoExtraRedeItem[]>([
+    { chave: "instagram", valor: "" },
+  ]);
+  const [redeEstilo, setRedeEstilo] = useState<PapelariaRedeEstilo | null>(null);
+  const [redeIconePt, setRedeIconePt] = useState<number | null>(null);
   const [textoDialog, setTextoDialog] = useState<{
     ancora_chave: string;
     direcao: CampoExtraDirecao;
@@ -363,12 +378,13 @@ export function PapelariaPdfLivePreview({
     setTextoXMm(0);
     setTextoYMm(0);
     setTextoTemPos(false);
-    setRedeChave("");
-    setRedeValor("");
+    setRedeLinhas([{ chave: redesCatalogo[0]?.chave ?? "instagram", valor: "" }]);
+    setRedeEstilo(null);
+    setRedeIconePt(null);
     setRedeXMm(0);
     setRedeYMm(0);
     setRedeTemPos(false);
-  }, []);
+  }, [redesCatalogo]);
 
   /**
    * Herda tipografia/alinhamento do campo em que o usuário abriu o menu
@@ -398,13 +414,21 @@ export function PapelariaPdfLivePreview({
   );
 
   const confirmarRedeExtra = useCallback(() => {
-    if (!redeDialog || !onAdicionarCampoExtra || !redeChave) return;
+    if (!redeDialog || !onAdicionarCampoExtra || !redeLinhas.length) return;
+    const redes = redeLinhas
+      .map((r) => ({ chave: r.chave.trim().toLowerCase(), valor: r.valor.trim() }))
+      .filter((r) => r.chave);
+    if (!redes.length) return;
+    const espelho = espelhoRedePrincipal(redes);
     onAdicionarCampoExtra({
       tipo: "rede",
       ancora_chave: redeDialog.ancora_chave,
       direcao: redeDialog.direcao,
-      rede_chave: redeChave,
-      rede_valor: redeValor.trim(),
+      redes,
+      rede_chave: espelho.rede_chave,
+      rede_valor: espelho.rede_valor,
+      estilo: redeEstilo,
+      icone_pt: redeIconePt,
       tamanho_pt: redeTamanhoPt,
       align_h: redeAlignH,
       align_v: redeAlignV,
@@ -417,8 +441,9 @@ export function PapelariaPdfLivePreview({
   }, [
     redeDialog,
     onAdicionarCampoExtra,
-    redeChave,
-    redeValor,
+    redeLinhas,
+    redeEstilo,
+    redeIconePt,
     redeTamanhoPt,
     redeAlignH,
     redeAlignV,
@@ -1066,7 +1091,6 @@ export function PapelariaPdfLivePreview({
                                 onSelect={() => {
                                   limparConteudoCriacao();
                                   aplicarEstiloDaAncora(r);
-                                  setRedeChave(redesCatalogo[0]?.chave ?? "instagram");
                                   setRedeDialog({
                                     ancora_chave: r.chave,
                                     direcao: d.id,
@@ -1100,6 +1124,8 @@ export function PapelariaPdfLivePreview({
                       <PapelariaTextoEditor
                         key={regiaoEditada.chave}
                         regiao={regiaoEditada}
+                        redesCatalogo={redesCatalogo}
+                        redesEstilos={redesEstilos}
                         extraMeta={
                           (regiaoEditada.extra_id
                             ? extrasMeta?.[regiaoEditada.extra_id]
@@ -1201,12 +1227,12 @@ export function PapelariaPdfLivePreview({
           onClick={() => setRedeDialog(null)}
         >
           <div
-            className="w-full max-w-sm rounded-lg border border-sagra-border bg-white p-4 shadow-xl"
+            className="w-full max-w-md rounded-lg border border-sagra-border bg-white p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-sm font-semibold text-neutral-800">Rede social extra</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              Escolha a rede, o perfil e a tipografia neste mesmo passo.
+              Uma ou várias redes, variante da logo e tipografia neste mesmo passo.
             </p>
             <PapelariaEstiloToolbar
               className="mt-3 border-b-0 pb-0"
@@ -1218,6 +1244,9 @@ export function PapelariaPdfLivePreview({
                 setRedeAlignH(align_h);
                 setRedeAlignV(align_v);
               }}
+              mostrarIconePt
+              iconePt={redeIconePt}
+              onIconePt={setRedeIconePt}
               mostrarMm
               xMm={redeXMm}
               yMm={redeYMm}
@@ -1230,46 +1259,15 @@ export function PapelariaPdfLivePreview({
                 setRedeYMm(v);
               }}
             />
-            <label className="mt-3 block text-[11px] font-medium text-neutral-700">
-              Rede
-              <select
-                className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
-                value={redeChave}
-                onChange={(e) => setRedeChave(e.target.value)}
-              >
-                {(redesCatalogo.length
-                  ? redesCatalogo
-                  : [
-                      { chave: "instagram", nome: "Instagram" },
-                      { chave: "facebook", nome: "Facebook" },
-                      { chave: "x", nome: "X" },
-                      { chave: "linkedin", nome: "LinkedIn" },
-                      { chave: "youtube", nome: "YouTube" },
-                      { chave: "tiktok", nome: "TikTok" },
-                      { chave: "threads", nome: "Threads" },
-                      { chave: "whatsapp", nome: "WhatsApp" },
-                    ]
-                ).map((r) => (
-                  <option key={r.chave} value={r.chave}>
-                    {r.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-2 block text-[11px] font-medium text-neutral-700">
-              Perfil / handle
-              <input
-                className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
-                value={redeValor}
-                onChange={(e) => setRedeValor(e.target.value)}
-                placeholder="@usuario"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmarRedeExtra();
-                  if (e.key === "Escape") setRedeDialog(null);
-                }}
-              />
-            </label>
+            <PapelariaRedeExtraEditor
+              className="mt-3"
+              redes={redeLinhas}
+              onRedesChange={setRedeLinhas}
+              estilo={redeEstilo}
+              onEstiloChange={setRedeEstilo}
+              catalogo={redesCatalogo}
+              estilosDisponiveis={redesEstilos}
+            />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
@@ -1282,7 +1280,7 @@ export function PapelariaPdfLivePreview({
                 type="button"
                 className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
                 onClick={confirmarRedeExtra}
-                disabled={!redeChave}
+                disabled={!redeLinhas.some((r) => r.chave)}
               >
                 Adicionar
               </button>

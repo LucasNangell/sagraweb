@@ -57,6 +57,8 @@ import {
 import {
   CAMPOS_EXTRAS_DADOS_KEY,
   camposExtrasParaDados,
+  espelhoRedePrincipal,
+  normalizarRedesDoExtra,
   novoIdCampoExtra,
   type CampoExtra,
 } from "@/features/papelaria/papelariaCamposExtras";
@@ -1192,6 +1194,13 @@ export function PapelariaCorelPanel({
         align_v: e.align_v,
         x_pt: e.x_pt,
         y_pt: e.y_pt,
+        ...(e.tipo === "rede"
+          ? {
+              redes: e.redes,
+              estilo: e.estilo,
+              icone_pt: e.icone_pt,
+            }
+          : {}),
       };
     }
     for (const [chave, est] of Object.entries(camposEstilo)) {
@@ -1244,7 +1253,19 @@ export function PapelariaCorelPanel({
               ...(meta?.y_pt !== undefined ? { y_pt: meta.y_pt } : {}),
             };
             if (e.tipo === "rede") {
-              next.rede_valor = texto.trim();
+              const redes =
+                meta?.redes?.length
+                  ? meta.redes.map((r) => ({
+                      chave: String(r.chave || "").trim().toLowerCase(),
+                      valor: String(r.valor || "").trim(),
+                    }))
+                  : normalizarRedesDoExtra(e.redes, e.rede_chave, texto.trim());
+              const espelho = espelhoRedePrincipal(redes);
+              next.redes = redes;
+              next.rede_chave = espelho.rede_chave;
+              next.rede_valor = espelho.rede_valor;
+              if (meta?.estilo !== undefined) next.estilo = meta.estilo ?? null;
+              if (meta?.icone_pt !== undefined) next.icone_pt = meta.icone_pt;
               return next;
             }
             next.texto = texto;
@@ -1322,6 +1343,20 @@ export function PapelariaCorelPanel({
   );
 
   const handleAdicionarCampoExtra = useCallback((payload: AdicionarCampoExtraPayload) => {
+    const redes =
+      payload.tipo === "rede"
+        ? payload.redes?.length
+          ? payload.redes.map((r) => ({
+              chave: String(r.chave || "").trim().toLowerCase(),
+              valor: String(r.valor || "").trim(),
+            }))
+          : normalizarRedesDoExtra(
+              null,
+              payload.rede_chave ?? "",
+              payload.rede_valor ?? "",
+            )
+        : [];
+    const espelho = espelhoRedePrincipal(redes);
     setCamposExtras((prev) => [
       ...prev,
       {
@@ -1330,8 +1365,11 @@ export function PapelariaCorelPanel({
         ancora_chave: payload.ancora_chave,
         direcao: payload.direcao,
         texto: payload.tipo === "texto" ? (payload.texto ?? "") : "",
-        rede_chave: payload.tipo === "rede" ? (payload.rede_chave ?? "") : "",
-        rede_valor: payload.tipo === "rede" ? (payload.rede_valor ?? "") : "",
+        rede_chave: payload.tipo === "rede" ? espelho.rede_chave : "",
+        rede_valor: payload.tipo === "rede" ? espelho.rede_valor : "",
+        redes,
+        estilo: payload.tipo === "rede" ? (payload.estilo ?? null) : null,
+        icone_pt: payload.tipo === "rede" ? (payload.icone_pt ?? null) : null,
         x_pt: payload.x_pt ?? null,
         y_pt: payload.y_pt ?? null,
         offset_x_pt: 0,
@@ -2281,7 +2319,10 @@ export function PapelariaCorelPanel({
             redesCatalogoExtras={(redesBloco?.redes ?? []).map((r) => ({
               chave: r.chave,
               nome: r.nome,
+              exemplo: r.exemplo,
+              logos_url: r.logos_url,
             }))}
+            redesEstilosExtras={redesBloco?.estilos}
             onAdicionarCampoExtra={handleAdicionarCampoExtra}
             onRemoverCampoExtra={handleRemoverCampoExtra}
             onMoverCampoExtra={handleMoverCampoExtra}

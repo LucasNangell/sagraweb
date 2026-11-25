@@ -54,6 +54,9 @@ describe("papelariaCamposExtras", () => {
         texto: "Linha",
         rede_chave: "",
         rede_valor: "",
+        redes: [],
+        estilo: null,
+        icone_pt: null,
         x_pt: null,
         y_pt: null,
         offset_x_pt: 0,
@@ -67,6 +70,49 @@ describe("papelariaCamposExtras", () => {
     expect(json).toContain("extra_1");
     expect(CAMPOS_EXTRAS_DADOS_KEY).toBe("__campos_extras");
     expect(camposExtrasParaDados([])).toBeNull();
+  });
+
+  it("compat legado e multi-rede com estilo/icone", () => {
+    const legado = normalizarCamposExtras([
+      {
+        id: "extra_legado",
+        tipo: "rede",
+        ancora_chave: "7:1:NOME",
+        direcao: "direita",
+        rede_chave: "instagram",
+        rede_valor: "@ana",
+      },
+    ]);
+    expect(legado).toHaveLength(1);
+    expect(legado[0]?.redes).toEqual([{ chave: "instagram", valor: "@ana" }]);
+    expect(legado[0]?.estilo).toBeNull();
+    expect(legado[0]?.icone_pt).toBeNull();
+
+    const multi = normalizarCamposExtras([
+      {
+        id: "extra_multi",
+        tipo: "rede",
+        ancora_chave: "7:1:NOME",
+        direcao: "abaixo",
+        redes: [
+          { chave: "instagram", valor: "@ana" },
+          { chave: "facebook", valor: "ana.fb" },
+        ],
+        estilo: "pb",
+        icone_pt: 18,
+        tamanho_pt: 10,
+      },
+    ]);
+    expect(multi[0]?.redes).toHaveLength(2);
+    expect(multi[0]?.rede_chave).toBe("instagram");
+    expect(multi[0]?.rede_valor).toBe("@ana");
+    expect(multi[0]?.estilo).toBe("pb");
+    expect(multi[0]?.icone_pt).toBe(18);
+
+    const json = camposExtrasParaDados(multi);
+    expect(json).toContain('"redes"');
+    expect(json).toContain('"estilo":"pb"');
+    expect(json).toContain('"icone_pt":18');
   });
 
   it("gera ids únicos", () => {

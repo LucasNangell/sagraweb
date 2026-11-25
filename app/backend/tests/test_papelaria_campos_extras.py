@@ -39,6 +39,40 @@ def test_normalizar_campos_extras_ok():
     assert out[0]["tamanho_pt"] == 12.0
     assert out[0]["negrito"] == [[0, 5]]
     assert out[1]["rede_chave"] == "instagram"
+    assert out[1]["redes"] == [{"chave": "instagram", "valor": "@ana"}]
+    assert out[1]["estilo"] is None
+    assert out[1]["icone_pt"] is None
+
+
+def test_normalizar_campos_extras_redes_multi_estilo_icone():
+    from services.papelaria_campos_extras_service import normalizar_campos_extras
+
+    out = normalizar_campos_extras(
+        [
+            {
+                "id": "extra_r",
+                "tipo": "rede",
+                "ancora_chave": "7:1:NOME",
+                "direcao": "abaixo",
+                "redes": [
+                    {"chave": "instagram", "valor": "@ana"},
+                    {"chave": "facebook", "valor": "ana.fb"},
+                ],
+                "estilo": "pb",
+                "icone_pt": 16,
+                "tamanho_pt": 10,
+            }
+        ]
+    )
+    assert len(out) == 1
+    assert out[0]["redes"] == [
+        {"chave": "instagram", "valor": "@ana"},
+        {"chave": "facebook", "valor": "ana.fb"},
+    ]
+    assert out[0]["rede_chave"] == "instagram"
+    assert out[0]["rede_valor"] == "@ana"
+    assert out[0]["estilo"] == "pb"
+    assert out[0]["icone_pt"] == 16.0
 
 
 def test_normalizar_campos_extras_rejeita_invalido():
@@ -159,6 +193,108 @@ def test_aplicar_campos_extras_texto_emite_regiao():
     assert extras_regs
     assert extras_regs[0]["chave"] == "extra:extra_1"
     assert extras_regs[0].get("page_w")
+
+
+def test_aplicar_campos_extras_multi_rede_estilo_override(monkeypatch, tmp_path):
+    from services import papelaria_campos_extras_service as extras_svc
+    from services import papelaria_redes_service as redes_svc
+
+    logo = tmp_path / "ig.png"
+    logo.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f"
+        b"\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    monkeypatch.setattr(
+        redes_svc,
+        "por_chave",
+        lambda: {
+            "instagram": {
+                "chave": "instagram",
+                "nome": "Instagram",
+                "ativo": True,
+                "logos": {"pb": str(logo), "policromia": str(logo)},
+            },
+            "facebook": {
+                "chave": "facebook",
+                "nome": "Facebook",
+                "ativo": True,
+                "logos": {"pb": str(logo)},
+            },
+        },
+    )
+
+    def _caminho(rede, estilo=None, *, permitir_outro=True):
+        logos = rede.get("logos") or {}
+        if estilo and estilo in logos:
+            return logo
+        return logo if logos else None
+
+    monkeypatch.setattr(redes_svc, "caminho_logo", _caminho)
+
+    doc = fitz.open()
+    page = doc.new_page(width=300, height=400)
+    page.insert_text((50, 80), "ANCORA", fontsize=12)
+    pdf_bytes = doc.tobytes()
+    doc.close()
+
+    regioes = [
+        {
+            "chave": "7:1:ANCORA",
+            "modelo_id": 7,
+            "pagina": 1,
+            "pagina_saida": 0,
+            "marcador": "ANCORA",
+            "area": [50 / 300, 60 / 400, 150 / 300, 90 / 400],
+            "texto": "ANCORA",
+        }
+    ]
+    extras = [
+        {
+            "id": "extra_r",
+            "tipo": "rede",
+            "ancora_chave": "7:1:ANCORA",
+            "direcao": "abaixo",
+            "texto": "",
+            "rede_chave": "instagram",
+            "rede_valor": "@ana",
+            "redes": [
+                {"chave": "instagram", "valor": "@ana"},
+                {"chave": "facebook", "valor": "ana.fb"},
+            ],
+            "estilo": "pb",
+            "icone_pt": 14,
+            "x_pt": None,
+            "y_pt": None,
+            "offset_x_pt": 0,
+            "offset_y_pt": 0,
+            "align_h": "esquerda",
+            "align_v": "topo",
+            "tamanho_pt": 10,
+            "negrito": [],
+        }
+    ]
+    avisos: list[str] = []
+    out = extras_svc.aplicar_campos_extras(
+        pdf_bytes,
+        extras,
+        regioes,
+        modelo_id=7,
+        avisos=avisos,
+        estilo_redes="policromia",
+    )
+    assert isinstance(out, (bytes, bytearray))
+    rede_regs = [r for r in regioes if r.get("tipo") == "rede_extra"]
+    assert len(rede_regs) == 1
+    reg = rede_regs[0]
+    assert reg["redes"] == [
+        {"chave": "instagram", "valor": "@ana"},
+        {"chave": "facebook", "valor": "ana.fb"},
+    ]
+    assert reg["texto"] == "@ana\nana.fb"
+    assert reg["estilo"] == "pb"  # override do global policromia
+    assert reg["icone_pt"] == 14.0
 
 
 def test_previa_pdf_rota_encaminha_campos_extras(monkeypatch):

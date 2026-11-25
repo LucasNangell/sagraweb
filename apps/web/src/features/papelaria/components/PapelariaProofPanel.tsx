@@ -54,7 +54,11 @@ import {
   templateId,
   type ActiveDynamicFieldPlacement,
 } from "../preview";
-import type { PapelariaJob, PapelariaProvaStatus } from "../types";
+import type {
+  PapelariaJob,
+  PapelariaProvaStatus,
+  PapelariaRedeEstilo,
+} from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import { previaRepeticao, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 
@@ -120,6 +124,7 @@ type Props = {
   /** Campos extras (só operador): menu de contexto na prévia PDF. */
   permitirCamposExtras?: boolean;
   redesCatalogoExtras?: RedeCatalogoItem[];
+  redesEstilosExtras?: Array<{ id: PapelariaRedeEstilo; rotulo: string }>;
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
   onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
@@ -193,6 +198,7 @@ export function PapelariaProofPanel({
   onRestaurarTextoPrevia,
   permitirCamposExtras = true,
   redesCatalogoExtras = [],
+  redesEstilosExtras,
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
   onMoverCampoExtra,
@@ -975,6 +981,7 @@ export function PapelariaProofPanel({
               onRestaurarTexto={onRestaurarTextoPrevia}
               permitirCamposExtras={permitirCamposExtras}
               redesCatalogo={redesCatalogoExtras}
+              redesEstilos={redesEstilosExtras}
               onAdicionarCampoExtra={onAdicionarCampoExtra}
               onRemoverCampoExtra={onRemoverCampoExtra}
               onMoverCampoExtra={onMoverCampoExtra}

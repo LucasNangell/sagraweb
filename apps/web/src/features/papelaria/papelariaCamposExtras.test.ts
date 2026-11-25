@@ -9,6 +9,8 @@ import {
   normalizarCamposExtras,
   novoIdCampoExtra,
   ptParaMm,
+  segmentosComNegrito,
+  selecaoEstaEmNegrito,
   toggleNegritoRange,
 } from "./papelariaCamposExtras";
 
@@ -85,5 +87,16 @@ describe("papelariaCamposExtras", () => {
     expect(toggleNegritoRange([[0, 4]], 0, 4, 10)).toEqual([]);
     // Sobreposição parcial: completa o negrito no intervalo selecionado
     expect(toggleNegritoRange([[0, 4]], 2, 6, 10)).toEqual([[0, 6]]);
+  });
+
+  it("segmentos e seleção em negrito", () => {
+    expect(segmentosComNegrito("Abcde", [[1, 3]])).toEqual([
+      { texto: "A", negrito: false },
+      { texto: "bc", negrito: true },
+      { texto: "de", negrito: false },
+    ]);
+    expect(selecaoEstaEmNegrito([[1, 3]], 1, 3, 5)).toBe(true);
+    expect(selecaoEstaEmNegrito([[1, 3]], 0, 3, 5)).toBe(false);
+    expect(selecaoEstaEmNegrito([[1, 3]], 2, 2, 5)).toBe(true);
   });
 });

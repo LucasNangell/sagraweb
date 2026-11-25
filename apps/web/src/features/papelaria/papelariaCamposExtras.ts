@@ -185,6 +185,55 @@ export function alignParaCelula(
   };
 }
 
+/** Segmentos consecutivos com flag de negrito (para preview tipográfico). */
+export function segmentosComNegrito(
+  texto: string,
+  ranges: Array<[number, number]>,
+): Array<{ texto: string; negrito: boolean }> {
+  if (!texto) return [];
+  const marks = new Array<boolean>(texto.length).fill(false);
+  for (const [a, b] of ranges) {
+    const x = Math.max(0, Math.min(texto.length, a));
+    const y = Math.max(0, Math.min(texto.length, b));
+    for (let i = x; i < y; i++) marks[i] = true;
+  }
+  const out: Array<{ texto: string; negrito: boolean }> = [];
+  let i = 0;
+  while (i < texto.length) {
+    const flag = marks[i] ?? false;
+    let j = i + 1;
+    while (j < texto.length && (marks[j] ?? false) === flag) j += 1;
+    out.push({ texto: texto.slice(i, j), negrito: flag });
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * True quando o intervalo [start, end) está inteiro em negrito.
+ * Com cursor (start === end), olha o caractere à esquerda (ou o da posição).
+ */
+export function selecaoEstaEmNegrito(
+  ranges: Array<[number, number]>,
+  start: number,
+  end: number,
+  textoLen: number,
+): boolean {
+  if (textoLen <= 0) return false;
+  if (end <= start) {
+    const i = Math.min(textoLen - 1, Math.max(0, start > 0 ? start - 1 : 0));
+    return ranges.some(([a, b]) => i >= a && i < b);
+  }
+  const a = Math.max(0, Math.min(textoLen, start));
+  const b = Math.max(0, Math.min(textoLen, end));
+  if (b <= a) return false;
+  let coberto = 0;
+  for (const [x, y] of ranges) {
+    coberto += Math.max(0, Math.min(y, b) - Math.max(x, a));
+  }
+  return coberto >= b - a;
+}
+
 /** Une intervalos de negrito e aplica/remove no range [start, end). */
 export function toggleNegritoRange(
   ranges: Array<[number, number]>,

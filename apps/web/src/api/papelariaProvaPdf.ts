@@ -176,6 +176,8 @@ export interface ProvaPdfRegiao {
   extra_id?: string;
   /** Tamanho efetivo do extra (pt). */
   tamanho_pt?: number;
+  /** Nome da fonte do PDF (quando disponível). */
+  fonte?: string | null;
   align_h?: "esquerda" | "centro" | "direita";
   align_v?: "topo" | "meio" | "base";
   /** Dimensões da página em pontos (extras — para arraste → x_pt/y_pt). */

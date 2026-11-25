@@ -163,46 +163,50 @@ def _area_abs(regiao: dict[str, Any], page_rect: Any) -> Any:
     )
 
 
-def _bbox_relativo(
-    ancora: Any,
-    direcao: str,
+def _ponto_ancora(box: Any, align_h: str, align_v: str) -> tuple[float, float]:
+    """Ponto fixo da caixa conforme o alinhamento 3×3 (canto/centro)."""
+    if align_h == "direita":
+        x = float(box.x1)
+    elif align_h == "centro":
+        x = (float(box.x0) + float(box.x1)) / 2.0
+    else:
+        x = float(box.x0)
+    if align_v == "base":
+        y = float(box.y1)
+    elif align_v == "meio":
+        y = (float(box.y0) + float(box.y1)) / 2.0
+    else:
+        y = float(box.y0)
+    return x, y
+
+
+def _box_from_ancora(
+    ax: float,
+    ay: float,
+    w: float,
+    h: float,
+    align_h: str,
+    align_v: str,
     largura: float,
     altura: float,
-    *,
-    linha_h: float,
-    largura_conteudo: float,
-    align_h: str,
 ) -> Any:
-    """Caixa do extra: altura ≈ linha tipográfica; X conforme align_h da âncora."""
+    """Monta a caixa a partir do ponto âncora (cresce para o lado oposto ao align)."""
     import fitz
 
-    gap = GAP_PT
-    h = max(8.0, float(linha_h))
-    w = max(8.0, float(largura_conteudo), float(ancora.width) * 0.35)
-    # Alinha a caixa ao lado correspondente da âncora
+    w = max(2.0, float(w))
+    h = max(2.0, float(h))
     if align_h == "direita":
-        x0 = ancora.x1 - w
+        x0, x1 = ax - w, ax
     elif align_h == "centro":
-        x0 = (ancora.x0 + ancora.x1) / 2.0 - w / 2.0
+        x0, x1 = ax - w / 2.0, ax + w / 2.0
     else:
-        x0 = ancora.x0
-    x1 = x0 + w
-    if direcao == "acima":
-        y1 = ancora.y0 - gap
-        y0 = y1 - h
-    elif direcao == "abaixo":
-        y0 = ancora.y1 + gap
-        y1 = y0 + h
-    elif direcao == "esquerda":
-        x1 = ancora.x0 - gap
-        x0 = x1 - w
-        y0 = ancora.y0
-        y1 = y0 + h
+        x0, x1 = ax, ax + w
+    if align_v == "base":
+        y0, y1 = ay - h, ay
+    elif align_v == "meio":
+        y0, y1 = ay - h / 2.0, ay + h / 2.0
     else:
-        x0 = ancora.x1 + gap
-        x1 = x0 + w
-        y0 = ancora.y0
-        y1 = y0 + h
+        y0, y1 = ay, ay + h
     page = fitz.Rect(0, 0, largura, altura)
     box = fitz.Rect(x0, y0, x1, y1) & page
     if box.is_empty or box.width < 2 or box.height < 2:
@@ -215,14 +219,96 @@ def _bbox_relativo(
     return box
 
 
-def _aplicar_offsets(box: Any, extra: dict[str, Any], largura: float, altura: float) -> Any:
+def _bbox_relativo(
+    ancora: Any,
+    direcao: str,
+    largura: float,
+    altura: float,
+    *,
+    linha_h: float,
+    largura_conteudo: float,
+    align_h: str,
+    align_v: str = "topo",
+) -> Any:
+    """
+    Caixa do extra relativa à âncora.
+
+    Calcula a caixa “natural” colada na direção pedida e depois a reconstrói
+    a partir do ponto âncora do align 3×3 — assim, ao mudar o tamanho, o canto
+    escolhido permanece fixo em relação à âncora.
+    """
+    gap = GAP_PT
+    h = max(8.0, float(linha_h))
+    w = max(8.0, float(largura_conteudo), float(ancora.width) * 0.35)
+
+    # Caixa base (topo-esquerda), só para obter o ponto âncora desejado.
+    if direcao == "acima":
+        x0 = float(ancora.x0)
+        if align_h == "direita":
+            x0 = float(ancora.x1) - w
+        elif align_h == "centro":
+            x0 = (float(ancora.x0) + float(ancora.x1)) / 2.0 - w / 2.0
+        y1 = float(ancora.y0) - gap
+        y0 = y1 - h
+    elif direcao == "abaixo":
+        x0 = float(ancora.x0)
+        if align_h == "direita":
+            x0 = float(ancora.x1) - w
+        elif align_h == "centro":
+            x0 = (float(ancora.x0) + float(ancora.x1)) / 2.0 - w / 2.0
+        y0 = float(ancora.y1) + gap
+        y1 = y0 + h
+    elif direcao == "esquerda":
+        x1 = float(ancora.x0) - gap
+        x0 = x1 - w
+        y0 = float(ancora.y0)
+        if align_v == "base":
+            y0 = float(ancora.y1) - h
+        elif align_v == "meio":
+            y0 = (float(ancora.y0) + float(ancora.y1)) / 2.0 - h / 2.0
+        y1 = y0 + h
+    else:
+        x0 = float(ancora.x1) + gap
+        y0 = float(ancora.y0)
+        if align_v == "base":
+            y0 = float(ancora.y1) - h
+        elif align_v == "meio":
+            y0 = (float(ancora.y0) + float(ancora.y1)) / 2.0 - h / 2.0
+        y1 = y0 + h
+
+    import fitz
+
+    base = fitz.Rect(x0, y0, x0 + w, y1)
+    ax, ay = _ponto_ancora(base, align_h, align_v)
+    return _box_from_ancora(ax, ay, w, h, align_h, align_v, largura, altura)
+
+
+def _aplicar_offsets(
+    box: Any,
+    extra: dict[str, Any],
+    largura: float,
+    altura: float,
+    *,
+    align_h: str,
+    align_v: str,
+) -> Any:
+    """
+    ``x_pt``/``y_pt`` são o ponto âncora do align 3×3 (não o canto superior-esquerdo).
+    Assim, ao mudar o tamanho, a caixa cresce para o lado oposto ao alinhamento.
+    """
     import fitz
 
     if extra.get("x_pt") is not None and extra.get("y_pt") is not None:
-        w, h = box.width, box.height
-        x0 = float(extra["x_pt"])
-        y0 = float(extra["y_pt"])
-        return fitz.Rect(x0, y0, x0 + w, y0 + h) & fitz.Rect(0, 0, largura, altura)
+        return _box_from_ancora(
+            float(extra["x_pt"]),
+            float(extra["y_pt"]),
+            box.width,
+            box.height,
+            align_h,
+            align_v,
+            largura,
+            altura,
+        )
     dx = float(extra.get("offset_x_pt") or 0)
     dy = float(extra.get("offset_y_pt") or 0)
     if dx == 0 and dy == 0:
@@ -405,8 +491,11 @@ def aplicar_campos_extras(
                     linha_h=linha_h,
                     largura_conteudo=tw,
                     align_h=align_h,
+                    align_v=align_v,
                 )
-                box = _aplicar_offsets(box, extra, largura_pg, altura_pg)
+                box = _aplicar_offsets(
+                    box, extra, largura_pg, altura_pg, align_h=align_h, align_v=align_v
+                )
                 th = tam * 1.05
                 cx, cy = _pos_conteudo(box, tw if texto else box.width, th, align_h, align_v)
                 if texto and fonte is not None and recurso is not None:
@@ -455,6 +544,7 @@ def aplicar_campos_extras(
                     "tipo": "campo_extra",
                     "extra_id": extra["id"],
                     "tamanho_pt": tam,
+                    "fonte": getattr(fonte, "nome", None) if fonte is not None else None,
                     "align_h": align_h,
                     "align_v": align_v,
                     "page_w": largura_pg,
@@ -497,8 +587,11 @@ def aplicar_campos_extras(
                 linha_h=max(linha_h, icone),
                 largura_conteudo=max(tw, 24.0),
                 align_h=align_h,
+                align_v=align_v,
             )
-            box = _aplicar_offsets(box, extra, largura_pg, altura_pg)
+            box = _aplicar_offsets(
+                box, extra, largura_pg, altura_pg, align_h=align_h, align_v=align_v
+            )
             th = max(icone, tam * 1.05)
             cx, cy = _pos_conteudo(box, tw, th, align_h, align_v)
             centro = cy + th / 2
@@ -562,6 +655,7 @@ def aplicar_campos_extras(
                 "extra_id": extra["id"],
                 "rede_chave": extra["rede_chave"],
                 "tamanho_pt": tam,
+                "fonte": getattr(fonte, "nome", None) if fonte is not None else None,
                 "align_h": align_h,
                 "align_v": align_v,
                 "page_w": largura_pg,

@@ -18,9 +18,11 @@ import {
   supportNotificationDetailsFromWs,
 } from "@/features/support/utils/supportNotificationHandlers";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
+import { isSagraManutencaoApp } from "@/lib/sagraNativeApp";
 import {
   markNativeNotificationShown,
   showNativeNotification,
+  spaAbsoluteUrl,
   wasNativeNotificationShown,
 } from "@/lib/nativeNotification";
 import type { AppNotification } from "../types";
@@ -61,7 +63,9 @@ function isSupportPopupSkipped(notification: AppNotification): boolean {
   return (
     detalhes.type === "support_reply" ||
     detalhes.type === "cliente_support" ||
-    detalhes.type === "support_incoming"
+    detalhes.type === "support_incoming" ||
+    // Manutenção tem aviso próprio (push/app nativo + toast na página).
+    detalhes.type === "manutencao"
   );
 }
 
@@ -295,6 +299,24 @@ export function OsNotificationHandler() {
         }
       }
 
+      if (data.action === "manutencao") {
+        // Sem modal bloqueante: no app Android o aviso é nativo; no navegador,
+        // notificação do sistema (mesma tag do Web Push → não duplica).
+        if (data.browser_notify === true && !isSagraManutencaoApp()) {
+          void showNativeNotification({
+            title: "Manutenção",
+            body: data.mensagem?.trim() || "Atualização na manutenção",
+            notificationId: data.notification_id ?? null,
+            url: spaAbsoluteUrl("manutencao"),
+            urgent: Boolean(data.urgent),
+          });
+        }
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications(ponto),
+        });
+        return;
+      }
+
       if (data.action && OS_WATCH_ACTIONS.has(data.action)) {
         if (data.browser_notify === true) {
           void showOsWatchNativeToast(data);
@@ -358,7 +380,7 @@ export function OsNotificationHandler() {
         <p className="mt-3 whitespace-pre-wrap text-sm text-neutral-800">
           {active.Mensagem ?? "Nova notificação"}
         </p>
-        {(active.NroProtocolo != null || active.AnoProtocolo != null) && (
+        {hasOsRef(active.NroProtocolo, active.AnoProtocolo) && (
           <p className="mt-2 text-xs text-neutral-500">
             OS {active.NroProtocolo}/{active.AnoProtocolo}
           </p>

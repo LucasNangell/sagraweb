@@ -381,6 +381,7 @@ def test_notificar_operadores_envia_web_push_com_link_do_pedido():
         ),
         patch("services.notification_push_service.push_user_notification"),
         patch("services.web_push_service.send_web_push_to_ponto", return_value=1) as send,
+        patch("services.manutencao_app_service.enfileirar_notificacao") as fila_app,
         patch.object(svc.threading, "Thread") as thread_cls,
     ):
         svc._notificar_operadores(_pedido_fake(), exclude_ponto="222")
@@ -397,6 +398,10 @@ def test_notificar_operadores_envia_web_push_com_link_do_pedido():
     assert call["urgent"] is True
     assert call["notification_id"] == 901
     assert call["icon"] == "icons/manutencao-192.png"
+    fila_app.assert_called_once()
+    assert fila_app.call_args.args[0] == ["111"]
+    assert fila_app.call_args.kwargs["pedido_id"] == 42
+    assert fila_app.call_args.kwargs["urgente"] is True
 
 
 def test_notificar_solicitante_aponta_para_gerencia():
@@ -404,6 +409,7 @@ def test_notificar_solicitante_aponta_para_gerencia():
         patch("services.notification_push_service.insert_user_notification", return_value=7),
         patch("services.notification_push_service.push_user_notification"),
         patch("services.web_push_service.send_web_push_to_ponto", return_value=1) as send,
+        patch("services.manutencao_app_service.enfileirar_notificacao") as fila_app,
         patch.object(svc.threading, "Thread") as thread_cls,
     ):
         svc._notificar_solicitante(_pedido_fake(prioridade="normal"), ponto="999")

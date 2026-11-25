@@ -1319,6 +1319,7 @@ def _notify(
     url: Optional[str] = None,
     tag: Optional[str] = None,
     background: bool = True,
+    pedido_id: Optional[int] = None,
 ) -> None:
     try:
         from services.notification_push_service import (
@@ -1332,7 +1333,17 @@ def _notify(
     ids: dict[str, Optional[int]] = {}
     for ponto in alvos:
         try:
-            nid = insert_user_notification(ponto=ponto, nro=0, ano=0, mensagem=mensagem)
+            nid = insert_user_notification(
+                ponto=ponto,
+                nro=0,
+                ano=0,
+                mensagem=mensagem,
+                # Tipo próprio: o SPA não abre o modal genérico de "Notificação de OS".
+                detalhes_json=json.dumps(
+                    {"type": "manutencao", "pedido_id": pedido_id, "url": url, "urgent": urgent},
+                    ensure_ascii=False,
+                ),
+            )
             ids[ponto] = nid
             push_user_notification(
                 target_ponto=ponto,
@@ -1348,6 +1359,20 @@ def _notify(
             logger.warning("Manutenção: falha ao notificar ponto %s: %s", ponto, exc)
     if not alvos:
         return
+    # App Android: fila lida pelo serviço em segundo plano (chega com o app fechado).
+    try:
+        from services.manutencao_app_service import enfileirar_notificacao
+
+        enfileirar_notificacao(
+            alvos,
+            titulo=titulo,
+            mensagem=mensagem,
+            url=url,
+            urgente=urgent,
+            pedido_id=pedido_id,
+        )
+    except Exception as exc:
+        logger.warning("Manutenção: fila do app falhou: %s", exc)
     kwargs = dict(
         titulo=titulo,
         mensagem=mensagem,
@@ -1411,6 +1436,7 @@ def _notificar_operadores(
         titulo=titulo,
         url=url_pedido(pedido["id"], "operador"),
         tag=f"sagra-manutencao-{pedido['id']}",
+        pedido_id=pedido["id"],
     )
 
 
@@ -1425,4 +1451,5 @@ def _notificar_solicitante(pedido: dict[str, Any], ponto: str) -> None:
         titulo=f"✅ Manutenção concluída · {pedido['maquina_nome']}",
         url=url_pedido(pedido["id"], "gerencia"),
         tag=f"sagra-manutencao-{pedido['id']}",
+        pedido_id=pedido["id"],
     )

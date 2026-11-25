@@ -15,6 +15,7 @@ import {
   Plus,
   Repeat,
   Search,
+  Smartphone,
   Timer,
   X,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import {
   useRecorrentes,
   useResumo,
 } from "../useManutencaoData";
+import { AparelhosPanel } from "./AparelhosPanel";
 import { MaquinasPanel } from "./MaquinasPanel";
 import {
   Badge,
@@ -57,7 +59,7 @@ import { PedidoCard } from "./PedidoCard";
 import { PedidoDetalheDialog } from "./PedidoDetalheDialog";
 import { RecorrentesPanel } from "./RecorrentesPanel";
 
-type View = "pedidos" | "maquinas" | "recorrentes";
+type View = "pedidos" | "maquinas" | "recorrentes" | "app";
 
 export function GerenciaTab({
   maquinaCodigo,
@@ -99,12 +101,13 @@ export function GerenciaTab({
     { id: "pedidos", label: "Pedidos", icon: ListOrdered },
     { id: "maquinas", label: "Máquinas", icon: Cog },
     { id: "recorrentes", label: "Recorrentes", icon: Repeat },
+    { id: "app", label: "App", icon: Smartphone },
   ];
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
           {views.map((v) => {
             const Icon = v.icon;
             return (
@@ -149,6 +152,7 @@ export function GerenciaTab({
           onAbrirPedido={setDetalheId}
         />
       ) : null}
+      {view === "app" ? <AparelhosPanel /> : null}
       {view === "recorrentes" ? (
         <RecorrentesPanel
           onSolicitar={(r) => abrirNovo({ maquinaId: r.maquina_id ?? null, recorrenteId: r.id })}

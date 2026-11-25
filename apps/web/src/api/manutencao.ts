@@ -61,6 +61,47 @@ export interface ManutencaoEvento {
   criado_em?: string | null;
 }
 
+export interface ManutencaoVisualizacao {
+  ponto: string;
+  nome?: string | null;
+  primeira_em: string | null;
+  ultima_em: string | null;
+  origem: "app" | "web";
+  vezes: number;
+}
+
+export interface ManutencaoAparelho {
+  id: number;
+  ponto: string;
+  nome?: string | null;
+  modelo?: string | null;
+  versao_app?: string | null;
+  criado_em: string | null;
+  ultimo_acesso_em: string | null;
+  ultima_abertura_em: string | null;
+  revogado_em: string | null;
+  aberturas_7d: number;
+}
+
+export interface ManutencaoAppAbertura {
+  id: number;
+  ponto: string;
+  nome?: string | null;
+  modelo?: string | null;
+  versao_app?: string | null;
+  aberto_em: string | null;
+}
+
+export interface ManutencaoAppVersao {
+  version_code: number;
+  version_name: string;
+  arquivo: string;
+  sha256: string;
+  tamanho: number;
+  publicado_em?: string | null;
+  notas?: string | null;
+}
+
 export interface ManutencaoPedido {
   id: number;
   maquina_id: number;
@@ -95,6 +136,8 @@ export interface ManutencaoPedido {
   atualizado_em?: string | null;
   /** Só com `incluirSimilares`: soluções semelhantes já registradas no histórico. */
   similares_count?: number;
+  /** Quem já viu o pedido (app ou web) e quando. */
+  visualizacoes?: ManutencaoVisualizacao[];
   eventos?: ManutencaoEvento[];
 }
 
@@ -177,6 +220,8 @@ export const manutencaoKeys = {
   similares: (id: number) => ["manutencao", "similares", id] as const,
   historico: (q: string, maquinaId: number | null) =>
     ["manutencao", "historico", q, maquinaId] as const,
+  aparelhos: ["manutencao", "aparelhos"] as const,
+  appVersao: ["manutencao", "app-versao"] as const,
 };
 
 function json(method: string, body?: unknown): RequestInit {
@@ -374,4 +419,27 @@ export function testarManutencaoPush() {
     "/manutencao/push/teste",
     { method: "POST" },
   );
+}
+
+export function registrarManutencaoVisualizacoes(ids: number[], origem: "app" | "web") {
+  return apiFetch<{ registrados: number }>(
+    "/manutencao/visualizacoes",
+    json("POST", { ids, origem }),
+  );
+}
+
+export function fetchManutencaoAparelhos() {
+  return apiFetch<{
+    items: ManutencaoAparelho[];
+    aberturas: ManutencaoAppAbertura[];
+    versao: ManutencaoAppVersao | null;
+  }>("/manutencao/aparelhos");
+}
+
+export function revogarManutencaoAparelho(id: number) {
+  return apiFetch<{ ok: boolean }>(`/manutencao/aparelhos/${id}/revogar`, { method: "POST" });
+}
+
+export function fetchManutencaoAppVersao() {
+  return apiFetch<ManutencaoAppVersao>("/manutencao/app/versao");
 }

@@ -6,6 +6,7 @@ import { LombadaCalculatorModal } from "@/features/lombada/components/LombadaCal
 import { useLombadaUiStore } from "@/features/lombada/lombadaUiStore";
 import { SupportMessageModal } from "@/features/support/components/SupportMessageModal";
 import { useSupportUiStore } from "@/features/support/supportUiStore";
+import { isSagraManutencaoApp } from "@/lib/sagraNativeApp";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 
@@ -15,6 +16,17 @@ export function AppShell() {
     (s) => s.modalOpen && s.modalKind === "assigned",
   );
   const showLombadaModal = useLombadaUiStore((s) => s.open);
+
+  // App Android da Manutenção: só a página, sem cabeçalho/menu do sistema.
+  if (isSagraManutencaoApp()) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-sagra-bg pt-[env(safe-area-inset-top,0px)]">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 pb-[env(safe-area-inset-bottom,0px)]">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-sagra-bg">

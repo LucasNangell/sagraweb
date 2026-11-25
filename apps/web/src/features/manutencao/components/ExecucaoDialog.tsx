@@ -188,7 +188,7 @@ function ExecucaoBody({
     salvar.isPending || pausar.isPending || retomar.isPending || devolver.isPending || concluir.isPending;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
       <div className="space-y-5">
         {/* Solicitação */}
         <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">

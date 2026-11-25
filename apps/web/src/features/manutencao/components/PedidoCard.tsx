@@ -4,6 +4,7 @@ import { AlertTriangle, Repeat } from "lucide-react";
 import type { ManutencaoPedido } from "@/api/manutencao";
 
 import { pessoa, PRIORIDADE_META, tempoRelativo } from "../manutencaoUi";
+import { VistoPorBadge } from "./Visualizacoes";
 import {
   Badge,
   CodigoMaquina,
@@ -64,6 +65,9 @@ export function PedidoCard({
             <Repeat className="h-3 w-3" aria-hidden />
             Recorrente
           </Badge>
+        ) : null}
+        {pedido.status !== "concluido" && pedido.status !== "cancelado" ? (
+          <VistoPorBadge visualizacoes={pedido.visualizacoes} destacarNinguem={pedido.status === "fila"} />
         ) : null}
       </div>
       {pedido.status === "pausado" && pedido.pausa_motivo ? (

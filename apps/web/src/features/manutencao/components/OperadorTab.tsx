@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { iniciarManutencaoPedido, type ManutencaoPedido } from "@/api/manutencao";
 import { sagraBtn } from "@/components/ui/sagraBtn";
+import { isSagraManutencaoApp } from "@/lib/sagraNativeApp";
 
 import {
   agruparPedidos,
@@ -38,6 +39,7 @@ import {
   StatusBadge,
 } from "./ManutencaoShared";
 import { PedidoDetalheDialog } from "./PedidoDetalheDialog";
+import { useRegistrarVisualizacoes, VistoPorBadge } from "./Visualizacoes";
 import { HistoricoBuscaDialog, SimilaresBadge } from "./SolucoesHistorico";
 
 export function OperadorTab({
@@ -96,6 +98,12 @@ export function OperadorTab({
     onSuccess: (p) => setExecId(p.id),
   });
 
+  // Registra quem viu os pedidos abertos exibidos (fila + em execução).
+  useRegistrarVisualizacoes(
+    useMemo(() => [...fila, ...execucao].map((p) => p.id), [fila, execucao]),
+    !pedidosQ.isLoading,
+  );
+
   if (pedidosQ.isLoading) return <LoadingBlock label="Carregando fila de manutenção…" />;
 
   return (
@@ -121,7 +129,8 @@ export function OperadorTab({
         </div>
       ) : null}
 
-      <ManutencaoNotificacoesCard />
+      {/* No app Android as notificações são nativas (serviço em segundo plano). */}
+      {isSagraManutencaoApp() ? null : <ManutencaoNotificacoesCard />}
 
       <AlertaFila
         total={fila.length}
@@ -152,7 +161,7 @@ export function OperadorTab({
             <User className="h-4 w-4" aria-hidden />
             Meus serviços em andamento
           </h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {meus.map((p) => (
               <ServicoCard key={p.id} pedido={p} destaque onAbrir={() => setExecId(p.id)} />
             ))}
@@ -167,7 +176,7 @@ export function OperadorTab({
           <span className="rounded-full bg-slate-200 px-2 text-xs text-slate-700">{fila.length}</span>
         </h2>
         {fila.length ? (
-          <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ol className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {fila.map((p, idx) => (
               <li key={p.id}>
                 <FilaCard
@@ -198,7 +207,7 @@ export function OperadorTab({
             <PlayCircle className="h-4 w-4" aria-hidden />
             Em execução por outros operadores
           </h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {outros.map((p) => (
               <ServicoCard key={p.id} pedido={p} onAbrir={() => setExecId(p.id)} />
             ))}
@@ -393,6 +402,7 @@ function FilaCard({
             </Badge>
           ) : null}
           <SimilaresBadge count={pedido.similares_count} />
+          <VistoPorBadge visualizacoes={pedido.visualizacoes} />
           <span className="inline-flex items-center gap-1 text-xs text-slate-500">
             <Clock className="h-3 w-3" aria-hidden />
             {tempoRelativo(pedido.solicitado_em)}

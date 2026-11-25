@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Manutenção</string>
+    <string name="canal_chamados">Novos chamados</string>
+    <string name="canal_chamados_desc">Avisos de novos pedidos de manutenção</string>
+    <string name="canal_urgentes">Chamados urgentes</string>
+    <string name="canal_urgentes_desc">Pedidos urgentes ou com máquina parada</string>
+    <string name="canal_conexao">Conexão em segundo plano</string>
+    <string name="canal_conexao_desc">Mantém o app pronto para receber chamados com ele fechado</string>
+    <string name="canal_app">Atualizações do app</string>
+</resources>

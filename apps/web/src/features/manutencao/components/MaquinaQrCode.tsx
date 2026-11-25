@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { sagraBtn } from "@/components/ui/sagraBtn";
 import { toast } from "@/components/ui/toastStore";
+import { salvarDataUrlNoApp } from "@/lib/sagraNativeApp";
 
 /** Página pública de abertura de chamado já com a máquina selecionada. */
 export function linkChamadoMaquina(codigo: string): string {
@@ -81,6 +82,7 @@ export function MaquinaQrCode({ nome, codigo }: { nome: string; codigo: string }
     setBaixando(true);
     try {
       const url = await gerarEtiquetaPng(nome, codigo);
+      if (salvarDataUrlNoApp(url, `qrcode-${codigo}.png`)) return;
       const a = document.createElement("a");
       a.href = url;
       a.download = `qrcode-${codigo}.png`;

@@ -1,13 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import {
-  BellRing,
-  ClipboardList,
-  HardHat,
-  HelpCircle,
-  Wrench,
-  X,
-} from "lucide-react";
+import { ClipboardList, HardHat, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { manutencaoKeys } from "@/api/manutencao";
@@ -17,12 +10,11 @@ import { useAccessControl } from "@/features/auth/useAccessControl";
 import { usePainelOsManifest } from "@/components/pwa/usePainelOsManifest";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
+import { AppMobileAcoes } from "./AppMobileAcoes";
 import { GerenciaTab } from "./GerenciaTab";
 import { OperadorTab } from "./OperadorTab";
 
 type TabId = "gerencia" | "operador";
-
-const HELP_KEY = "sagra.manutencao.help.dismissed";
 
 interface ManutencaoWsMessage {
   type?: string;
@@ -57,22 +49,6 @@ export function ManutencaoPage({
     setTab((cur) => resolveTab(initialTab ?? cur));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canGerencia, canOperador, initialTab]);
-
-  const [showHelp, setShowHelp] = useState(() => {
-    try {
-      return localStorage.getItem(HELP_KEY) !== "1";
-    } catch {
-      return true;
-    }
-  });
-  const closeHelp = () => {
-    setShowHelp(false);
-    try {
-      localStorage.setItem(HELP_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-  };
 
   // Atualização em tempo real: qualquer mudança no módulo invalida os dados.
   const invalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,19 +108,8 @@ export function ManutencaoPage({
               </p>
             </div>
           </div>
-          {!showHelp ? (
-            <button
-              type="button"
-              onClick={() => setShowHelp(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
-            >
-              <HelpCircle className="h-4 w-4" aria-hidden />
-              Como funciona
-            </button>
-          ) : null}
+          <AppMobileAcoes />
         </header>
-
-        {showHelp ? <ComoFunciona onClose={closeHelp} /> : null}
 
         {tabs.length > 1 ? (
           <nav
@@ -189,60 +154,6 @@ export function ManutencaoPage({
           />
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function ComoFunciona({ onClose }: { onClose: () => void }) {
-  const steps = [
-    {
-      icon: ClipboardList,
-      title: "1. Gerência solicita",
-      text: "Escolha a máquina, descreva o que deve ser feito (ou use uma manutenção recorrente) e defina a prioridade.",
-    },
-    {
-      icon: BellRing,
-      title: "2. Operador é avisado",
-      text: "O pedido entra na fila e os operadores recebem uma notificação. A gerência pode reordenar a fila a qualquer momento.",
-    },
-    {
-      icon: HardHat,
-      title: "3. Operador executa",
-      text: "Ao iniciar, o operador detalha o problema e registra o passo a passo da solução. Pode pausar (ex.: aguardando peça).",
-    },
-    {
-      icon: Wrench,
-      title: "4. Conclusão registrada",
-      text: "Concluído, o histórico fica salvo na máquina e quem solicitou é notificado.",
-    },
-  ];
-  return (
-    <div className="relative rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-4 shadow-sm">
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-2 top-2 rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-700"
-        aria-label="Fechar guia"
-      >
-        <X className="h-4 w-4" />
-      </button>
-      <p className="mb-3 pr-8 text-sm font-semibold text-sky-900">Como funciona a Manutenção</p>
-      <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {steps.map((s) => {
-          const Icon = s.icon;
-          return (
-            <li key={s.title} className="flex gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-sky-700 shadow-sm ring-1 ring-sky-100">
-                <Icon className="h-4 w-4" aria-hidden />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{s.title}</p>
-                <p className="text-xs leading-relaxed text-slate-600">{s.text}</p>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
     </div>
   );
 }

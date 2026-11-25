@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/sagra_dark</item>
+        <item name="android:colorPrimaryDark">@color/sagra_dark</item>
+        <item name="android:colorAccent">@color/sagra_amber</item>
+        <item name="android:statusBarColor">@color/sagra_dark</item>
+        <item name="android:navigationBarColor">@color/sagra_dark</item>
+        <item name="android:windowBackground">@color/sagra_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

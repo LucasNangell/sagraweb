@@ -107,3 +107,55 @@ ALTER TABLE ip_permissions ADD COLUMN sb_manutencao_gerencia TINYINT(1) NOT NULL
 ALTER TABLE ip_permissions ADD COLUMN sb_manutencao_operador TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE user_permissions ADD COLUMN sb_manutencao_gerencia TINYINT(1) DEFAULT 0;
 ALTER TABLE user_permissions ADD COLUMN sb_manutencao_operador TINYINT(1) DEFAULT 0;
+
+-- 0.125.0 — App Android: aparelhos (login persistente), aberturas, visualizações e notificações do app.
+CREATE TABLE IF NOT EXISTS tab_manutencao_aparelho (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ponto VARCHAR(32) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    aparelho_id VARCHAR(64) NOT NULL,
+    modelo VARCHAR(120) NULL,
+    versao_app VARCHAR(20) NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ultimo_acesso_em DATETIME NULL,
+    ultima_abertura_em DATETIME NULL,
+    revogado_em DATETIME NULL,
+    revogado_por VARCHAR(32) NULL,
+    UNIQUE KEY uq_manut_aparelho_token (token_hash),
+    KEY idx_manut_aparelho_ponto (ponto, revogado_em),
+    KEY idx_manut_aparelho_device (aparelho_id, revogado_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tab_manutencao_app_abertura (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    aparelho_id BIGINT NOT NULL,
+    ponto VARCHAR(32) NOT NULL,
+    versao_app VARCHAR(20) NULL,
+    aberto_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_manut_abertura_ponto (ponto, aberto_em),
+    KEY idx_manut_abertura_aparelho (aparelho_id, aberto_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tab_manutencao_visualizacao (
+    pedido_id BIGINT NOT NULL,
+    ponto VARCHAR(32) NOT NULL,
+    primeira_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ultima_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    origem VARCHAR(10) NOT NULL DEFAULT 'web',
+    vezes INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (pedido_id, ponto),
+    KEY idx_manut_visualizacao_ponto (ponto, ultima_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tab_manutencao_app_notificacao (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ponto VARCHAR(32) NOT NULL,
+    pedido_id BIGINT NULL,
+    titulo VARCHAR(200) NOT NULL,
+    mensagem VARCHAR(1000) NOT NULL,
+    url VARCHAR(500) NULL,
+    urgente TINYINT(1) NOT NULL DEFAULT 0,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_manut_app_notif_ponto (ponto, id),
+    KEY idx_manut_app_notif_criado (criado_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

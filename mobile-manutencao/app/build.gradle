@@ -1,0 +1,71 @@
+plugins {
+    id "com.android.application"
+}
+
+def versionProps = new Properties()
+file("../version.properties").withInputStream { versionProps.load(it) }
+
+// Assinatura de release: arquivo .properties fora do repositório (ver README).
+def signingFile = System.getenv("SAGRA_MANUTENCAO_SIGNING") ?: project.findProperty("sagraSigning")
+def signingProps = new Properties()
+if (signingFile && file(signingFile).exists()) {
+    file(signingFile).withInputStream { signingProps.load(it) }
+}
+
+// Servidor carregado pelo app (sempre o host público HTTPS em produção).
+def releaseBaseUrl = project.findProperty("sagraBaseUrl") ?: "https://cgrafsysvm.camara.leg.br/sagra/"
+// Debug: emulador/celular via `adb reverse tcp:5173 tcp:5173` (localhost = contexto seguro).
+def debugBaseUrl = project.findProperty("sagraDebugBaseUrl") ?: "http://localhost:5173/"
+
+android {
+    namespace "br.leg.camara.sagra.manutencao"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "br.leg.camara.sagra.manutencao"
+        minSdk 26
+        targetSdk 35
+        versionCode Integer.parseInt(versionProps["VERSION_CODE"].toString())
+        versionName versionProps["VERSION_NAME"].toString()
+    }
+
+    signingConfigs {
+        if (signingProps["storeFile"]) {
+            release {
+                storeFile file(signingProps["storeFile"])
+                storePassword signingProps["storePassword"]
+                keyAlias signingProps["keyAlias"]
+                keyPassword signingProps["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            buildConfigField "String", "BASE_URL", "\"${debugBaseUrl}\""
+        }
+        release {
+            minifyEnabled false
+            buildConfigField "String", "BASE_URL", "\"${releaseBaseUrl}\""
+            if (signingProps["storeFile"]) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

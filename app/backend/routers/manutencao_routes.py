@@ -16,6 +16,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from services import manutencao_app_service as app_svc
 from services import manutencao_service as svc
 
 logger = logging.getLogger(__name__)
@@ -203,17 +204,16 @@ def get_pedidos(
 ):
     _require_view(request)
     status_list = [s.strip() for s in status.split(",")] if status else None
-    return {
-        "items": _run(
-            lambda: svc.list_pedidos(
-                status=status_list,
-                maquina_id=maquina_id,
-                finalizados_dias=finalizados_dias,
-                limit_finalizados=limit_finalizados,
-                incluir_similares=incluir_similares,
-            )
+    items = _run(
+        lambda: svc.list_pedidos(
+            status=status_list,
+            maquina_id=maquina_id,
+            finalizados_dias=finalizados_dias,
+            limit_finalizados=limit_finalizados,
+            incluir_similares=incluir_similares,
         )
-    }
+    )
+    return {"items": app_svc.anexar_visualizacoes(items)}
 
 
 @router.get("/historico/busca")
@@ -238,7 +238,9 @@ def get_pedido_similares(pedido_id: int, request: Request):
 @router.get("/pedidos/{pedido_id}")
 def get_pedido(pedido_id: int, request: Request):
     _require_view(request)
-    return _run(lambda: svc.get_pedido(pedido_id, include_eventos=True))
+    pedido = _run(lambda: svc.get_pedido(pedido_id, include_eventos=True))
+    app_svc.anexar_visualizacoes([pedido])
+    return pedido
 
 
 # ------------------------------------------------------------------ gerência
@@ -365,3 +367,70 @@ def post_push_teste(request: Request):
     if not ponto or ponto.strip("0") == "":
         raise HTTPException(status_code=401, detail="Sessão sem ponto identificado")
     return _run(lambda: svc.enviar_push_teste(ponto))
+
+
+
+# ------------------------------------------------- visualizações e app Android
+
+
+class VisualizacaoPayload(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=app_svc.MAX_IDS_VISUALIZACAO)
+    origem: str = Field(default="web", pattern="^(app|web)$")
+
+
+@router.post("/visualizacoes")
+def post_visualizacoes(body: VisualizacaoPayload, request: Request):
+    """Registra que o usuário viu os pedidos listados na tela (app ou web)."""
+    _require_view(request)
+    return {"registrados": _run(lambda: app_svc.registrar_visualizacoes(_ponto(request), body.ids, body.origem))}
+
+
+@router.get("/pedidos/{pedido_id}/visualizacoes")
+def get_visualizacoes(pedido_id: int, request: Request):
+    _require_view(request)
+    return {"items": app_svc.visualizacoes_por_pedido([pedido_id]).get(pedido_id, [])}
+
+
+class AparelhoPayload(BaseModel):
+    aparelho_id: str = Field(min_length=8, max_length=64)
+    modelo: Optional[str] = Field(default=None, max_length=120)
+    versao_app: Optional[str] = Field(default=None, max_length=20)
+
+
+@router.post("/aparelhos")
+def post_aparelho(body: AparelhoPayload, request: Request):
+    """Chamado pelo app Android logo após o login: autoriza o aparelho (login persistente)."""
+    _require_view(request)
+    ponto = _ponto(request)
+    return _run(
+        lambda: app_svc.registrar_aparelho(
+            ponto,
+            aparelho_id=body.aparelho_id,
+            modelo=body.modelo,
+            versao_app=body.versao_app,
+        )
+    )
+
+
+@router.get("/aparelhos")
+def get_aparelhos(request: Request, aberturas: int = Query(50, ge=0, le=500)):
+    _require_gerencia(request)
+    return {
+        "items": app_svc.listar_aparelhos(),
+        "aberturas": app_svc.listar_aberturas(aberturas) if aberturas else [],
+        "versao": _versao_publica(),
+    }
+
+
+@router.post("/aparelhos/{aparelho_id}/revogar")
+def post_revogar_aparelho(aparelho_id: int, request: Request):
+    _require_gerencia(request)
+    _run(lambda: app_svc.revogar_aparelho(aparelho_id, _ponto(request)))
+    return {"ok": True}
+
+
+def _versao_publica() -> Optional[dict]:
+    info = app_svc.info_versao()
+    if not info:
+        return None
+    return {k: v for k, v in info.items() if not k.startswith("_")}

@@ -1,5 +1,5 @@
 import { cn } from "@sagra/ui";
-import { ArrowUpToLine, Ban, MessageSquarePlus, Save } from "lucide-react";
+import { ArrowUpToLine, Ban, Eye, MessageSquarePlus, Save } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
@@ -26,6 +26,7 @@ import {
   Timeline,
 } from "./ManutencaoShared";
 import { SimilaresPanel } from "./SolucoesHistorico";
+import { VisualizacoesLista } from "./Visualizacoes";
 
 export function PedidoDetalheDialog({
   pedidoId,
@@ -164,7 +165,7 @@ function PedidoDetalheBody({
       : null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="space-y-6">
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">Solicitação</h3>
@@ -364,6 +365,14 @@ function PedidoDetalheBody({
 
       <aside className="space-y-3">
         {aberto ? <SimilaresPanel pedidoId={pedido.id} /> : null}
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+          <Eye className="h-4 w-4 text-slate-400" aria-hidden />
+          Quem já viu
+          {pedido.visualizacoes?.length ? (
+            <span className="font-normal text-slate-400">({pedido.visualizacoes.length})</span>
+          ) : null}
+        </h3>
+        <VisualizacoesLista visualizacoes={pedido.visualizacoes} />
         <h3 className="text-sm font-semibold text-slate-900">Linha do tempo</h3>
         <Timeline eventos={pedido.eventos ?? []} />
         <div className="flex gap-2 pt-2">

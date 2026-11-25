@@ -113,6 +113,9 @@ _PUBLIC_PREFIXES: Tuple[str, ...] = (
     # Abertura de chamado de manutenção pelo QR Code da máquina (sem login/IP).
     "/api/manutencao/publico/",
 
+    # App Android da Manutenção: autenticado pelo token do aparelho em cada rota.
+    "/api/manutencao/app/",
+
 )
 
 # Portal do cliente: GET com token na query (validado no handler da rota)

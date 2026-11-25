@@ -28,6 +28,7 @@ from routers import (
     manipular_imagem_routes,
     manutencao_routes,
     manutencao_publico_routes,
+    manutencao_app_routes,
     settings_routes,
     ip_admin_routes,
     auth_routes,
@@ -1377,6 +1378,7 @@ app.include_router(credenciais_depol_routes.router, prefix="/api")
 app.include_router(manipular_imagem_routes.router, prefix="/api")
 app.include_router(manutencao_routes.router, prefix="/api")
 app.include_router(manutencao_publico_routes.router, prefix="/api")
+app.include_router(manutencao_app_routes.router, prefix="/api")
 app.include_router(gravacao_externa_routes.router, prefix="/api")
 app.include_router(gravacao_pendente_routes.router, prefix="/api")
 app.include_router(painel_gravacao_routes.router)

@@ -499,6 +499,10 @@ class TestBuildOsContextCoercion:
             "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
             lambda *_a, **_k: True,
         )
+        extras_json = (
+            '[{"id":"extra_1","tipo":"texto","ancora_chave":"7:1:NOME",'
+            '"direcao":"abaixo","texto":"Linha"}]'
+        )
         monkeypatch.setattr(
             "services.papelaria_jobs_service.get_job",
             lambda _job_id: {
@@ -507,6 +511,8 @@ class TestBuildOsContextCoercion:
                     "email": "dep.antigo@camara.leg.br",
                     "nome_deputado": "Deputado Antigo",
                     "partido": "PL",
+                    "__campos_extras": extras_json,
+                    "__redes_estilo": "pb",
                 },
             },
         )
@@ -522,6 +528,8 @@ class TestBuildOsContextCoercion:
         assert alt["observacao"] == "Corrigir e-mail"
         assert alt["versao"] == "2"
         assert alt["job_id"] == 42
+        assert alt["internos"]["__campos_extras"] == extras_json
+        assert alt["internos"]["__redes_estilo"] == "pb"
         assert alt["campos_alterados"] == [
             {
                 "key": "email",
@@ -808,7 +816,83 @@ class TestBuildOsContextCoercion:
                 "frente": {"modelo_id": 12, "pagina": 1},
                 "verso": {"modelo_id": 30, "pagina": 1},
             },
+            "internos": None,
         }
+
+    def test_build_os_context_ultima_prova_inclui_campos_extras(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        extras_json = (
+            '[{"id":"extra_1","tipo":"texto","ancora_chave":"7:1:NOME",'
+            '"direcao":"abaixo","texto":"Cargo"}]'
+        )
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: [
+                {
+                    "NroProtocolo": 5101,
+                    "AnoProtocolo": 2026,
+                    "NomeUsuario": "Teste",
+                    "Titular": "Nome Teste",
+                    "SiglaOrgao": "PL/DF",
+                    "GabSalaUsuario": 716,
+                    "RamalUsuario": 55716,
+                    "Titulo": "Titulo",
+                    "TipoPublicacaoLink": "Ct Visita",
+                    "Cores": 4,
+                    "CoresDescricao": None,
+                    "FrenteVerso": 1,
+                    "Observ": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(svc, "build_prefill_corel", lambda *_a, **_k: {})
+        monkeypatch.setattr(
+            svc,
+            "list_modelos",
+            lambda *a, **k: [
+                {
+                    "id": 7,
+                    "produto": "Ct Visita",
+                    "frente_versao": "Somente Frente",
+                    "cores": "Policromia",
+                    "arquivo_modelo": "A.cdr",
+                    "variaveis": [],
+                    "nome_exibicao": "A",
+                    "ordem": 1,
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.load_cliente_alteracao_prova",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.list_jobs_for_os",
+            lambda *_a, **_k: [
+                {
+                    "id": 100,
+                    "tipo_job": "create",
+                    "status": "completed",
+                    "tem_arquivo_pdf": True,
+                    "modelo_id": 7,
+                    "dados": {
+                        "__campos_extras": extras_json,
+                        "__campos_estilo": '{"7:1:NOME":{"tamanho_pt":12}}',
+                        "__textos": '{"7:1:NOME":"X"}',
+                    },
+                }
+            ],
+        )
+
+        ctx = svc.build_os_context(2026, 5101)
+        assert ctx["ultima_prova"]["internos"] == {
+            "__campos_extras": extras_json,
+            "__campos_estilo": '{"7:1:NOME":{"tamanho_pt":12}}',
+        }
+        # Textos/redes não vão em ultima_prova.internos (só extras/estilo).
+        assert "__textos" not in (ctx["ultima_prova"]["internos"] or {})
 
     def test_build_os_context_alt_pendente_prioriza_modelo_e_job(self, monkeypatch):
         from services import papelaria_models_service as svc

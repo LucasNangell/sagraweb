@@ -25,8 +25,38 @@ describe("pedido de alteração do cliente: formulário x textos/redes", () => {
   });
 
   it("JSON inválido ou ausente não quebra", () => {
-    expect(internosCliente({ __textos: "{", __redes: "x" })).toEqual({ textos: null, redes: null, redesEstilo: null });
-    expect(internosCliente(null)).toEqual({ textos: null, redes: null, redesEstilo: null });
+    expect(internosCliente({ __textos: "{", __redes: "x" })).toEqual({
+      textos: null,
+      redes: null,
+      redesEstilo: null,
+      camposExtrasRaw: null,
+      camposEstiloRaw: null,
+    });
+    expect(internosCliente(null)).toEqual({
+      textos: null,
+      redes: null,
+      redesEstilo: null,
+      camposExtrasRaw: null,
+      camposEstiloRaw: null,
+    });
+  });
+
+  it("lê campos extras e estilo tipográfico", () => {
+    const extras = JSON.stringify([
+      {
+        id: "extra_1",
+        tipo: "texto",
+        ancora_chave: "7:1:NOME",
+        direcao: "abaixo",
+        texto: "X",
+      },
+    ]);
+    const r = internosCliente({
+      __campos_extras: extras,
+      __campos_estilo: JSON.stringify({ "7:1:NOME": { tamanho_pt: 12 } }),
+    });
+    expect(r.camposExtrasRaw).toBe(extras);
+    expect(r.camposEstiloRaw).toContain("tamanho_pt");
   });
 });
 

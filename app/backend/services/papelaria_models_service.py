@@ -1792,6 +1792,30 @@ def _job_ultima_prova(
     return None
 
 
+_INTERNOS_EXTRAS_KEYS = ("__campos_extras", "__campos_estilo")
+_INTERNOS_ALTERACAO_KEYS = (
+    "__textos",
+    "__redes",
+    "__redes_estilo",
+    "__campos_extras",
+    "__campos_estilo",
+)
+
+
+def _internos_de_dados(
+    dados: dict[str, Any],
+    *,
+    chaves: tuple[str, ...] = _INTERNOS_ALTERACAO_KEYS,
+) -> Optional[dict[str, str]]:
+    """Filtra chaves internas não vazias de ``dados`` do job."""
+    out: dict[str, str] = {}
+    for k in chaves:
+        v = str((dados or {}).get(k) or "").strip()
+        if v:
+            out[k] = v
+    return out or None
+
+
 def _ultima_prova_resumo(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """``modelo_id`` + composição do job para restaurar a seleção na UI."""
     if not job:
@@ -1804,10 +1828,12 @@ def _ultima_prova_resumo(job: Optional[dict[str, Any]]) -> Optional[dict[str, An
         return None
     from services.papelaria_faces_service import composicao_do_job
 
+    dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
     return {
         "job_id": int(job.get("id") or 0) or None,
         "modelo_id": mid,
         "composicao": composicao_do_job(job),
+        "internos": _internos_de_dados(dados, chaves=_INTERNOS_EXTRAS_KEYS),
     }
 
 
@@ -2091,14 +2117,12 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
                     "campos_alterados": campos_alterados or None,
                     "textos_alterados": textos_alterados or None,
                     "redes_alteradas": redes_alteradas or None,
-                    # Textos editados e redes da prova (com o que o cliente mudou por
+                    # Textos/redes/extras da prova (com o que o cliente mudou por
                     # cima): a prévia da Papelaria abre igual ao que o cliente pediu.
-                    "internos": {
-                        k: v
-                        for k, v in {**job_dados_base, **campos_alt}.items()
-                        if k in ("__textos", "__redes", "__redes_estilo") and str(v or "").strip()
-                    }
-                    or None,
+                    "internos": _internos_de_dados(
+                        {**job_dados_base, **campos_alt},
+                        chaves=_INTERNOS_ALTERACAO_KEYS,
+                    ),
                 }
 
     modelos, warnings, auto_id = match_modelos_para_os(

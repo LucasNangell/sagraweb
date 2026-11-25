@@ -100,6 +100,9 @@ export type InternosCliente = {
   /** Redes marcadas, na ordem. */
   redes: Array<{ chave: string; valor: string }> | null;
   redesEstilo: string | null;
+  /** Campos extras (`__campos_extras`) e estilo de campos do modelo. */
+  camposExtrasRaw: string | null;
+  camposEstiloRaw: string | null;
 };
 
 function lerJson(raw: string | undefined): unknown {
@@ -111,7 +114,7 @@ function lerJson(raw: string | undefined): unknown {
   }
 }
 
-/** Lê `__textos`, `__redes` e `__redes_estilo` do pedido do cliente. */
+/** Lê `__textos`, `__redes`, `__redes_estilo`, `__campos_extras` e `__campos_estilo`. */
 export function internosCliente(internos: Record<string, string> | null | undefined): InternosCliente {
   const textosRaw = lerJson(internos?.["__textos"]);
   const textos =
@@ -128,9 +131,13 @@ export function internosCliente(internos: Record<string, string> | null | undefi
         .filter((r) => r.chave)
     : null;
   const estilo = internos?.["__redes_estilo"]?.trim() || null;
+  const camposExtrasRaw = internos?.["__campos_extras"]?.trim() || null;
+  const camposEstiloRaw = internos?.["__campos_estilo"]?.trim() || null;
   return {
     textos: textos && Object.keys(textos).length ? textos : null,
     redes,
     redesEstilo: estilo,
+    camposExtrasRaw,
+    camposEstiloRaw,
   };
 }

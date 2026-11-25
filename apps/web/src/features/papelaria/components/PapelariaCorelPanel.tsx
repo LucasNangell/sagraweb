@@ -63,6 +63,12 @@ import {
   type CampoExtra,
 } from "@/features/papelaria/papelariaCamposExtras";
 import {
+  clearExtrasDraft,
+  extrasDeInternos,
+  loadExtrasDraft,
+  saveExtrasDraft,
+} from "@/features/papelaria/papelariaExtrasDraft";
+import {
   interpretarEdicao,
   TEXTOS_DADOS_KEY,
   textoComMarcasNegrito,
@@ -271,6 +277,10 @@ export function PapelariaCorelPanel({
   const prefillApplied = useRef(false);
   const camaraEnrichApplied = useRef(false);
   const appliedAlteracaoRef = useRef<string | null>(null);
+  /** Extras já hidratados nesta montagem (OS) — evita sobrescrever edição local. */
+  const extrasHydratedRef = useRef(false);
+  /** Evita gravar rascunho vazio antes da hidratação. */
+  const extrasDraftReadyRef = useRef(false);
   /** Bloco de redes em vigor (lido pelo efeito que aplica o pedido do cliente). */
   const redesBlocoAtualRef = useRef<PapelariaRedesBloco | null>(null);
   /** Repetição de SP: prévia e prova a partir da base recortada da prova antiga. */
@@ -569,6 +579,8 @@ export function PapelariaCorelPanel({
         });
         return;
       }
+      // Alinha rascunho ao que foi gravado no job (permanece na OS).
+      saveExtrasDraft(anoNum, nroNum, camposExtras, camposEstilo);
       setActiveJobId(job.id);
       setFormError(null);
       setProvaReviewMessage(null);
@@ -856,6 +868,8 @@ export function PapelariaCorelPanel({
     onSuccess: () => {
       setTextosEditados({});
       setCamposExtras([]);
+      setCamposEstilo({});
+      clearExtrasDraft(anoNum, nroNum);
       setUsarRepeticao(true);
       repeticaoComposicaoAplicada.current = false;
       setViewMode("previa");
@@ -892,6 +906,16 @@ export function PapelariaCorelPanel({
         redesEstiloEscolhidoRef.current = internos.redesEstilo as PapelariaRedeEstilo;
         setRedesEstilo(internos.redesEstilo as PapelariaRedeEstilo);
       }
+      // Extras da alteração (prioridade sobre última prova / rascunho).
+      if (!extrasHydratedRef.current) {
+        const deAlt = extrasDeInternos(ctx.cliente_alteracao?.internos ?? null);
+        if (deAlt.extras.length || Object.keys(deAlt.estilos).length) {
+          if (deAlt.extras.length) setCamposExtras(deAlt.extras);
+          if (Object.keys(deAlt.estilos).length) setCamposEstilo(deAlt.estilos);
+          extrasHydratedRef.current = true;
+          extrasDraftReadyRef.current = true;
+        }
+      }
       appliedAlteracaoRef.current = alteracaoKey;
       prefillApplied.current = true;
       return;
@@ -906,6 +930,42 @@ export function PapelariaCorelPanel({
       prefillApplied.current = true;
     }
   }, [contextQuery.data]);
+
+  // Hidrata extras: alteração (acima) → última prova → rascunho local.
+  useEffect(() => {
+    if (!hasOs || extrasHydratedRef.current) return;
+    const ctx = contextQuery.data;
+    if (!ctx && contextQuery.isLoading) return;
+
+    const deAlt = extrasDeInternos(ctx?.cliente_alteracao?.internos ?? null);
+    const deUltima = extrasDeInternos(ctx?.ultima_prova?.internos ?? null);
+    const draft = loadExtrasDraft(anoNum, nroNum);
+
+    const fonte =
+      deAlt.extras.length || Object.keys(deAlt.estilos).length
+        ? deAlt
+        : deUltima.extras.length || Object.keys(deUltima.estilos).length
+          ? deUltima
+          : draft
+            ? { extras: draft.extras, estilos: draft.estilos }
+            : null;
+
+    if (fonte) {
+      if (fonte.extras.length) setCamposExtras(fonte.extras);
+      if (Object.keys(fonte.estilos).length) setCamposEstilo(fonte.estilos);
+    }
+    extrasHydratedRef.current = true;
+    extrasDraftReadyRef.current = true;
+  }, [hasOs, anoNum, nroNum, contextQuery.data, contextQuery.isLoading]);
+
+  // Persiste rascunho local (F5) — só depois da hidratação.
+  useEffect(() => {
+    if (!hasOs || !extrasDraftReadyRef.current) return;
+    const t = window.setTimeout(() => {
+      saveExtrasDraft(anoNum, nroNum, camposExtras, camposEstilo);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [hasOs, anoNum, nroNum, camposExtras, camposEstilo]);
 
   useEffect(() => {
     if (!prefillApplied.current || camaraEnrichApplied.current) return;
@@ -2416,6 +2476,8 @@ export function PapelariaCorelPanel({
                               setUsarRepeticao(true);
                               setTextosEditados({});
                               setCamposExtras([]);
+                              setCamposEstilo({});
+                              clearExtrasDraft(anoNum, nroNum);
                             },
                           }
                         : null

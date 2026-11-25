@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -448,14 +448,27 @@ export function PapelariaTextoEditor({
       </p>
       <div className="mt-2.5 flex items-center justify-between gap-2">
         {onRestaurar ? (
-          <button
-            type="button"
-            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 hover:text-amber-900"
-            onClick={onRestaurar}
-          >
-            <RotateCcw className="size-3" aria-hidden />
-            {modoExtra ? "Remover campo extra" : "Restaurar original"}
-          </button>
+          modoExtra ? (
+            <button
+              type="button"
+              data-testid="papelaria-extra-remover-modal"
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 text-[11px] font-semibold text-red-700 hover:bg-red-50"
+              onClick={onRestaurar}
+              title="Remove este campo extra da prévia"
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+              Remover
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+              onClick={onRestaurar}
+            >
+              <RotateCcw className="size-3" aria-hidden />
+              Restaurar original
+            </button>
+          )
         ) : (
           <span />
         )}

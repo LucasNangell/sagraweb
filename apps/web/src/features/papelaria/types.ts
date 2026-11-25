@@ -203,6 +203,11 @@ export interface PapelariaUltimaProva {
   job_id: number | null;
   modelo_id: number;
   composicao: PapelariaComposicao | null;
+  /**
+   * Internos da prova (`__campos_extras` / `__campos_estilo`) para hidratar
+   * a prévia ao reabrir a OS.
+   */
+  internos?: Record<string, string> | null;
 }
 
 export interface PapelariaOsContext {

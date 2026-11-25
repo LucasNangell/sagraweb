@@ -17,6 +17,11 @@ def test_normalizar_campos_extras_ok():
             "ancora_chave": "7:1:NOME",
             "direcao": "abaixo",
             "texto": "Cargo",
+            "align_h": "centro",
+            "tamanho_pt": 12,
+            "negrito": [[0, 5]],
+            "x_pt": 10,
+            "y_pt": 20,
         },
         {
             "id": "extra_2",
@@ -30,6 +35,9 @@ def test_normalizar_campos_extras_ok():
     out = normalizar_campos_extras(raw)
     assert len(out) == 2
     assert out[0]["texto"] == "Cargo"
+    assert out[0]["align_h"] == "centro"
+    assert out[0]["tamanho_pt"] == 12.0
+    assert out[0]["negrito"] == [[0, 5]]
     assert out[1]["rede_chave"] == "instagram"
 
 
@@ -45,6 +53,18 @@ def test_normalizar_campos_extras_rejeita_invalido():
         normalizar_campos_extras(
             [{"id": "x", "tipo": "texto", "ancora_chave": "ruim", "direcao": "acima"}]
         )
+    with pytest.raises(CamposExtrasError):
+        normalizar_campos_extras(
+            [
+                {
+                    "id": "x",
+                    "tipo": "texto",
+                    "ancora_chave": "7:1:A",
+                    "direcao": "acima",
+                    "tamanho_pt": 200,
+                }
+            ]
+        )
 
 
 def test_sanitize_dados_campos_extras():
@@ -57,6 +77,8 @@ def test_sanitize_dados_campos_extras():
             "ancora_chave": "7:1:NOME",
             "direcao": "acima",
             "texto": "Linha",
+            "align_h": "esquerda",
+            "offset_x_pt": 2,
         }
     ]
     limpo = jobs_svc._sanitize_dados({"__campos_extras": json.dumps(payload), "nome": "x"})
@@ -65,27 +87,32 @@ def test_sanitize_dados_campos_extras():
         jobs_svc._sanitize_dados({"__campos_extras": "[{"})
 
 
-def test_bbox_relativo_quatro_direcoes():
+def test_bbox_relativo_altura_de_linha():
     from services.papelaria_campos_extras_service import _bbox_relativo
 
-    ancora = fitz.Rect(100, 100, 200, 120)
-    acima = _bbox_relativo(ancora, "acima", 400, 600)
-    abaixo = _bbox_relativo(ancora, "abaixo", 400, 600)
-    esquerda = _bbox_relativo(ancora, "esquerda", 400, 600)
-    direita = _bbox_relativo(ancora, "direita", 400, 600)
-    assert acima.y1 <= ancora.y0
+    ancora = fitz.Rect(100, 100, 200, 180)  # âncora alta
+    abaixo = _bbox_relativo(
+        ancora,
+        "abaixo",
+        400,
+        600,
+        linha_h=14.0,
+        largura_conteudo=80.0,
+        align_h="esquerda",
+    )
+    assert abaixo.height == pytest.approx(14.0, abs=0.5)
     assert abaixo.y0 >= ancora.y1
-    assert esquerda.x1 <= ancora.x0
-    assert direita.x0 >= ancora.x1
+    acima = _bbox_relativo(
+        ancora, "acima", 400, 600, linha_h=14.0, largura_conteudo=80.0, align_h="centro"
+    )
+    assert acima.y1 <= ancora.y0
+    # centro: caixa centrada na âncora
+    assert abs((acima.x0 + acima.x1) / 2 - (ancora.x0 + ancora.x1) / 2) < 1.0
 
 
-def test_aplicar_campos_extras_texto_emite_regiao(tmp_path, monkeypatch):
-    """Desenha texto extra relativo a uma região âncora e emite regiao clicável."""
+def test_aplicar_campos_extras_texto_emite_regiao():
     from services import papelaria_campos_extras_service as extras_svc
 
-    # PDF mínimo com texto embutido (fonte padrão Helvetica — tipografia
-    # embutida editável pode falhar; o teste cobre o caminho de região
-    # quando o estilo é encontrado, ou o aviso quando não).
     doc = fitz.open()
     page = doc.new_page(width=300, height=400)
     page.insert_text((50, 80), "ANCORA", fontsize=12)
@@ -112,6 +139,14 @@ def test_aplicar_campos_extras_texto_emite_regiao(tmp_path, monkeypatch):
             "texto": "Extra",
             "rede_chave": "",
             "rede_valor": "",
+            "x_pt": None,
+            "y_pt": None,
+            "offset_x_pt": 0,
+            "offset_y_pt": 0,
+            "align_h": "esquerda",
+            "align_v": "topo",
+            "tamanho_pt": 12,
+            "negrito": [],
         }
     ]
     avisos: list[str] = []
@@ -120,9 +155,7 @@ def test_aplicar_campos_extras_texto_emite_regiao(tmp_path, monkeypatch):
     )
     assert isinstance(out, (bytes, bytearray))
     extras_regs = [r for r in regioes if r.get("tipo") == "campo_extra"]
-    # Sem fonte embutida editável, o serviço avisa e ignora — ambos ok.
-    if extras_regs:
-        assert extras_regs[0]["chave"] == "extra:extra_1"
-        assert extras_regs[0]["texto"] == "Extra"
-    else:
-        assert any("tipografia" in a.lower() or "ignorado" in a.lower() for a in avisos)
+    # Sem fonte embutida editável, ainda emite região clicável
+    assert extras_regs
+    assert extras_regs[0]["chave"] == "extra:extra_1"
+    assert extras_regs[0].get("page_w")

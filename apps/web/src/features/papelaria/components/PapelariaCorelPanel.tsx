@@ -57,7 +57,11 @@ import {
   TEXTOS_DADOS_KEY,
   textosParaDados,
 } from "@/features/papelaria/papelariaTextosEditados";
-import type { AdicionarCampoExtraPayload } from "./PapelariaPdfLivePreview";
+import type {
+  AdicionarCampoExtraPayload,
+  MoverCampoExtraPayload,
+} from "./PapelariaPdfLivePreview";
+import type { ExtraEditorMeta } from "./PapelariaTextoEditor";
 
 import { PapelariaModelosLista, resumoListaModelos } from "./PapelariaModelosLista";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
@@ -1127,19 +1131,35 @@ export function PapelariaCorelPanel({
   const valoresPrevia = useMemo(() => {
     const textos = textosParaDados(textosEditados);
     const extras = camposExtrasParaDados(camposExtras);
+    const temEstiloRede = Boolean(redesBloco) || Boolean(extras);
     if (!redesBloco && !textos && !extras) return fieldValues;
     return {
       ...fieldValues,
       ...(redesBloco
         ? {
             [REDES_DADOS_KEY]: redesParaDados(redesEscolha),
-            [REDES_ESTILO_DADOS_KEY]: redesEstilo,
           }
         : {}),
+      ...(temEstiloRede ? { [REDES_ESTILO_DADOS_KEY]: redesEstilo } : {}),
       ...(textos ? { [TEXTOS_DADOS_KEY]: textos } : {}),
       ...(extras ? { [CAMPOS_EXTRAS_DADOS_KEY]: extras } : {}),
     };
   }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras]);
+
+  const extrasMeta = useMemo(() => {
+    const map: Record<string, ExtraEditorMeta> = {};
+    for (const e of camposExtras) {
+      map[e.id] = {
+        tamanho_pt: e.tamanho_pt,
+        negrito: e.negrito,
+        align_h: e.align_h,
+        align_v: e.align_v,
+        x_pt: e.x_pt,
+        y_pt: e.y_pt,
+      };
+    }
+    return map;
+  }, [camposExtras]);
 
   /** Prova PDF: detalhe do modelo, lista do contexto ou composição frente/verso. */
   const temProvaPdfModelo =
@@ -1165,14 +1185,27 @@ export function PapelariaCorelPanel({
    * Regiões de rede social atualizam o picker (`redesEscolha` → `__redes`).
    */
   const handleEditarTextoPrevia = useCallback(
-    (regiao: ProvaPdfRegiao, texto: string) => {
+    (regiao: ProvaPdfRegiao, texto: string, meta?: ExtraEditorMeta) => {
       if (regiao.tipo === "campo_extra" || regiao.tipo === "rede_extra") {
         const eid = regiao.extra_id ?? regiao.chave.replace(/^extra:/, "");
         setCamposExtras((prev) =>
           prev.map((e) => {
             if (e.id !== eid) return e;
-            if (e.tipo === "rede") return { ...e, rede_valor: texto.trim() };
-            return { ...e, texto };
+            const next: CampoExtra = {
+              ...e,
+              ...(meta?.tamanho_pt !== undefined ? { tamanho_pt: meta.tamanho_pt } : {}),
+              ...(meta?.align_h ? { align_h: meta.align_h } : {}),
+              ...(meta?.align_v ? { align_v: meta.align_v } : {}),
+              ...(meta?.x_pt !== undefined ? { x_pt: meta.x_pt } : {}),
+              ...(meta?.y_pt !== undefined ? { y_pt: meta.y_pt } : {}),
+            };
+            if (e.tipo === "rede") {
+              next.rede_valor = texto.trim();
+              return next;
+            }
+            next.texto = texto;
+            if (meta?.negrito) next.negrito = meta.negrito;
+            return next;
           }),
         );
         return;
@@ -1228,15 +1261,33 @@ export function PapelariaCorelPanel({
         tipo: payload.tipo,
         ancora_chave: payload.ancora_chave,
         direcao: payload.direcao,
-        texto: "",
+        texto: payload.tipo === "texto" ? (payload.texto ?? "") : "",
         rede_chave: payload.tipo === "rede" ? (payload.rede_chave ?? "") : "",
         rede_valor: payload.tipo === "rede" ? (payload.rede_valor ?? "") : "",
+        x_pt: null,
+        y_pt: null,
+        offset_x_pt: 0,
+        offset_y_pt: 0,
+        align_h: "esquerda",
+        align_v: "topo",
+        tamanho_pt: null,
+        negrito: [],
       },
     ]);
   }, []);
 
   const handleRemoverCampoExtra = useCallback((extraId: string) => {
     setCamposExtras((prev) => prev.filter((e) => e.id !== extraId));
+  }, []);
+
+  const handleMoverCampoExtra = useCallback((payload: MoverCampoExtraPayload) => {
+    setCamposExtras((prev) =>
+      prev.map((e) =>
+        e.id === payload.extraId
+          ? { ...e, x_pt: payload.x_pt, y_pt: payload.y_pt, offset_x_pt: 0, offset_y_pt: 0 }
+          : e,
+      ),
+    );
   }, []);
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
@@ -2178,6 +2229,8 @@ export function PapelariaCorelPanel({
             }))}
             onAdicionarCampoExtra={handleAdicionarCampoExtra}
             onRemoverCampoExtra={handleRemoverCampoExtra}
+            onMoverCampoExtra={handleMoverCampoExtra}
+            extrasMeta={extrasMeta}
             provaStatus={contextQuery.data?.prova_status ?? null}
             previaRepeticao={repeticaoAtiva ? { ano: anoNum, nro: nroNum } : null}
             topoPrevia={

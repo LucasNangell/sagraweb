@@ -4,6 +4,8 @@ export const CAMPOS_EXTRAS_DADOS_KEY = "__campos_extras";
 
 export type CampoExtraDirecao = "acima" | "abaixo" | "esquerda" | "direita";
 export type CampoExtraTipo = "texto" | "rede";
+export type CampoExtraAlignH = "esquerda" | "centro" | "direita";
+export type CampoExtraAlignV = "topo" | "meio" | "base";
 
 export type CampoExtra = {
   id: string;
@@ -13,6 +15,16 @@ export type CampoExtra = {
   texto: string;
   rede_chave: string;
   rede_valor: string;
+  x_pt: number | null;
+  y_pt: number | null;
+  offset_x_pt: number;
+  offset_y_pt: number;
+  align_h: CampoExtraAlignH;
+  align_v: CampoExtraAlignV;
+  /** null = herdar da âncora. */
+  tamanho_pt: number | null;
+  /** Intervalos [inicio, fim) em negrito no texto. */
+  negrito: Array<[number, number]>;
 };
 
 export const DIRECOES_EXTRA: Array<{ id: CampoExtraDirecao; label: string }> = [
@@ -22,11 +34,56 @@ export const DIRECOES_EXTRA: Array<{ id: CampoExtraDirecao; label: string }> = [
   { id: "direita", label: "À direita" },
 ];
 
+export const PT_POR_MM = 72 / 25.4;
+
+export function ptParaMm(pt: number): number {
+  return pt / PT_POR_MM;
+}
+
+export function mmParaPt(mm: number): number {
+  return mm * PT_POR_MM;
+}
+
 let _seq = 0;
 
 export function novoIdCampoExtra(): string {
   _seq += 1;
   return `extra_${Date.now().toString(36)}_${_seq}`;
+}
+
+function numOuNull(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function numOuZero(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizarNegrito(raw: unknown, textoLen: number): Array<[number, number]> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<[number, number]> = [];
+  for (const item of raw) {
+    if (!Array.isArray(item) || item.length < 2) continue;
+    const a = Math.max(0, Math.min(textoLen, Math.floor(Number(item[0]))));
+    const b = Math.max(0, Math.min(textoLen, Math.floor(Number(item[1]))));
+    if (b > a) out.push([a, b]);
+  }
+  return out;
+}
+
+function alignH(v: unknown): CampoExtraAlignH {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "centro" || s === "direita") return s;
+  return "esquerda";
+}
+
+function alignV(v: unknown): CampoExtraAlignV {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "meio" || s === "base") return s;
+  return "topo";
 }
 
 export function normalizarCamposExtras(raw: unknown): CampoExtra[] {
@@ -54,14 +111,25 @@ export function normalizarCamposExtras(raw: unknown): CampoExtra[] {
     if (!["acima", "abaixo", "esquerda", "direita"].includes(direcao)) continue;
     if (!ancora) continue;
     ids.add(id);
+    const texto = tipo === "texto" ? String(o.texto ?? "") : "";
+    let tamanho = numOuNull(o.tamanho_pt);
+    if (tamanho != null && (tamanho < 4 || tamanho > 72)) tamanho = null;
     out.push({
       id,
       tipo,
       ancora_chave: ancora,
       direcao: direcao as CampoExtraDirecao,
-      texto: tipo === "texto" ? String(o.texto ?? "") : "",
+      texto,
       rede_chave: tipo === "rede" ? String(o.rede_chave ?? "").trim() : "",
       rede_valor: tipo === "rede" ? String(o.rede_valor ?? "").trim() : "",
+      x_pt: numOuNull(o.x_pt),
+      y_pt: numOuNull(o.y_pt),
+      offset_x_pt: numOuZero(o.offset_x_pt),
+      offset_y_pt: numOuZero(o.offset_y_pt),
+      align_h: alignH(o.align_h),
+      align_v: alignV(o.align_v),
+      tamanho_pt: tamanho,
+      negrito: tipo === "texto" ? normalizarNegrito(o.negrito, texto.length) : [],
     });
   }
   return out;
@@ -79,6 +147,14 @@ export function camposExtrasParaDados(extras: CampoExtra[]): string | null {
       texto: e.tipo === "texto" ? e.texto : "",
       rede_chave: e.tipo === "rede" ? e.rede_chave : "",
       rede_valor: e.tipo === "rede" ? e.rede_valor : "",
+      x_pt: e.x_pt,
+      y_pt: e.y_pt,
+      offset_x_pt: e.offset_x_pt,
+      offset_y_pt: e.offset_y_pt,
+      align_h: e.align_h,
+      align_v: e.align_v,
+      tamanho_pt: e.tamanho_pt,
+      negrito: e.tipo === "texto" ? e.negrito : [],
     })),
   );
 }
@@ -87,4 +163,76 @@ export function extraIdDaRegiao(chave: string, extraId?: string): string | null 
   if (extraId) return extraId;
   if (chave.startsWith("extra:")) return chave.slice("extra:".length);
   return null;
+}
+
+export function celulaParaAlign(
+  row: 0 | 1 | 2,
+  col: 0 | 1 | 2,
+): { align_h: CampoExtraAlignH; align_v: CampoExtraAlignV } {
+  return {
+    align_h: col === 0 ? "esquerda" : col === 1 ? "centro" : "direita",
+    align_v: row === 0 ? "topo" : row === 1 ? "meio" : "base",
+  };
+}
+
+export function alignParaCelula(
+  align_h: CampoExtraAlignH,
+  align_v: CampoExtraAlignV,
+): { row: 0 | 1 | 2; col: 0 | 1 | 2 } {
+  return {
+    col: align_h === "esquerda" ? 0 : align_h === "centro" ? 1 : 2,
+    row: align_v === "topo" ? 0 : align_v === "meio" ? 1 : 2,
+  };
+}
+
+/** Une intervalos de negrito e aplica/remove no range [start, end). */
+export function toggleNegritoRange(
+  ranges: Array<[number, number]>,
+  start: number,
+  end: number,
+  textoLen: number,
+): Array<[number, number]> {
+  const a = Math.max(0, Math.min(textoLen, Math.floor(start)));
+  const b = Math.max(0, Math.min(textoLen, Math.floor(end)));
+  if (b <= a) return ranges;
+  // Cobertura atual do intervalo
+  let coberto = 0;
+  for (const [x, y] of ranges) {
+    coberto += Math.max(0, Math.min(y, b) - Math.max(x, a));
+  }
+  const marcar = coberto < b - a;
+  const pontos: Array<{ p: number; d: number }> = [];
+  for (const [x, y] of ranges) {
+    pontos.push({ p: x, d: 1 }, { p: y, d: -1 });
+  }
+  if (marcar) {
+    pontos.push({ p: a, d: 1 }, { p: b, d: -1 });
+  } else {
+    // Remove cobrindo: split — marca tudo, depois desmarca [a,b)
+    // Mais simples: rebuild sem [a,b)
+    const next: Array<[number, number]> = [];
+    for (const [x, y] of ranges) {
+      if (y <= a || x >= b) {
+        next.push([x, y]);
+        continue;
+      }
+      if (x < a) next.push([x, a]);
+      if (y > b) next.push([b, y]);
+    }
+    return next.filter(([x, y]) => y > x);
+  }
+  pontos.sort((u, v) => u.p - v.p || u.d - v.d);
+  const merged: Array<[number, number]> = [];
+  let depth = 0;
+  let startAt: number | null = null;
+  for (const { p, d } of pontos) {
+    const prev = depth;
+    depth += d;
+    if (prev === 0 && depth > 0) startAt = p;
+    if (prev > 0 && depth === 0 && startAt != null) {
+      merged.push([startAt, p]);
+      startAt = null;
+    }
+  }
+  return merged.filter(([x, y]) => y > x);
 }

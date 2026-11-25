@@ -174,6 +174,13 @@ export interface ProvaPdfRegiao {
   rede_chave?: string;
   /** Id do item em `__campos_extras` (regiões `campo_extra` / `rede_extra`). */
   extra_id?: string;
+  /** Tamanho efetivo do extra (pt). */
+  tamanho_pt?: number;
+  align_h?: "esquerda" | "centro" | "direita";
+  align_v?: "topo" | "meio" | "base";
+  /** Dimensões da página em pontos (extras — para arraste → x_pt/y_pt). */
+  page_w?: number;
+  page_h?: number;
   /** Campo marcado no admin para não permitir edição na prévia. */
   bloquear_edicao?: boolean;
 }

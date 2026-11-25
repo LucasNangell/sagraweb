@@ -229,6 +229,7 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(onEditarTexto).toHaveBeenCalledWith(
       expect.objectContaining({ chave: "7:1:NOME" }),
       "Ana Maria\nSegunda linha",
+      undefined,
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -239,7 +240,11 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     const campo = screen.getByRole("textbox", { name: "Texto" });
     fireEvent.change(campo, { target: { value: "Ana Maria" } });
     fireEvent.keyDown(campo, { key: "Enter", ctrlKey: true });
-    expect(onEditarTexto).toHaveBeenCalledWith(expect.objectContaining({ chave: "7:1:NOME" }), "Ana Maria");
+    expect(onEditarTexto).toHaveBeenCalledWith(
+      expect.objectContaining({ chave: "7:1:NOME" }),
+      "Ana Maria",
+      undefined,
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -316,7 +321,7 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(screen.getByTestId("papelaria-previa-regiao-bloqueada")).toBeInTheDocument();
   });
 
-  it("menu de campos extras aparece com permitirCamposExtras", async () => {
+  it("menu de campos extras abre modal de texto", async () => {
     const onAdicionar = vi.fn();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -334,11 +339,15 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     fireEvent.contextMenu(regiao);
     expect(await screen.findByTestId("papelaria-previa-extras-menu")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("papelaria-extra-texto-abaixo"));
+    expect(await screen.findByTestId("papelaria-extra-texto-dialog")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "Cargo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
     expect(onAdicionar).toHaveBeenCalledWith(
       expect.objectContaining({
         tipo: "texto",
         ancora_chave: "7:1:NOME",
         direcao: "abaixo",
+        texto: "Cargo",
       }),
     );
   });

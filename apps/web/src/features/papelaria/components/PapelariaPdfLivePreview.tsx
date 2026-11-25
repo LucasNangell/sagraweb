@@ -15,6 +15,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
 
@@ -34,7 +36,7 @@ import {
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
 
-import { PapelariaTextoEditor } from "./PapelariaTextoEditor";
+import { PapelariaTextoEditor, type ExtraEditorMeta } from "./PapelariaTextoEditor";
 
 export type RedeCatalogoItem = { chave: string; nome: string };
 
@@ -42,9 +44,19 @@ export type AdicionarCampoExtraPayload = {
   tipo: CampoExtraTipo;
   ancora_chave: string;
   direcao: CampoExtraDirecao;
+  texto?: string;
   rede_chave?: string;
   rede_valor?: string;
 };
+
+export type MoverCampoExtraPayload = {
+  extraId: string;
+  x_pt: number;
+  y_pt: number;
+};
+
+const DRAG_THRESHOLD_PX = 4;
+const GUIDE_TOLERANCE_PX = 3;
 
 const DEBOUNCE_MS = 450;
 const ZOOM_MIN = 0.5;
@@ -160,6 +172,8 @@ export function PapelariaPdfLivePreview({
   redesCatalogo = [],
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
+  onMoverCampoExtra,
+  extrasMeta,
 }: {
   modeloId: number;
   values: Record<string, string>;
@@ -167,7 +181,7 @@ export function PapelariaPdfLivePreview({
   composicao?: PapelariaComposicao | null;
   className?: string;
   /** Texto digitado direto na prévia (com as regras do campo do PDF). */
-  onEditarTexto?: (regiao: ProvaPdfRegiao, texto: string) => void;
+  onEditarTexto?: (regiao: ProvaPdfRegiao, texto: string, meta?: ExtraEditorMeta) => void;
   /** Volta o campo ao texto do template. */
   onRestaurarTexto?: (regiao: ProvaPdfRegiao) => void;
   /** Por padrão chama a API autenticada; o portal passa a variante com token. */
@@ -179,6 +193,9 @@ export function PapelariaPdfLivePreview({
   redesCatalogo?: RedeCatalogoItem[];
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
+  onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
+  /** Metadados locais dos extras (align/tamanho/posição) para o editor. */
+  extrasMeta?: Record<string, ExtraEditorMeta>;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
@@ -227,9 +244,30 @@ export function PapelariaPdfLivePreview({
   } | null>(null);
   const [redeChave, setRedeChave] = useState("");
   const [redeValor, setRedeValor] = useState("");
+  const [textoDialog, setTextoDialog] = useState<{
+    ancora_chave: string;
+    direcao: CampoExtraDirecao;
+  } | null>(null);
+  const [textoNovo, setTextoNovo] = useState("");
+  const [drag, setDrag] = useState<{
+    chave: string;
+    extraId: string;
+    pagina: number;
+    startX: number;
+    startY: number;
+    orig: [number, number, number, number];
+    cur: [number, number, number, number];
+    pageW: number;
+    pageH: number;
+    moved: boolean;
+  } | null>(null);
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+
   useEffect(() => {
     setEditando(null);
     setRedeDialog(null);
+    setTextoDialog(null);
+    setDrag(null);
   }, [modeloId]);
 
   const menuExtrasAtivo =
@@ -248,6 +286,61 @@ export function PapelariaPdfLivePreview({
     setRedeChave("");
     setRedeValor("");
   }, [redeDialog, onAdicionarCampoExtra, redeChave, redeValor]);
+
+  const confirmarTextoExtra = useCallback(() => {
+    if (!textoDialog || !onAdicionarCampoExtra) return;
+    onAdicionarCampoExtra({
+      tipo: "texto",
+      ancora_chave: textoDialog.ancora_chave,
+      direcao: textoDialog.direcao,
+      texto: textoNovo,
+    });
+    setTextoDialog(null);
+    setTextoNovo("");
+  }, [textoDialog, onAdicionarCampoExtra, textoNovo]);
+
+  const calcGuides = useCallback(
+    (pagina: number, area: [number, number, number, number], selfChave: string, caixa: Caixa) => {
+      const others = todasRegioes.filter(
+        (r) => r.pagina_saida === pagina && r.chave !== selfChave,
+      );
+      const edges = (a: [number, number, number, number]) => ({
+        l: a[0],
+        c: (a[0] + a[2]) / 2,
+        r: a[2],
+        t: a[1],
+        m: (a[1] + a[3]) / 2,
+        b: a[3],
+      });
+      const me = edges(area);
+      const tol = GUIDE_TOLERANCE_PX / Math.max(caixa.width, 1);
+      const v: number[] = [];
+      const h: number[] = [];
+      for (const o of others) {
+        const e = edges(o.area);
+        for (const [a, b] of [
+          [me.l, e.l],
+          [me.l, e.r],
+          [me.r, e.l],
+          [me.r, e.r],
+          [me.c, e.c],
+        ] as const) {
+          if (Math.abs(a - b) <= tol) v.push(b);
+        }
+        for (const [a, b] of [
+          [me.t, e.t],
+          [me.t, e.b],
+          [me.b, e.t],
+          [me.b, e.b],
+          [me.m, e.m],
+        ] as const) {
+          if (Math.abs(a - b) <= tol) h.push(b);
+        }
+      }
+      setGuides({ v: [...new Set(v)], h: [...new Set(h)] });
+    },
+    [todasRegioes],
+  );
 
   const [zoom, setZoom] = useState(1);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -485,8 +578,34 @@ export function PapelariaPdfLivePreview({
                         atualizando && "opacity-80",
                       )}
                     />
+                    {drag && drag.pagina === i
+                      ? [
+                          ...guides.v.map((xf, gi) => (
+                            <div
+                              key={`gv-${gi}`}
+                              data-testid="papelaria-extra-guide-v"
+                              className="pointer-events-none absolute top-0 bottom-0 border-l border-dashed border-sky-500"
+                              style={{ left: xf * caixa.width }}
+                            />
+                          )),
+                          ...guides.h.map((yf, gi) => (
+                            <div
+                              key={`gh-${gi}`}
+                              data-testid="papelaria-extra-guide-h"
+                              className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-sky-500"
+                              style={{ top: yf * caixa.height }}
+                            />
+                          )),
+                        ]
+                      : null}
                     {regioesPagina.map((r) => {
-                      const [x0, y0, x1, y1] = r.area;
+                      const isExtra =
+                        r.tipo === "campo_extra" || r.tipo === "rede_extra";
+                      const extraId =
+                        r.extra_id ?? (r.chave.startsWith("extra:") ? r.chave.slice(6) : null);
+                      const area =
+                        drag && drag.chave === r.chave ? drag.cur : r.area;
+                      const [x0, y0, x1, y1] = area;
                       const bloqueada = Boolean(r.bloquear_edicao);
                       const ativa = !bloqueada && r.chave === editando;
                       const estiloArea = {
@@ -511,29 +630,109 @@ export function PapelariaPdfLivePreview({
                         type: "button" as const,
                         "aria-label": `Editar texto: ${r.texto || r.marcador}`,
                         title: menuExtrasAtivo
-                          ? "Clique para editar · botão direito para campos extras"
+                          ? isExtra
+                            ? "Arraste para mover · clique para editar · botão direito para opções"
+                            : "Clique para editar · botão direito para campos extras"
                           : r.editado
                             ? "Texto editado — clique para alterar"
                             : "Clique para editar",
                         "data-testid": "papelaria-previa-regiao",
                         "data-editado": r.editado ? ("true" as const) : undefined,
                         className: cn(
-                          "absolute cursor-text rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
+                          "absolute rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
+                          isExtra && menuExtrasAtivo ? "cursor-grab active:cursor-grabbing" : "cursor-text",
                           ativa
                             ? "bg-secondary-blue/10 outline outline-secondary-blue"
-                            : r.editado
+                            : r.editado || isExtra
                               ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
                               : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
                         ),
                         style: estiloArea,
-                        onClick: () => setEditando(r.chave),
+                        onClick: (e: ReactMouseEvent) => {
+                          if (drag?.moved) {
+                            e.preventDefault();
+                            return;
+                          }
+                          setEditando(r.chave);
+                        },
+                        onPointerDown:
+                          isExtra && menuExtrasAtivo && extraId && onMoverCampoExtra
+                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                                if (e.button !== 0) return;
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                                setDrag({
+                                  chave: r.chave,
+                                  extraId,
+                                  pagina: i,
+                                  startX: e.clientX,
+                                  startY: e.clientY,
+                                  orig: [...r.area] as [number, number, number, number],
+                                  cur: [...r.area] as [number, number, number, number],
+                                  pageW: r.page_w || 595,
+                                  pageH: r.page_h || 842,
+                                  moved: false,
+                                });
+                              }
+                            : undefined,
+                        onPointerMove:
+                          isExtra && menuExtrasAtivo
+                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                                setDrag((prev) => {
+                                  if (!prev || prev.chave !== r.chave) return prev;
+                                  const dxPx = e.clientX - prev.startX;
+                                  const dyPx = e.clientY - prev.startY;
+                                  const moved =
+                                    prev.moved ||
+                                    Math.hypot(dxPx, dyPx) >= DRAG_THRESHOLD_PX;
+                                  if (!moved) return prev;
+                                  const dx = dxPx / caixa.width;
+                                  const dy = dyPx / caixa.height;
+                                  const [a0, a1, a2, a3] = prev.orig;
+                                  const w = a2 - a0;
+                                  const h = a3 - a1;
+                                  let nx0 = a0 + dx;
+                                  let ny0 = a1 + dy;
+                                  nx0 = Math.max(0, Math.min(1 - w, nx0));
+                                  ny0 = Math.max(0, Math.min(1 - h, ny0));
+                                  const cur: [number, number, number, number] = [
+                                    nx0,
+                                    ny0,
+                                    nx0 + w,
+                                    ny0 + h,
+                                  ];
+                                  calcGuides(i, cur, r.chave, caixa);
+                                  return { ...prev, cur, moved: true };
+                                });
+                              }
+                            : undefined,
+                        onPointerUp:
+                          isExtra && menuExtrasAtivo
+                            ? (e: ReactPointerEvent<HTMLButtonElement>) => {
+                                try {
+                                  e.currentTarget.releasePointerCapture(e.pointerId);
+                                } catch {
+                                  /* ignore */
+                                }
+                                setDrag((prev) => {
+                                  if (!prev || prev.chave !== r.chave) return prev;
+                                  if (prev.moved && onMoverCampoExtra) {
+                                    onMoverCampoExtra({
+                                      extraId: prev.extraId,
+                                      x_pt: prev.cur[0] * prev.pageW,
+                                      y_pt: prev.cur[1] * prev.pageH,
+                                    });
+                                  }
+                                  setGuides({ v: [], h: [] });
+                                  // delay clear so click handler sees moved
+                                  window.setTimeout(() => setDrag(null), 0);
+                                  return prev.moved ? { ...prev, moved: true } : null;
+                                });
+                              }
+                            : undefined,
                       };
                       if (!menuExtrasAtivo) {
                         return <button key={r.chave} {...botaoProps} />;
                       }
-                      const isExtra =
-                        r.tipo === "campo_extra" || r.tipo === "rede_extra";
-                      const extraId = r.extra_id ?? (r.chave.startsWith("extra:") ? r.chave.slice(6) : null);
                       return (
                         <ContextMenu key={r.chave}>
                           <ContextMenuTrigger asChild>
@@ -548,13 +747,13 @@ export function PapelariaPdfLivePreview({
                               <ContextMenuItem
                                 key={`t-${d.id}`}
                                 data-testid={`papelaria-extra-texto-${d.id}`}
-                                onSelect={() =>
-                                  onAdicionarCampoExtra?.({
-                                    tipo: "texto",
+                                onSelect={() => {
+                                  setTextoNovo("");
+                                  setTextoDialog({
                                     ancora_chave: r.chave,
                                     direcao: d.id,
-                                  })
-                                }
+                                  });
+                                }}
                               >
                                 {d.label}
                               </ContextMenuItem>
@@ -566,7 +765,7 @@ export function PapelariaPdfLivePreview({
                                 key={`r-${d.id}`}
                                 data-testid={`papelaria-extra-rede-${d.id}`}
                                 onSelect={() => {
-                                  setRedeChave(redesCatalogo[0]?.chave ?? "");
+                                  setRedeChave(redesCatalogo[0]?.chave ?? "instagram");
                                   setRedeValor("");
                                   setRedeDialog({
                                     ancora_chave: r.chave,
@@ -600,8 +799,12 @@ export function PapelariaPdfLivePreview({
                       <PapelariaTextoEditor
                         key={regiaoEditada.chave}
                         regiao={regiaoEditada}
+                        extraMeta={
+                          regiaoEditada.extra_id
+                            ? extrasMeta?.[regiaoEditada.extra_id]
+                            : undefined
+                        }
                         ancora={() => {
-                          // Campo na janela: caixa da imagem (sem a borda) × área da região.
                           const img = imgRefs.current[i];
                           if (!img) return null;
                           const r = img.getBoundingClientRect();
@@ -615,9 +818,9 @@ export function PapelariaPdfLivePreview({
                             bottom: y + regiaoEditada.area[3] * h,
                           };
                         }}
-                        onAplicar={(texto) => {
+                        onAplicar={(texto, meta) => {
                           setEditando(null);
-                          if (texto !== regiaoEditada.texto) onEditarTexto(regiaoEditada, texto);
+                          onEditarTexto(regiaoEditada, texto, meta);
                         }}
                         onRestaurar={
                           (regiaoEditada.editado ||
@@ -735,6 +938,60 @@ export function PapelariaPdfLivePreview({
                 className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
                 onClick={confirmarRedeExtra}
                 disabled={!redeChave}
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {textoDialog ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Adicionar texto"
+          data-testid="papelaria-extra-texto-dialog"
+          onClick={() => setTextoDialog(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-sagra-border bg-white p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-neutral-800">Texto extra</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              Digite o texto. A tipografia segue o campo âncora (dá para ajustar depois).
+            </p>
+            <label className="mt-3 block text-[11px] font-medium text-neutral-700">
+              Texto
+              <textarea
+                className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
+                rows={3}
+                value={textoNovo}
+                onChange={(e) => setTextoNovo(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    confirmarTextoExtra();
+                  }
+                  if (e.key === "Escape") setTextoDialog(null);
+                }}
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-3 py-1.5 text-xs text-neutral-600 hover:bg-slate-100"
+                onClick={() => setTextoDialog(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                onClick={confirmarTextoExtra}
               >
                 Adicionar
               </button>

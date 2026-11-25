@@ -61,8 +61,10 @@ import {
   deveUsarPreviaPdfAoVivo,
   PapelariaPdfLivePreview,
   type AdicionarCampoExtraPayload,
+  type MoverCampoExtraPayload,
   type RedeCatalogoItem,
 } from "./PapelariaPdfLivePreview";
+import type { ExtraEditorMeta } from "./PapelariaTextoEditor";
 import { mockupJsonEfetivo, type ModeloComMockup } from "../mockup/mockupProduto";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
@@ -108,13 +110,19 @@ type Props = {
   onActiveDynamicFieldsChange?: (next: ActiveDynamicFieldPlacement[]) => void;
   onLivePreviewValueChange?: (key: string, value: string) => void;
   /** Texto editado direto na prévia do PDF. */
-  onEditarTextoPrevia?: (regiao: ProvaPdfRegiao, texto: string) => void;
+  onEditarTextoPrevia?: (
+    regiao: ProvaPdfRegiao,
+    texto: string,
+    meta?: ExtraEditorMeta,
+  ) => void;
   onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
   /** Campos extras (só operador): menu de contexto na prévia PDF. */
   permitirCamposExtras?: boolean;
   redesCatalogoExtras?: RedeCatalogoItem[];
   onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
   onRemoverCampoExtra?: (extraId: string) => void;
+  onMoverCampoExtra?: (payload: MoverCampoExtraPayload) => void;
+  extrasMeta?: Record<string, ExtraEditorMeta>;
   /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
   ladoEsquerdo?: ReactNode;
   /** Conteúdo fixo no topo da prévia (ex.: resumo do pedido de alteração do cliente). */
@@ -177,6 +185,8 @@ export function PapelariaProofPanel({
   redesCatalogoExtras = [],
   onAdicionarCampoExtra,
   onRemoverCampoExtra,
+  onMoverCampoExtra,
+  extrasMeta,
   ladoEsquerdo,
   provaStatus = null,
   criarProva = null,
@@ -933,6 +943,8 @@ export function PapelariaProofPanel({
               redesCatalogo={redesCatalogoExtras}
               onAdicionarCampoExtra={onAdicionarCampoExtra}
               onRemoverCampoExtra={onRemoverCampoExtra}
+              onMoverCampoExtra={onMoverCampoExtra}
+              extrasMeta={extrasMeta}
               className="min-h-0 flex-1"
             />
           ) : hasLivePreview && runtimePreviewConfig ? (

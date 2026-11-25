@@ -21,7 +21,7 @@ const LABELS = [
 ] as const;
 
 /**
- * Grade 3×3 para alinhamento do conteúdo (como no ícone de alinhamento).
+ * Grade 3×3 para alinhamento/ancoragem do conteúdo — fundo claro, padrão SAGRA.
  */
 export function PapelariaAlignPicker({ align_h, align_v, onChange, className }: Props) {
   const sel = alignParaCelula(align_h, align_v);
@@ -30,8 +30,9 @@ export function PapelariaAlignPicker({ align_h, align_v, onChange, className }: 
       role="group"
       aria-label="Alinhamento do conteúdo"
       data-testid="papelaria-align-picker"
+      title="Alinhamento / ancoragem"
       className={cn(
-        "inline-grid grid-cols-3 gap-0.5 rounded-md border border-slate-700 bg-slate-900 p-1",
+        "inline-grid h-7 w-7 shrink-0 grid-cols-3 place-items-center gap-px rounded-md border border-sagra-border bg-white p-0.5",
         className,
       )}
     >
@@ -47,11 +48,12 @@ export function PapelariaAlignPicker({ align_h, align_v, onChange, className }: 
               aria-pressed={active}
               data-testid={`papelaria-align-cell-${row}-${col}`}
               className={cn(
-                "size-4 rounded-[2px] border transition-colors",
+                "size-[6px] rounded-[1px] transition-colors",
                 active
-                  ? "border-slate-300 bg-slate-300"
-                  : "border-slate-500 bg-transparent hover:border-slate-400",
+                  ? "bg-secondary-blue"
+                  : "bg-slate-300 hover:bg-slate-400",
               )}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => onChange(celulaParaAlign(row, col))}
             />
           );

@@ -25,6 +25,11 @@ export type PapelariaEstiloToolbarProps = {
   className?: string;
 };
 
+const campoCls =
+  "h-7 rounded-md border border-sagra-border bg-white px-1.5 text-xs text-neutral-800 outline-none focus:border-secondary-blue focus:ring-1 focus:ring-secondary-blue/30";
+
+const rotuloCls = "text-[10px] font-semibold uppercase tracking-wide text-neutral-500";
+
 /** Controles de tipografia/alinhamento compartilhados (criar extra e editar campo). */
 export function PapelariaEstiloToolbar({
   tamanhoPt,
@@ -45,12 +50,12 @@ export function PapelariaEstiloToolbar({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2",
+        "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-sagra-border/70 pb-2",
         className,
       )}
     >
-      <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-        pt
+      <label className="inline-flex h-7 items-center gap-1.5">
+        <span className={rotuloCls}>pt</span>
         <input
           type="number"
           min={4}
@@ -58,10 +63,11 @@ export function PapelariaEstiloToolbar({
           step={0.5}
           value={tamanhoPt}
           data-testid="papelaria-extra-tamanho"
-          className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs"
+          className={cn(campoCls, "w-14 tabular-nums")}
           onChange={(e) => onTamanhoPt(Number(e.target.value) || 11)}
         />
       </label>
+
       {mostrarNegrito && onNegrito ? (
         <button
           type="button"
@@ -70,10 +76,10 @@ export function PapelariaEstiloToolbar({
           aria-pressed={negritoAtivo}
           data-testid="papelaria-extra-negrito"
           className={cn(
-            "inline-flex size-7 items-center justify-center rounded border text-neutral-700 hover:bg-slate-50",
+            "inline-flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors",
             negritoAtivo
-              ? "border-secondary-blue bg-secondary-blue/15 text-secondary-blue"
-              : "border-slate-300",
+              ? "border-secondary-blue bg-secondary-blue/10 text-secondary-blue"
+              : "border-sagra-border bg-white text-neutral-700 hover:bg-slate-50",
           )}
           onMouseDown={(e) => e.preventDefault()}
           onClick={onNegrito}
@@ -81,30 +87,40 @@ export function PapelariaEstiloToolbar({
           <Bold className="size-3.5" aria-hidden strokeWidth={negritoAtivo ? 2.75 : 2} />
         </button>
       ) : null}
-      <PapelariaAlignPicker align_h={align_h} align_v={align_v} onChange={onAlign} />
+
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-sagra-border/80" aria-hidden />
+
+      <div className="inline-flex h-7 items-center gap-1.5">
+        <span className={rotuloCls}>Âncora</span>
+        <PapelariaAlignPicker align_h={align_h} align_v={align_v} onChange={onAlign} />
+      </div>
+
       {mostrarMm ? (
         <>
-          <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-            X mm
+          <div className="mx-0.5 h-5 w-px shrink-0 bg-sagra-border/80" aria-hidden />
+          <label className="inline-flex h-7 items-center gap-1.5">
+            <span className={rotuloCls}>X</span>
             <input
               type="number"
               step={0.1}
               value={xMm}
               data-testid="papelaria-extra-x-mm"
-              className="w-16 rounded border border-slate-300 px-1 py-0.5 text-xs"
+              className={cn(campoCls, "w-16 tabular-nums")}
               onChange={(e) => onXMm?.(Number(e.target.value) || 0)}
             />
+            <span className="text-[10px] text-neutral-400">mm</span>
           </label>
-          <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-            Y mm
+          <label className="inline-flex h-7 items-center gap-1.5">
+            <span className={rotuloCls}>Y</span>
             <input
               type="number"
               step={0.1}
               value={yMm}
               data-testid="papelaria-extra-y-mm"
-              className="w-16 rounded border border-slate-300 px-1 py-0.5 text-xs"
+              className={cn(campoCls, "w-16 tabular-nums")}
               onChange={(e) => onYMm?.(Number(e.target.value) || 0)}
             />
+            <span className="text-[10px] text-neutral-400">mm</span>
           </label>
         </>
       ) : null}

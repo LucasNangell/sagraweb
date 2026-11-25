@@ -274,7 +274,7 @@ export function PapelariaTextoEditor({
       ref={caixaRef}
       role="dialog"
       aria-label="Editar texto da prévia"
-      className="fixed z-[200] rounded-lg border border-sagra-border bg-white p-2 shadow-xl"
+      className="fixed z-[200] rounded-lg border border-sagra-border bg-white p-3 shadow-xl"
       style={{
         left: estilo?.left ?? 0,
         top: estilo?.top ?? 0,
@@ -290,7 +290,7 @@ export function PapelariaTextoEditor({
       }}
     >
       <PapelariaEstiloToolbar
-        className="mb-2"
+        className="mb-2.5"
         tamanhoPt={tamanhoPt}
         onTamanhoPt={setTamanhoPt}
         align_h={alignH}
@@ -319,7 +319,7 @@ export function PapelariaTextoEditor({
           <div
             aria-hidden
             data-testid="papelaria-texto-preview"
-            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre break-spaces rounded-md border border-transparent px-2 py-1.5 text-neutral-800"
+            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre break-spaces rounded-md border border-transparent px-2.5 py-2 text-neutral-800"
             style={tipografiaStyle}
           >
             {segsPreview.map((seg, i) => (
@@ -378,20 +378,20 @@ export function PapelariaTextoEditor({
             caretColor: "#171717",
           }}
           className={cn(
-            "relative block w-full resize-none overflow-x-auto overflow-y-hidden whitespace-pre rounded-md border border-slate-300 px-2 py-1.5 leading-snug focus:border-secondary-blue focus:outline-none focus:ring-1 focus:ring-secondary-blue/40",
+            "relative block w-full resize-none overflow-x-auto overflow-y-hidden whitespace-pre rounded-md border border-sagra-border px-2.5 py-2 leading-snug outline-none focus:border-secondary-blue focus:ring-1 focus:ring-secondary-blue/30",
             segsPreview ? "bg-transparent text-transparent" : "text-xs text-neutral-800",
           )}
         />
       </div>
-      <p className="mt-1 text-[10px] leading-snug text-neutral-500">
+      <p className="mt-1.5 text-[10px] leading-snug text-neutral-500">
         Enter quebra a linha · Shift+Enter aplica
         {permiteNegrito ? " · Ctrl+B negrito" : ""} · Esc cancela.
       </p>
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="mt-2.5 flex items-center justify-between gap-2">
         {onRestaurar ? (
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 hover:text-amber-900"
             onClick={onRestaurar}
           >
             <RotateCcw className="size-3" aria-hidden />
@@ -400,17 +400,17 @@ export function PapelariaTextoEditor({
         ) : (
           <span />
         )}
-        <div className="flex gap-1.5">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            className="rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 hover:bg-slate-50"
+            className="inline-flex h-7 items-center rounded-md border border-sagra-border bg-white px-2.5 text-[11px] font-semibold text-neutral-600 hover:bg-slate-50"
             onClick={onCancelar}
           >
             Cancelar
           </button>
           <button
             type="button"
-            className="rounded-md bg-secondary-blue px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-secondary-blue/90"
+            className="inline-flex h-7 items-center rounded-md bg-secondary-blue px-2.5 text-[11px] font-semibold text-white hover:bg-secondary-blue/90"
             onClick={aplicar}
             title="Shift+Enter ou Ctrl+Enter"
           >

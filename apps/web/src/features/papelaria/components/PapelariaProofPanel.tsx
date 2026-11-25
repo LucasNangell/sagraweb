@@ -5,6 +5,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  RotateCcw,
   XCircle,
 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -138,6 +139,15 @@ type Props = {
     pending: boolean;
     title?: string;
   } | null;
+  /** Conteúdo da aba Imposição quando ainda não há PDF (setup Offset/Digital + grade). */
+  imposicaoSetup?: ReactNode;
+  /** «Refazer imposição» flutuante quando o PDF está pronto. */
+  refazerImposicao?: {
+    onClick: () => void;
+    disabled: boolean;
+    pending: boolean;
+    title?: string;
+  } | null;
 };
 
 function resolvePreviewImageUrl(raw: string): string {
@@ -192,6 +202,8 @@ export function PapelariaProofPanel({
   criarProva = null,
   topoPrevia = null,
   previaRepeticao: repeticaoPrevia = null,
+  imposicaoSetup = null,
+  refazerImposicao = null,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const queryClient = useQueryClient();
@@ -557,7 +569,7 @@ export function PapelariaProofPanel({
           </div>
         </div>
       ) : viewMode === "imposicao" && imposicaoPdfUrl ? (
-        <div className="flex min-h-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3">
             <article
               className={cn(
@@ -607,7 +619,29 @@ export function PapelariaProofPanel({
               />
             </article>
           </div>
+          {refazerImposicao ? (
+            <button
+              type="button"
+              className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-secondary-blue px-4 py-2.5 text-xs font-semibold text-white shadow-lg ring-1 ring-black/5 transition hover:bg-secondary-blue/90 disabled:cursor-not-allowed disabled:opacity-55"
+              onClick={refazerImposicao.onClick}
+              disabled={refazerImposicao.disabled}
+              title={
+                refazerImposicao.title ??
+                "Refazer imposição e devolver as OSs juntadas a Aguard. Juntada"
+              }
+              data-testid="papelaria-refazer-imposicao-flutuante"
+            >
+              {refazerImposicao.pending ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <RotateCcw className="size-3.5" aria-hidden />
+              )}
+              Refazer imposição
+            </button>
+          ) : null}
         </div>
+      ) : viewMode === "imposicao" && imposicaoSetup ? (
+        imposicaoSetup
       ) : viewMode === "imposicao" ? (
         <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-neutral-400">
           <div>

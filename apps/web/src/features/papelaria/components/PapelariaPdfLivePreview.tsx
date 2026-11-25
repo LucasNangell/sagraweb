@@ -32,7 +32,12 @@ import {
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import {
   DIRECOES_EXTRA,
+  mmParaPt,
   segmentosComNegrito,
+  selecaoEstaEmNegrito,
+  toggleNegritoRange,
+  type CampoExtraAlignH,
+  type CampoExtraAlignV,
   type CampoExtraDirecao,
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
@@ -43,6 +48,7 @@ import {
   type ConteudoOtimistaExtra,
 } from "@/features/papelaria/papelariaPreviaOtimista";
 
+import { PapelariaEstiloToolbar } from "./PapelariaEstiloToolbar";
 import { PapelariaTextoEditor, type ExtraEditorMeta } from "./PapelariaTextoEditor";
 
 export type RedeCatalogoItem = { chave: string; nome: string };
@@ -54,6 +60,12 @@ export type AdicionarCampoExtraPayload = {
   texto?: string;
   rede_chave?: string;
   rede_valor?: string;
+  tamanho_pt?: number | null;
+  negrito?: Array<[number, number]>;
+  align_h?: CampoExtraAlignH;
+  align_v?: CampoExtraAlignV;
+  x_pt?: number | null;
+  y_pt?: number | null;
 };
 
 export type MoverCampoExtraPayload = {
@@ -298,6 +310,21 @@ export function PapelariaPdfLivePreview({
     direcao: CampoExtraDirecao;
   } | null>(null);
   const [textoNovo, setTextoNovo] = useState("");
+  const [textoTamanhoPt, setTextoTamanhoPt] = useState(11);
+  const [textoNegrito, setTextoNegrito] = useState<Array<[number, number]>>([]);
+  const [textoAlignH, setTextoAlignH] = useState<CampoExtraAlignH>("esquerda");
+  const [textoAlignV, setTextoAlignV] = useState<CampoExtraAlignV>("topo");
+  const [textoXMm, setTextoXMm] = useState(0);
+  const [textoYMm, setTextoYMm] = useState(0);
+  const [textoTemPos, setTextoTemPos] = useState(false);
+  const [textoSel, setTextoSel] = useState({ start: 0, end: 0 });
+  const textoCampoRef = useRef<HTMLTextAreaElement>(null);
+  const [redeTamanhoPt, setRedeTamanhoPt] = useState(11);
+  const [redeAlignH, setRedeAlignH] = useState<CampoExtraAlignH>("esquerda");
+  const [redeAlignV, setRedeAlignV] = useState<CampoExtraAlignV>("topo");
+  const [redeXMm, setRedeXMm] = useState(0);
+  const [redeYMm, setRedeYMm] = useState(0);
+  const [redeTemPos, setRedeTemPos] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [conteudosOtimistas, setConteudosOtimistas] = useState<
@@ -324,6 +351,23 @@ export function PapelariaPdfLivePreview({
   const menuExtrasAtivo =
     permitirCamposExtras && Boolean(onAdicionarCampoExtra) && editavel;
 
+  const resetEstiloCriacao = useCallback(() => {
+    setTextoNovo("");
+    setTextoTamanhoPt(11);
+    setTextoNegrito([]);
+    setTextoAlignH("esquerda");
+    setTextoAlignV("topo");
+    setTextoXMm(0);
+    setTextoYMm(0);
+    setTextoTemPos(false);
+    setRedeTamanhoPt(11);
+    setRedeAlignH("esquerda");
+    setRedeAlignV("topo");
+    setRedeXMm(0);
+    setRedeYMm(0);
+    setRedeTemPos(false);
+  }, []);
+
   const confirmarRedeExtra = useCallback(() => {
     if (!redeDialog || !onAdicionarCampoExtra || !redeChave) return;
     onAdicionarCampoExtra({
@@ -332,11 +376,30 @@ export function PapelariaPdfLivePreview({
       direcao: redeDialog.direcao,
       rede_chave: redeChave,
       rede_valor: redeValor.trim(),
+      tamanho_pt: redeTamanhoPt,
+      align_h: redeAlignH,
+      align_v: redeAlignV,
+      x_pt: redeTemPos ? mmParaPt(redeXMm) : null,
+      y_pt: redeTemPos ? mmParaPt(redeYMm) : null,
+      negrito: [],
     });
     setRedeDialog(null);
     setRedeChave("");
     setRedeValor("");
-  }, [redeDialog, onAdicionarCampoExtra, redeChave, redeValor]);
+    resetEstiloCriacao();
+  }, [
+    redeDialog,
+    onAdicionarCampoExtra,
+    redeChave,
+    redeValor,
+    redeTamanhoPt,
+    redeAlignH,
+    redeAlignV,
+    redeTemPos,
+    redeXMm,
+    redeYMm,
+    resetEstiloCriacao,
+  ]);
 
   const confirmarTextoExtra = useCallback(() => {
     if (!textoDialog || !onAdicionarCampoExtra) return;
@@ -345,10 +408,48 @@ export function PapelariaPdfLivePreview({
       ancora_chave: textoDialog.ancora_chave,
       direcao: textoDialog.direcao,
       texto: textoNovo,
+      tamanho_pt: textoTamanhoPt,
+      negrito: textoNegrito,
+      align_h: textoAlignH,
+      align_v: textoAlignV,
+      x_pt: textoTemPos ? mmParaPt(textoXMm) : null,
+      y_pt: textoTemPos ? mmParaPt(textoYMm) : null,
     });
     setTextoDialog(null);
-    setTextoNovo("");
-  }, [textoDialog, onAdicionarCampoExtra, textoNovo]);
+    resetEstiloCriacao();
+  }, [
+    textoDialog,
+    onAdicionarCampoExtra,
+    textoNovo,
+    textoTamanhoPt,
+    textoNegrito,
+    textoAlignH,
+    textoAlignV,
+    textoTemPos,
+    textoXMm,
+    textoYMm,
+    resetEstiloCriacao,
+  ]);
+
+  const aplicarNegritoCriacao = useCallback(() => {
+    const campo = textoCampoRef.current;
+    if (!campo) return;
+    let start = campo.selectionStart;
+    let end = campo.selectionEnd;
+    if (start === end) {
+      const left = textoNovo.slice(0, start).search(/\S+$/);
+      const rightMatch = textoNovo.slice(end).match(/^\S+/);
+      start = left >= 0 ? left : start;
+      end = end + (rightMatch ? rightMatch[0].length : 0);
+    }
+    if (end <= start) return;
+    setTextoNegrito(toggleNegritoRange(textoNegrito, start, end, textoNovo.length));
+    requestAnimationFrame(() => {
+      campo.focus();
+      campo.setSelectionRange(start, end);
+      setTextoSel({ start, end });
+    });
+  }, [textoNovo, textoNegrito]);
 
   const calcGuides = useCallback(
     (pagina: number, area: [number, number, number, number], selfChave: string, caixa: Caixa) => {
@@ -874,7 +975,7 @@ export function PapelariaPdfLivePreview({
                                 key={`t-${d.id}`}
                                 data-testid={`papelaria-extra-texto-${d.id}`}
                                 onSelect={() => {
-                                  setTextoNovo("");
+                                  resetEstiloCriacao();
                                   setTextoDialog({
                                     ancora_chave: r.chave,
                                     direcao: d.id,
@@ -891,6 +992,7 @@ export function PapelariaPdfLivePreview({
                                 key={`r-${d.id}`}
                                 data-testid={`papelaria-extra-rede-${d.id}`}
                                 onSelect={() => {
+                                  resetEstiloCriacao();
                                   setRedeChave(redesCatalogo[0]?.chave ?? "instagram");
                                   setRedeValor("");
                                   setRedeDialog({
@@ -927,9 +1029,9 @@ export function PapelariaPdfLivePreview({
                         key={regiaoEditada.chave}
                         regiao={regiaoEditada}
                         extraMeta={
-                          regiaoEditada.extra_id
+                          (regiaoEditada.extra_id
                             ? extrasMeta?.[regiaoEditada.extra_id]
-                            : undefined
+                            : undefined) ?? extrasMeta?.[regiaoEditada.chave]
                         }
                         ancora={() => {
                           const img = imgRefs.current[i];
@@ -1032,8 +1134,30 @@ export function PapelariaPdfLivePreview({
           >
             <h3 className="text-sm font-semibold text-neutral-800">Rede social extra</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              Escolha a rede e o perfil. A tipografia segue o campo âncora.
+              Escolha a rede, o perfil e a tipografia neste mesmo passo.
             </p>
+            <PapelariaEstiloToolbar
+              className="mt-3 border-b-0 pb-0"
+              tamanhoPt={redeTamanhoPt}
+              onTamanhoPt={setRedeTamanhoPt}
+              align_h={redeAlignH}
+              align_v={redeAlignV}
+              onAlign={({ align_h, align_v }) => {
+                setRedeAlignH(align_h);
+                setRedeAlignV(align_v);
+              }}
+              mostrarMm
+              xMm={redeXMm}
+              yMm={redeYMm}
+              onXMm={(v) => {
+                setRedeTemPos(true);
+                setRedeXMm(v);
+              }}
+              onYMm={(v) => {
+                setRedeTemPos(true);
+                setRedeYMm(v);
+              }}
+            />
             <label className="mt-3 block text-[11px] font-medium text-neutral-700">
               Rede
               <select
@@ -1110,20 +1234,61 @@ export function PapelariaPdfLivePreview({
           >
             <h3 className="text-sm font-semibold text-neutral-800">Texto extra</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              Digite o texto. A tipografia segue o campo âncora (dá para ajustar depois).
+              Digite o texto e configure tipografia/alinhamento neste mesmo passo.
             </p>
+            <PapelariaEstiloToolbar
+              className="mt-3 border-b-0 pb-0"
+              tamanhoPt={textoTamanhoPt}
+              onTamanhoPt={setTextoTamanhoPt}
+              align_h={textoAlignH}
+              align_v={textoAlignV}
+              onAlign={({ align_h, align_v }) => {
+                setTextoAlignH(align_h);
+                setTextoAlignV(align_v);
+              }}
+              mostrarNegrito
+              negritoAtivo={selecaoEstaEmNegrito(
+                textoNegrito,
+                textoSel.start,
+                textoSel.end,
+                textoNovo.length,
+              )}
+              onNegrito={aplicarNegritoCriacao}
+              mostrarMm
+              xMm={textoXMm}
+              yMm={textoYMm}
+              onXMm={(v) => {
+                setTextoTemPos(true);
+                setTextoXMm(v);
+              }}
+              onYMm={(v) => {
+                setTextoTemPos(true);
+                setTextoYMm(v);
+              }}
+            />
             <label className="mt-3 block text-[11px] font-medium text-neutral-700">
               Texto
               <textarea
+                ref={textoCampoRef}
                 className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
                 rows={3}
                 value={textoNovo}
                 onChange={(e) => setTextoNovo(e.target.value)}
+                onSelect={(e) =>
+                  setTextoSel({
+                    start: e.currentTarget.selectionStart,
+                    end: e.currentTarget.selectionEnd,
+                  })
+                }
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     confirmarTextoExtra();
+                  }
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+                    e.preventDefault();
+                    aplicarNegritoCriacao();
                   }
                   if (e.key === "Escape") setTextoDialog(null);
                 }}

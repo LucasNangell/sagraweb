@@ -1,4 +1,4 @@
-import { Bold, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -21,7 +21,7 @@ import {
 } from "@/features/papelaria/papelariaCamposExtras";
 import { cn } from "@sagra/ui";
 
-import { PapelariaAlignPicker } from "./PapelariaAlignPicker";
+import { PapelariaEstiloToolbar } from "./PapelariaEstiloToolbar";
 
 const MARGEM = 8;
 /** Largura mínima da caixa (px) — cabe a dica e os botões. */
@@ -73,9 +73,8 @@ function alignCss(align: CampoExtraAlignH): "left" | "center" | "right" {
 }
 
 /**
- * Caixa para editar o texto de um campo direto na prévia. Em extras, inclui
- * tamanho, negrito, alinhamento 3×3 e posição em mm. O campo espelha tamanho,
- * fonte e negrito do PDF.
+ * Caixa para editar texto na prévia. Sempre oferece tamanho, negrito e alinhamento
+ * 3×3 (extras e campos do modelo). Posição em mm só nos extras.
  */
 export function PapelariaTextoEditor({
   regiao,
@@ -90,10 +89,11 @@ export function PapelariaTextoEditor({
   onAplicar: (texto: string, meta?: ExtraEditorMeta) => void;
   onRestaurar?: () => void;
   onCancelar: () => void;
-  /** Estado atual do extra (quando a região é campo/rede extra). */
+  /** Estado atual do extra / estilo do campo do modelo. */
   extraMeta?: ExtraEditorMeta;
 }) {
   const modoExtra = isExtra(regiao);
+  const permiteNegrito = regiao.tipo !== "rede" && regiao.tipo !== "rede_extra";
   const [texto, setTexto] = useState(regiao.texto);
   const [tamanhoPt, setTamanhoPt] = useState<number>(
     extraMeta?.tamanho_pt ?? regiao.tamanho_pt ?? 11,
@@ -126,12 +126,9 @@ export function PapelariaTextoEditor({
   ancoraRef.current = ancora;
 
   const fonteFamilia = fonteCss(regiao.fonte);
-  const tipografiaAtiva = modoExtra || Boolean(regiao.tamanho_pt || regiao.fonte);
-  const fontSizeCss = tipografiaAtiva ? `${Math.max(4, Math.min(72, tamanhoPt))}pt` : undefined;
+  const fontSizeCss = `${Math.max(4, Math.min(72, tamanhoPt))}pt`;
   const negritoAtivo =
-    modoExtra &&
-    regiao.tipo === "campo_extra" &&
-    selecaoEstaEmNegrito(negrito, sel.start, sel.end, texto.length);
+    permiteNegrito && selecaoEstaEmNegrito(negrito, sel.start, sel.end, texto.length);
 
   const [fontesProntas, setFontesProntas] = useState(0);
   useEffect(() => {
@@ -204,17 +201,21 @@ export function PapelariaTextoEditor({
   }, [posicionar]);
 
   const aplicar = () => {
-    if (!modoExtra) {
-      onAplicar(texto);
-      return;
-    }
     onAplicar(texto, {
       tamanho_pt: tamanhoPt,
-      negrito: regiao.tipo === "campo_extra" ? negrito : [],
+      negrito: permiteNegrito ? negrito : [],
       align_h: alignH,
       align_v: alignV,
-      x_pt: temPosicao ? mmParaPt(xMm) : (extraMeta?.x_pt ?? null),
-      y_pt: temPosicao ? mmParaPt(yMm) : (extraMeta?.y_pt ?? null),
+      x_pt: modoExtra
+        ? temPosicao
+          ? mmParaPt(xMm)
+          : (extraMeta?.x_pt ?? null)
+        : null,
+      y_pt: modoExtra
+        ? temPosicao
+          ? mmParaPt(yMm)
+          : (extraMeta?.y_pt ?? null)
+        : null,
     });
   };
 
@@ -245,15 +246,13 @@ export function PapelariaTextoEditor({
     modoExtra ? LARGURA_MINIMA + 40 : larguraTexto + FOLGA_CAIXA,
   );
 
-  const segsPreview = tipografiaAtiva
-    ? segmentosComNegrito(texto.length ? texto : " ", modoExtra ? negrito : (regiao.negrito ?? []))
-    : null;
+  const segsPreview = segmentosComNegrito(texto.length ? texto : " ", negrito);
 
   const tipografiaStyle: CSSProperties = {
     fontSize: fontSizeCss,
     fontFamily: fonteFamilia,
     lineHeight: 1.2,
-    textAlign: modoExtra ? alignCss(alignH) : undefined,
+    textAlign: alignCss(alignH),
   };
 
   const caixa = (
@@ -266,98 +265,36 @@ export function PapelariaTextoEditor({
         left: estilo?.left ?? 0,
         top: estilo?.top ?? 0,
         visibility: estilo ? "visible" : "hidden",
-        width: larguraCaixa,
+        width: Math.max(larguraCaixa, LARGURA_MINIMA + 40),
         maxWidth: `calc(100vw - ${2 * MARGEM}px)`,
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {modoExtra ? (
-        <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
-          {regiao.tipo === "campo_extra" ? (
-            <>
-              <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-                pt
-                <input
-                  type="number"
-                  min={4}
-                  max={72}
-                  step={0.5}
-                  value={tamanhoPt}
-                  data-testid="papelaria-extra-tamanho"
-                  className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs"
-                  onChange={(e) => setTamanhoPt(Number(e.target.value) || 11)}
-                />
-              </label>
-              <button
-                type="button"
-                title="Negrito na seleção"
-                aria-label="Negrito"
-                aria-pressed={negritoAtivo}
-                data-testid="papelaria-extra-negrito"
-                className={cn(
-                  "inline-flex size-7 items-center justify-center rounded border text-neutral-700 hover:bg-slate-50",
-                  negritoAtivo
-                    ? "border-secondary-blue bg-secondary-blue/15 text-secondary-blue"
-                    : "border-slate-300",
-                )}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={aplicarNegritoSelecao}
-              >
-                <Bold className="size-3.5" aria-hidden strokeWidth={negritoAtivo ? 2.75 : 2} />
-              </button>
-            </>
-          ) : (
-            <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-              pt
-              <input
-                type="number"
-                min={4}
-                max={72}
-                step={0.5}
-                value={tamanhoPt}
-                className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs"
-                onChange={(e) => setTamanhoPt(Number(e.target.value) || 11)}
-              />
-            </label>
-          )}
-          <PapelariaAlignPicker
-            align_h={alignH}
-            align_v={alignV}
-            onChange={({ align_h, align_v }) => {
-              setAlignH(align_h);
-              setAlignV(align_v);
-            }}
-          />
-          <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-            X mm
-            <input
-              type="number"
-              step={0.1}
-              value={xMm}
-              data-testid="papelaria-extra-x-mm"
-              className="w-16 rounded border border-slate-300 px-1 py-0.5 text-xs"
-              onChange={(e) => {
-                setTemPosicao(true);
-                setXMm(Number(e.target.value) || 0);
-              }}
-            />
-          </label>
-          <label className="flex items-center gap-1 text-[10px] font-medium text-neutral-600">
-            Y mm
-            <input
-              type="number"
-              step={0.1}
-              value={yMm}
-              data-testid="papelaria-extra-y-mm"
-              className="w-16 rounded border border-slate-300 px-1 py-0.5 text-xs"
-              onChange={(e) => {
-                setTemPosicao(true);
-                setYMm(Number(e.target.value) || 0);
-              }}
-            />
-          </label>
-        </div>
-      ) : null}
+      <PapelariaEstiloToolbar
+        className="mb-2"
+        tamanhoPt={tamanhoPt}
+        onTamanhoPt={setTamanhoPt}
+        align_h={alignH}
+        align_v={alignV}
+        onAlign={({ align_h, align_v }) => {
+          setAlignH(align_h);
+          setAlignV(align_v);
+        }}
+        mostrarNegrito={permiteNegrito}
+        negritoAtivo={negritoAtivo}
+        onNegrito={aplicarNegritoSelecao}
+        mostrarMm={modoExtra}
+        xMm={xMm}
+        yMm={yMm}
+        onXMm={(v) => {
+          setTemPosicao(true);
+          setXMm(v);
+        }}
+        onYMm={(v) => {
+          setTemPosicao(true);
+          setYMm(v);
+        }}
+      />
       <div className="relative">
         {segsPreview ? (
           <div
@@ -411,7 +348,7 @@ export function PapelariaTextoEditor({
             } else if (teclaAplica(e)) {
               e.preventDefault();
               aplicar();
-            } else if (modoExtra && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+            } else if (permiteNegrito && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
               e.preventDefault();
               aplicarNegritoSelecao();
             }
@@ -428,9 +365,8 @@ export function PapelariaTextoEditor({
         />
       </div>
       <p className="mt-1 text-[10px] leading-snug text-neutral-500">
-        {modoExtra
-          ? "Enter quebra a linha · Shift+Enter aplica · Ctrl+B negrito · Esc cancela."
-          : "Enter quebra a linha · Shift+Enter ou Ctrl+Enter aplica · Esc cancela. Mantém a fonte e o alinhamento do campo."}
+        Enter quebra a linha · Shift+Enter aplica
+        {permiteNegrito ? " · Ctrl+B negrito" : ""} · Esc cancela.
       </p>
       <div className="mt-2 flex items-center justify-between gap-2">
         {onRestaurar ? (

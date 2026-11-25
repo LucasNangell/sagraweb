@@ -1,3 +1,4 @@
+import { CAMPOS_ESTILO_DADOS_KEY } from "@/features/papelaria/papelariaCamposEstilo";
 import { CAMPOS_EXTRAS_DADOS_KEY } from "@/features/papelaria/papelariaCamposExtras";
 import { TEXTOS_DADOS_KEY } from "@/features/papelaria/papelariaTextosEditados";
 
@@ -8,6 +9,7 @@ export const DEBOUNCE_ACTION_MS = 0;
 
 const CHAVES_ACAO = new Set([
   CAMPOS_EXTRAS_DADOS_KEY,
+  CAMPOS_ESTILO_DADOS_KEY,
   TEXTOS_DADOS_KEY,
   "__redes",
   "__redes_estilo",

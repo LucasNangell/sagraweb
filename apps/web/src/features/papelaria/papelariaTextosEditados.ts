@@ -114,6 +114,23 @@ export function manterNegrito(texto: string, regiao: Pick<ProvaPdfRegiao, "texto
   return out + resto;
 }
 
+/** Aplica intervalos [inicio, fim) como `**…**` (do fim para o início). */
+export function textoComMarcasNegrito(
+  texto: string,
+  ranges: Array<[number, number]>,
+): string {
+  if (!texto || !ranges.length) return texto;
+  const ordenados = [...ranges]
+    .map(([a, b]) => [Math.max(0, a), Math.min(texto.length, b)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((u, v) => v[0] - u[0] || v[1] - u[1]);
+  let out = texto;
+  for (const [a, b] of ordenados) {
+    out = `${out.slice(0, a)}**${out.slice(a, b)}**${out.slice(b)}`;
+  }
+  return out;
+}
+
 /** Textos editados → valor da chave `__textos` (vazio quando não há edição). */
 export function textosParaDados(textos: Record<string, string>): string | null {
   return Object.keys(textos).length ? JSON.stringify(textos) : null;

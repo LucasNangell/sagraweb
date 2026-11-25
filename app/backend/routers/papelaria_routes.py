@@ -69,6 +69,12 @@ class PapelariaImposicaoJuntadaOs(BaseModel):
     nro: int = Field(..., ge=1)
 
 
+class PapelariaImposicaoSlotOs(BaseModel):
+    slot: int = Field(..., ge=0)
+    ano: int = Field(..., ge=2000, le=2100)
+    nro: int = Field(..., ge=1)
+
+
 class PapelariaImposicaoPayload(BaseModel):
     ano: int = Field(..., ge=2000, le=2100)
     nro: int = Field(..., ge=1)
@@ -77,6 +83,7 @@ class PapelariaImposicaoPayload(BaseModel):
     variante: Optional[str] = Field(None, max_length=16)
     imposicao_config: Optional[Any] = None
     juntada_os: Optional[list[PapelariaImposicaoJuntadaOs]] = None
+    slot_os: Optional[list[PapelariaImposicaoSlotOs]] = None
 
 
 class PapelariaProdutoImposicaoPayload(BaseModel):
@@ -1228,6 +1235,8 @@ def previa_repeticao(
     import json as _json
 
     from services import papelaria_prova_pdf_service as svc
+
+    from services.papelaria_campos_estilo_service import CAMPOS_ESTILO_DADOS_KEY
     from services.papelaria_campos_extras_service import CAMPOS_EXTRAS_DADOS_KEY
 
     dados = {
@@ -1235,7 +1244,13 @@ def previa_repeticao(
         for k, v in (payload.dados or {}).items()
         if not str(k).startswith("__")
         or k
-        in (svc.TEXTOS_DADOS_KEY, "__redes", "__redes_estilo", CAMPOS_EXTRAS_DADOS_KEY)
+        in (
+            svc.TEXTOS_DADOS_KEY,
+            "__redes",
+            "__redes_estilo",
+            CAMPOS_EXTRAS_DADOS_KEY,
+            CAMPOS_ESTILO_DADOS_KEY,
+        )
     }
     if payload.composicao:
         dados["__composicao"] = _json.dumps(payload.composicao)
@@ -1278,14 +1293,22 @@ def previa_pdf_ao_vivo(
         raise HTTPException(404, "Modelo não encontrado.")
     from services.papelaria_faces_service import ComposicaoError, validar_composicao
 
-    # Chaves internas ficam de fora, menos textos/redes/campos extras da prévia.
+    # Chaves internas ficam de fora, menos textos/redes/campos extras/estilo da prévia.
+    from services.papelaria_campos_estilo_service import CAMPOS_ESTILO_DADOS_KEY
     from services.papelaria_campos_extras_service import CAMPOS_EXTRAS_DADOS_KEY
 
     dados = {
         k: v
         for k, v in (payload.dados or {}).items()
         if not str(k).startswith("__")
-        or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY, CAMPOS_EXTRAS_DADOS_KEY)
+        or k
+        in (
+            "__redes",
+            "__redes_estilo",
+            svc.TEXTOS_DADOS_KEY,
+            CAMPOS_EXTRAS_DADOS_KEY,
+            CAMPOS_ESTILO_DADOS_KEY,
+        )
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None
@@ -1660,6 +1683,20 @@ def gerar_imposicao_os(
             juntada_os = [
                 {"ano": int(j.ano), "nro": int(j.nro)} for j in payload.juntada_os
             ]
+        slot_os = None
+        if payload.slot_os:
+            slot_os = [
+                {"slot": int(s.slot), "ano": int(s.ano), "nro": int(s.nro)}
+                for s in payload.slot_os
+            ]
+            for s in slot_os:
+                key = (s["ano"], s["nro"])
+                if juntada_os is None:
+                    juntada_os = []
+                if key != (payload.ano, payload.nro) and key not in {
+                    (j["ano"], j["nro"]) for j in juntada_os
+                }:
+                    juntada_os.append({"ano": s["ano"], "nro": s["nro"]})
         alvos = [(payload.ano, payload.nro)] + [
             (int(j["ano"]), int(j["nro"])) for j in (juntada_os or [])
         ]
@@ -1677,6 +1714,7 @@ def gerar_imposicao_os(
                     else None
                 ),
                 juntada_os=juntada_os,
+                slot_os=slot_os,
             )
     except LookupError as e:
         raise HTTPException(404, str(e))

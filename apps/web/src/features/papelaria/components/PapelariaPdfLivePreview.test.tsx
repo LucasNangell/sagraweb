@@ -229,7 +229,11 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(onEditarTexto).toHaveBeenCalledWith(
       expect.objectContaining({ chave: "7:1:NOME" }),
       "Ana Maria\nSegunda linha",
-      undefined,
+      expect.objectContaining({
+        tamanho_pt: expect.any(Number),
+        align_h: expect.any(String),
+        align_v: expect.any(String),
+      }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -243,9 +247,21 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(onEditarTexto).toHaveBeenCalledWith(
       expect.objectContaining({ chave: "7:1:NOME" }),
       "Ana Maria",
-      undefined,
+      expect.objectContaining({
+        tamanho_pt: expect.any(Number),
+        align_h: expect.any(String),
+        align_v: expect.any(String),
+      }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("editor de campo do modelo mostra tipografia e alinhamento", async () => {
+    renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    expect(screen.getByTestId("papelaria-extra-tamanho")).toBeInTheDocument();
+    expect(screen.getByTestId("papelaria-extra-negrito")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Alinhamento/i })).toBeInTheDocument();
   });
 
   it("Esc cancela sem aplicar", async () => {
@@ -340,6 +356,8 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(await screen.findByTestId("papelaria-previa-extras-menu")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("papelaria-extra-texto-abaixo"));
     expect(await screen.findByTestId("papelaria-extra-texto-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("papelaria-extra-tamanho")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("papelaria-extra-tamanho"), { target: { value: "14" } });
     fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "Cargo" } });
     fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
     expect(onAdicionar).toHaveBeenCalledWith(
@@ -348,6 +366,9 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
         ancora_chave: "7:1:NOME",
         direcao: "abaixo",
         texto: "Cargo",
+        tamanho_pt: 14,
+        align_h: "esquerda",
+        align_v: "topo",
       }),
     );
   });

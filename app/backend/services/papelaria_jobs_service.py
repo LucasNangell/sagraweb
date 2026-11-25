@@ -354,6 +354,19 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if extras:
                 cleaned[key_stripped] = json.dumps(extras, ensure_ascii=False)
             continue
+        if key_stripped == "__campos_estilo":
+            from services.papelaria_campos_estilo_service import (
+                CamposEstiloError,
+                normalizar_campos_estilo,
+            )
+
+            try:
+                estilos = normalizar_campos_estilo(value)
+            except CamposEstiloError as exc:
+                raise ValueError(str(exc)) from exc
+            if estilos:
+                cleaned[key_stripped] = json.dumps(estilos, ensure_ascii=False)
+            continue
         if key_stripped == "__composicao":
             from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
 

@@ -20,7 +20,7 @@ import {
   finalizarCorelPapelariaOs,
   iniciarComparacaoCorelPapelariaOs,
 } from "@/api/papelaria";
-import { fetchImposicaoVariantesOs } from "@/api/imposicaoPerfil";
+import { fetchImposicaoVariantesOs, refazerImposicaoOs } from "@/api/imposicaoPerfil";
 import { fetchDeputadoLookup } from "@/api/auxLookups";
 import { emailProofFileUrl } from "@/api/email";
 import { fetchOsFolderBrowse } from "@/api/os";
@@ -34,18 +34,26 @@ import { openNetworkFolder } from "@/features/os/osFolderActions";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
-import { PapelariaActionBar } from "./PapelariaActionBar";
 import {
   PapelariaCorelDadosModal,
   type PapelariaCorelDadosEstado,
 } from "./PapelariaCorelDadosModal";
-import { PapelariaImposicaoVarianteDialog } from "./PapelariaImposicaoVarianteDialog";
+import { PapelariaImposicaoSetupPanel } from "./PapelariaImposicaoSetupPanel";
+import {
+  PAPELARIA_SP_ACTION_EVENT,
+} from "./PapelariaSpContextMenu";
+import { takePapelariaSpAction } from "../papelariaPendingSpAction";
 import type { PapelariaFaceFonte, PapelariaRedeEstilo, PapelariaRedesBloco } from "@/features/papelaria/types";
 import {
   COMPOSICAO_DADOS_KEY,
   usePapelariaComposicao,
 } from "./PapelariaFrenteVersoPicker";
 import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
+import {
+  CAMPOS_ESTILO_DADOS_KEY,
+  camposEstiloParaDados,
+  type CampoEstilo,
+} from "@/features/papelaria/papelariaCamposEstilo";
 import {
   CAMPOS_EXTRAS_DADOS_KEY,
   camposExtrasParaDados,
@@ -55,6 +63,7 @@ import {
 import {
   interpretarEdicao,
   TEXTOS_DADOS_KEY,
+  textoComMarcasNegrito,
   textosParaDados,
 } from "@/features/papelaria/papelariaTextosEditados";
 import type {
@@ -106,7 +115,6 @@ import {
   isReadyImposicaoPdf,
   isWaitingImposicaoApogee,
 } from "../papelariaImposicaoStatus";
-import { isTimbradoA4DigitalProduct } from "../papelariaSession";
 import { compararDadosCorel } from "../papelariaCorelDados";
 import {
   CAMPOS_PRODUTO_DADOS_KEY,
@@ -136,8 +144,6 @@ type Props = {
   formHost?: HTMLElement | null;
   /** Reserva o formulário para o host, mesmo antes do elemento existir. */
   dockForm?: boolean;
-  /** Quando informado, os botões de ação ficam em linha neste elemento (abaixo da lista de SPs). */
-  actionsHost?: HTMLElement | null;
 };
 
 function buildPreviaTextual(
@@ -203,7 +209,6 @@ export function PapelariaCorelPanel({
   osAno,
   formHost = null,
   dockForm = false,
-  actionsHost = null,
 }: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
@@ -221,6 +226,8 @@ export function PapelariaCorelPanel({
   /** Textos digitados direto na prévia (`modelo:pagina:marcador` → texto). */
   const [textosEditados, setTextosEditados] = useState<Record<string, string>>({});
   const [camposExtras, setCamposExtras] = useState<CampoExtra[]>([]);
+  /** Estilo tipográfico de campos do modelo (tamanho/align). */
+  const [camposEstilo, setCamposEstilo] = useState<Record<string, CampoEstilo>>({});
   const [activeDynamicFields, setActiveDynamicFields] = useState<
     ActiveDynamicFieldPlacement[]
   >([]);
@@ -251,13 +258,13 @@ export function PapelariaCorelPanel({
   const camposProdutoAplicados = useRef(false);
   const corelDadosAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => corelDadosAbortRef.current?.abort(), []);
-  const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
   const [imposicaoOpcoes, setImposicaoOpcoes] =
     useState<ImposicaoVariantesResponse | null>(null);
   const [imposicaoOpcoesLoading, setImposicaoOpcoesLoading] = useState(false);
-  const [imposicaoModalError, setImposicaoModalError] = useState<string | null>(
+  const [imposicaoSetupError, setImposicaoSetupError] = useState<string | null>(
     null,
   );
+  const [refazerConfirmOpen, setRefazerConfirmOpen] = useState(false);
   const autoSelectDone = useRef(false);
   const prefillApplied = useRef(false);
   const camaraEnrichApplied = useRef(false);
@@ -631,6 +638,31 @@ export function PapelariaCorelPanel({
     },
     onError: (err: Error) => {
       setFormError(err.message || "Erro ao solicitar imposição (JDF).");
+    },
+  });
+
+  const refazerImposicaoMutation = useMutation({
+    mutationFn: () => refazerImposicaoOs(anoNum, nroNum),
+    onSuccess: async () => {
+      setRefazerConfirmOpen(false);
+      setActiveJobId(null);
+      setProvaReviewMessage(null);
+      invalidateSpStatusResumo();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.contexto(anoNum, nroNum),
+      });
+      setViewMode("imposicao");
+      await loadImposicaoSetup();
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Erro ao refazer a imposição.");
+      setRefazerConfirmOpen(false);
     },
   });
 
@@ -1120,19 +1152,22 @@ export function PapelariaCorelPanel({
     if (textos) base[TEXTOS_DADOS_KEY] = textos;
     const extras = camposExtrasParaDados(camposExtras);
     if (extras) base[CAMPOS_EXTRAS_DADOS_KEY] = extras;
+    const estilos = camposEstiloParaDados(camposEstilo);
+    if (estilos) base[CAMPOS_ESTILO_DADOS_KEY] = estilos;
     if (repeticaoAtiva) {
       // Repetição de SP: a prova sai da base recortada da prova antiga; cada
       // face da composição vem dela (modelo 0) ou de um modelo escolhido.
       base[REPETICAO_DADOS_KEY] = `${anoNum}-${nroNum}`;
     }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras, repeticaoAtiva]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras, camposEstilo, repeticaoAtiva]);
 
   const valoresPrevia = useMemo(() => {
     const textos = textosParaDados(textosEditados);
     const extras = camposExtrasParaDados(camposExtras);
+    const estilos = camposEstiloParaDados(camposEstilo);
     const temEstiloRede = Boolean(redesBloco) || Boolean(extras);
-    if (!redesBloco && !textos && !extras) return fieldValues;
+    if (!redesBloco && !textos && !extras && !estilos) return fieldValues;
     return {
       ...fieldValues,
       ...(redesBloco
@@ -1143,8 +1178,9 @@ export function PapelariaCorelPanel({
       ...(temEstiloRede ? { [REDES_ESTILO_DADOS_KEY]: redesEstilo } : {}),
       ...(textos ? { [TEXTOS_DADOS_KEY]: textos } : {}),
       ...(extras ? { [CAMPOS_EXTRAS_DADOS_KEY]: extras } : {}),
+      ...(estilos ? { [CAMPOS_ESTILO_DADOS_KEY]: estilos } : {}),
     };
-  }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras]);
+  }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras, camposEstilo]);
 
   const extrasMeta = useMemo(() => {
     const map: Record<string, ExtraEditorMeta> = {};
@@ -1158,8 +1194,16 @@ export function PapelariaCorelPanel({
         y_pt: e.y_pt,
       };
     }
+    for (const [chave, est] of Object.entries(camposEstilo)) {
+      map[chave] = {
+        ...(map[chave] ?? {}),
+        tamanho_pt: est.tamanho_pt ?? map[chave]?.tamanho_pt,
+        align_h: est.align_h ?? map[chave]?.align_h,
+        align_v: est.align_v ?? map[chave]?.align_v,
+      };
+    }
     return map;
-  }, [camposExtras]);
+  }, [camposExtras, camposEstilo]);
 
   /** Prova PDF: detalhe do modelo, lista do contexto ou composição frente/verso. */
   const temProvaPdfModelo =
@@ -1223,13 +1267,32 @@ export function PapelariaCorelPanel({
         });
         return;
       }
-      const edicao = interpretarEdicao(regiao, texto, camposEditaveisPrevia);
-      if (edicao.tipo === "variavel") {
+      if (meta) {
+        setCamposEstilo((prev) => ({
+          ...prev,
+          [regiao.chave]: {
+            tamanho_pt: meta.tamanho_pt ?? null,
+            align_h: meta.align_h,
+            align_v: meta.align_v,
+          },
+        }));
+      }
+      const textoFinal =
+        meta?.negrito?.length
+          ? textoComMarcasNegrito(texto, meta.negrito)
+          : texto;
+      const edicao = interpretarEdicao(regiao, textoFinal, camposEditaveisPrevia);
+      // Tipografia vai em `__campos_estilo`; texto de variável continua no formulário
+      // salvo quando há negrito (precisa de `__textos` com marcas).
+      if (edicao.tipo === "variavel" && !(meta?.negrito?.length)) {
         removerTextoEditado(regiao.chave);
         setFieldValues((prev) => ({ ...prev, [edicao.chave]: edicao.valor }));
         return;
       }
-      setTextosEditados((prev) => ({ ...prev, [regiao.chave]: edicao.texto }));
+      setTextosEditados((prev) => ({
+        ...prev,
+        [regiao.chave]: edicao.tipo === "texto" ? edicao.texto : textoFinal,
+      }));
     },
     [camposEditaveisPrevia, removerTextoEditado],
   );
@@ -1249,6 +1312,11 @@ export function PapelariaCorelPanel({
         return;
       }
       removerTextoEditado(regiao.chave);
+      setCamposEstilo((prev) => {
+        if (!(regiao.chave in prev)) return prev;
+        const { [regiao.chave]: _rem, ...resto } = prev;
+        return resto;
+      });
     },
     [removerTextoEditado],
   );
@@ -1264,14 +1332,14 @@ export function PapelariaCorelPanel({
         texto: payload.tipo === "texto" ? (payload.texto ?? "") : "",
         rede_chave: payload.tipo === "rede" ? (payload.rede_chave ?? "") : "",
         rede_valor: payload.tipo === "rede" ? (payload.rede_valor ?? "") : "",
-        x_pt: null,
-        y_pt: null,
+        x_pt: payload.x_pt ?? null,
+        y_pt: payload.y_pt ?? null,
         offset_x_pt: 0,
         offset_y_pt: 0,
-        align_h: "esquerda",
-        align_v: "topo",
-        tamanho_pt: null,
-        negrito: [],
+        align_h: payload.align_h ?? "esquerda",
+        align_v: payload.align_v ?? "topo",
+        tamanho_pt: payload.tamanho_pt ?? null,
+        negrito: payload.negrito ?? [],
       },
     ]);
   }, []);
@@ -1494,13 +1562,14 @@ export function PapelariaCorelPanel({
     ).finally(() => setAbrirPastaPending(false));
   };
 
-  const openImposicaoModal = async () => {
+  const loadImposicaoSetup = async () => {
     if (!selectedModelId) {
       setFormError("Selecione o modelo com configuração de imposição.");
       return;
     }
-    setImposicaoModalOpen(true);
-    setImposicaoModalError(null);
+    setViewMode("imposicao");
+    setMobilePanel("preview");
+    setImposicaoSetupError(null);
     setImposicaoOpcoesLoading(true);
     try {
       const opcoes = await fetchImposicaoVariantesOs(
@@ -1509,7 +1578,6 @@ export function PapelariaCorelPanel({
         selectedModelId,
       );
       if (!(opcoes.variantes_disponiveis || []).length) {
-        setImposicaoModalOpen(false);
         setFormError(
           "Nenhuma imposição Digital/Offset configurada para este produto/modelo.",
         );
@@ -1518,8 +1586,7 @@ export function PapelariaCorelPanel({
       setImposicaoOpcoes(opcoes);
       setFormError(null);
     } catch (e) {
-      // Mantém o modal aberto e mostra o erro nele (não na barra da OS).
-      setImposicaoModalError(
+      setImposicaoSetupError(
         e instanceof Error
           ? e.message
           : "Não foi possível carregar as opções de imposição.",
@@ -1529,19 +1596,16 @@ export function PapelariaCorelPanel({
     }
   };
 
-  const runImposicao = (payload?: {
+  const runImposicao = (payload: {
     variante: ImposicaoVariante;
     juntada_os?: Array<{ ano: number; nro: number }>;
+    slot_os?: Array<{ slot: number; ano: number; nro: number }>;
   }) => {
     if (!selectedModelId) {
       setFormError("Selecione o modelo com configuração de imposição.");
       return;
     }
-    if (!payload) {
-      void openImposicaoModal();
-      return;
-    }
-    setImposicaoModalError(null);
+    setImposicaoSetupError(null);
     imposicaoMutation.mutate(
       {
         ano: anoNum,
@@ -1549,14 +1613,11 @@ export function PapelariaCorelPanel({
         modelo_id: selectedModelId,
         variante: payload.variante,
         juntada_os: payload.juntada_os,
+        slot_os: payload.slot_os,
       },
       {
-        onSuccess: () => {
-          setImposicaoModalOpen(false);
-          setImposicaoOpcoes(null);
-        },
         onError: (err: Error) => {
-          setImposicaoModalError(err.message || "Erro ao gerar imposição.");
+          setImposicaoSetupError(err.message || "Erro ao gerar imposição.");
         },
       },
     );
@@ -1572,7 +1633,7 @@ export function PapelariaCorelPanel({
         setFolderGateAction("imposicao");
         return;
       }
-      await openImposicaoModal();
+      await loadImposicaoSetup();
     } catch (e) {
       setFormError(
         e instanceof Error
@@ -1612,6 +1673,52 @@ export function PapelariaCorelPanel({
       dados: dadosForJob,
     });
   };
+
+  const spMenuHandlersRef = useRef({
+    handleAbrirPasta,
+    handleGerarCorel,
+    handleAbrirCorel,
+    handleImposicao,
+    handleTimbradoA4Digital,
+  });
+  spMenuHandlersRef.current = {
+    handleAbrirPasta,
+    handleGerarCorel,
+    handleAbrirCorel,
+    handleImposicao,
+    handleTimbradoA4Digital,
+  };
+
+  useEffect(() => {
+    if (!hasOs) return;
+    const runPending = () => {
+      const action = takePapelariaSpAction(anoNum, nroNum);
+      if (!action) return;
+      const h = spMenuHandlersRef.current;
+      switch (action) {
+        case "abrir-pasta":
+          h.handleAbrirPasta();
+          break;
+        case "gerar-corel":
+          h.handleGerarCorel();
+          break;
+        case "abrir-corel":
+          h.handleAbrirCorel();
+          break;
+        case "imposicao":
+          h.handleImposicao();
+          break;
+        case "timbrado-digital":
+          h.handleTimbradoA4Digital();
+          break;
+        default:
+          break;
+      }
+    };
+    runPending();
+    window.addEventListener(PAPELARIA_SP_ACTION_EVENT, runPending);
+    return () => window.removeEventListener(PAPELARIA_SP_ACTION_EVENT, runPending);
+  }, [hasOs, anoNum, nroNum]);
 
   const activeJob = activeJobQuery.data ?? null;
   const produtoOs = contextQuery.data?.os.produto ?? "";
@@ -1658,6 +1765,22 @@ export function PapelariaCorelPanel({
     hasOs && folderImposicaoName
       ? emailProofFileUrl(anoNum, nroNum, folderImposicaoName)
       : null;
+
+  useEffect(() => {
+    if (viewMode !== "imposicao") return;
+    if (hasImposicaoPdf || waitingApogee) return;
+    if (!selectedModelId || imposicaoOpcoesLoading) return;
+    if (imposicaoOpcoes) return;
+    void loadImposicaoSetup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    viewMode,
+    hasImposicaoPdf,
+    waitingApogee,
+    selectedModelId,
+    imposicaoOpcoes,
+    imposicaoOpcoesLoading,
+  ]);
 
   useEffect(() => {
     // proof-files só roda após o contexto; não escolher aba antes disso.
@@ -1736,24 +1859,10 @@ export function PapelariaCorelPanel({
 
   const formSlot = (node: ReactNode) =>
     formHost ? createPortal(node, formHost) : null;
-  /** Linha de ações (abaixo da lista de SPs) enquanto não há OS carregada. */
-  const actionsPlaceholder = (texto: string) =>
-    actionsHost
-      ? createPortal(
-          <div
-            className="flex h-12 w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white px-3 text-[11px] text-neutral-400"
-            data-testid="papelaria-action-bar-placeholder"
-          >
-            {texto}
-          </div>,
-          actionsHost,
-        )
-      : null;
 
   if (!hasOs) {
     return (
       <>
-        {actionsPlaceholder("Selecione uma SP para habilitar as ações.")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-4 text-center text-xs text-neutral-500">
             Selecione uma SP para preencher os campos.
@@ -1769,7 +1878,6 @@ export function PapelariaCorelPanel({
   if (contextQuery.isLoading) {
     return (
       <>
-        {actionsPlaceholder("Carregando…")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-2 rounded-lg border border-sagra-border bg-white text-xs text-neutral-600">
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -1791,7 +1899,6 @@ export function PapelariaCorelPanel({
         : "Erro desconhecido.";
     return (
       <>
-        {actionsPlaceholder("Ações indisponíveis — erro ao carregar a SP.")}
         {formSlot(
           <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-lg border border-sagra-danger/30 bg-red-50 p-4 text-center text-xs text-sagra-danger">
             <div>
@@ -1819,7 +1926,6 @@ export function PapelariaCorelPanel({
 
   const ctx = contextQuery.data!;
   const modelos = ctx.modelos;
-  const showTimbradoA4Digital = isTimbradoA4DigitalProduct(ctx.os.produto);
   const isJobGenerating =
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
@@ -1830,9 +1936,6 @@ export function PapelariaCorelPanel({
         activeJob.status === "processing")) ||
     !!listInFlightJob;
   const cdrFiles = usableCdrFiles(cdrPathQuery.data);
-
-  const renderAcoes = (node: ReactNode) =>
-    actionsHost ? createPortal(node, actionsHost) : node;
 
   const mobilePanelClass = (panel: "form" | "preview") =>
     cn(
@@ -2136,54 +2239,6 @@ export function PapelariaCorelPanel({
         </section>
           )}
 
-        {renderAcoes(
-        <PapelariaActionBar
-          orientacao={actionsHost ? "linha" : "coluna"}
-          ocultarCriarProva
-          className={
-            actionsHost
-              ? undefined
-              : "max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
-          }
-          showAbrirPasta={canOpenOsFolder}
-          showTimbradoA4Digital={showTimbradoA4Digital}
-          showFinalizar={corelEditMode}
-          busy={
-            createJobMutation.isPending ||
-            createDigitalJobMutation.isPending ||
-                    imposicaoMutation.isPending ||
-            abrirCorelMutation.isPending
-          }
-          folderCheckPending={folderCheckPending}
-          modelLoading={modelDetailQuery.isLoading}
-          isJobGenerating={isJobGenerating}
-          createJobPending={createJobMutation.isPending}
-          createDigitalPending={createDigitalJobMutation.isPending}
-          imposicaoPending={imposicaoMutation.isPending}
-          abrirCorelPending={abrirCorelMutation.isPending}
-          abrirPastaPending={abrirPastaPending}
-          finalizeCorelPending={finalizeCorelMutation.isPending}
-          hasOs={hasOs}
-          selectedModelId={selectedModelId}
-          corelDaPasta={cdrFiles[0]?.filename ?? null}
-          canImposicao={Boolean(
-            selectedModelId &&
-              (
-                contextQuery.data?.modelos.find((m) => m.id === selectedModelId)
-                  ?.tem_imposicao_config ||
-                modelDetailQuery.data?.tem_imposicao_config
-              ),
-          )}
-          onAbrirPasta={handleAbrirPasta}
-          onGerarArquivo={handleGerarArquivo}
-          onGerarCorel={handleGerarCorel}
-          onTimbradoA4Digital={handleTimbradoA4Digital}
-          onAbrirCorel={handleAbrirCorel}
-          onFinalizarCorel={handleFinalizarCorel}
-          onImposicao={handleImposicao}
-        />,
-        )}
-
         <div className={cn(mobilePanelClass("preview"), "max-md:order-3")}>
           <PapelariaProofPanel
             activeJob={activeJob}
@@ -2257,6 +2312,26 @@ export function PapelariaCorelPanel({
                 cdrFiles[0]?.filename && !temProvaPdfModelo
                   ? `Criar prova a partir do Corel da pasta (${cdrFiles[0].filename}), aplicando os campos do formulário`
                   : "Criar a prova (Prova PDF, gerada no servidor a partir da prévia)",
+            }}
+            imposicaoSetup={
+              <PapelariaImposicaoSetupPanel
+                ano={anoNum}
+                nro={nroNum}
+                modeloId={selectedModelId ?? null}
+                opcoes={imposicaoOpcoes}
+                loading={imposicaoOpcoesLoading}
+                submitting={imposicaoMutation.isPending}
+                error={imposicaoSetupError}
+                onGenerate={runImposicao}
+              />
+            }
+            refazerImposicao={{
+              onClick: () => setRefazerConfirmOpen(true),
+              pending: refazerImposicaoMutation.isPending,
+              disabled:
+                refazerImposicaoMutation.isPending || imposicaoMutation.isPending,
+              title:
+                "Refazer imposição — as OSs juntadas voltam a Aguard. Juntada",
             }}
             ladoEsquerdo={
               <>
@@ -2387,7 +2462,7 @@ export function PapelariaCorelPanel({
             queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
           });
           if (action === "imposicao") {
-            void openImposicaoModal();
+            void loadImposicaoSetup();
             return;
           }
           if (action) {
@@ -2396,23 +2471,50 @@ export function PapelariaCorelPanel({
         }}
       />
 
-      <PapelariaImposicaoVarianteDialog
-        open={imposicaoModalOpen}
-        ano={anoNum}
-        nro={nroNum}
-        modeloId={selectedModelId ?? null}
-        opcoes={imposicaoOpcoes}
-        loading={imposicaoOpcoesLoading}
-        submitting={imposicaoMutation.isPending}
-        error={imposicaoModalError}
-        onClose={() => {
-          if (imposicaoMutation.isPending) return;
-          setImposicaoModalOpen(false);
-          setImposicaoOpcoes(null);
-          setImposicaoModalError(null);
-        }}
-        onConfirm={(payload) => runImposicao(payload)}
-      />
+      {refazerConfirmOpen ? (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
+          <div
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refazer-imposicao-title"
+          >
+            <h3
+              id="refazer-imposicao-title"
+              className="text-center text-lg font-bold text-slate-800"
+            >
+              Refazer imposição?
+            </h3>
+            <p className="mt-2 text-center text-sm text-slate-600">
+              Isso afeta todas as SPs juntadas neste trabalho. Ao confirmar, todas
+              voltam à situação <strong>Aguard. Juntada</strong> e a imposição
+              atual deixa de valer.
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
+                disabled={refazerImposicaoMutation.isPending}
+                onClick={() => setRefazerConfirmOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
+                disabled={refazerImposicaoMutation.isPending}
+                data-testid="papelaria-refazer-imposicao-confirmar"
+                onClick={() => refazerImposicaoMutation.mutate()}
+              >
+                {refazerImposicaoMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

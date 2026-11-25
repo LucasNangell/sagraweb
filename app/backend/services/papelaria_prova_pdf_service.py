@@ -1357,6 +1357,7 @@ def renderizar(
     *,
     exigir_campos: bool = True,
     textos: Optional[dict[str, str]] = None,
+    estilos: Optional[dict[str, dict[str, Any]]] = None,
     regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
     """
@@ -1364,8 +1365,9 @@ def renderizar(
 
     ``textos`` (``"pagina:marcador"`` -> texto) substitui o texto do campo pelo
     que o usuário digitou na prévia — com a mesma fonte, alinhamento, âncora e
-    redução do campo. ``regioes``, quando fornecida, recebe onde cada campo
-    ficou na página (para editar o texto direto na prévia).
+    redução do campo. ``estilos`` (``"pagina:marcador"`` -> tipografia) sobrescreve
+    tamanho e alinhamento na prévia/prova. ``regioes``, quando fornecida, recebe
+    onde cada campo ficou na página (para editar o texto direto na prévia).
 
     Remove só o texto de cada marcador e escreve o texto novo com a fonte
     embutida no PDF, mesmo tamanho, cor e espaçamento entre letras.
@@ -1373,6 +1375,11 @@ def renderizar(
     aviso em ``avisos`` (quando fornecido).
     """
     import fitz
+
+    from services.papelaria_campos_estilo_service import (
+        align_v_de_ancora,
+        ancora_de_align_v,
+    )
 
     doc = _abrir(pdf_modelo)
     try:
@@ -1571,6 +1578,8 @@ def renderizar(
                 }
                 medidas.append(medida)
                 regiao: Optional[dict[str, Any]] = None
+                chave_estilo = f"{pidx + 1}:{campo['marcador']}"
+                estilo_campo = (estilos or {}).get(chave_estilo) or {}
                 if regioes is not None:
                     regiao = {
                         "pagina": pidx + 1,
@@ -1581,6 +1590,7 @@ def renderizar(
                         "valores": {} if editado else _valores_do_template(campo["template"], dados),
                         "editado": editado,
                         "bloquear_edicao": bool(campo.get("bloquear_edicao")),
+                        "fonte": getattr(fonte, "nome", None),
                     }
                     regioes.append(regiao)
                 lay: dict[str, Any] = {
@@ -1593,16 +1603,29 @@ def renderizar(
                     "regiao": regiao,
                     "area": fitz.Rect(bbox),
                     "vazio": not texto,
+                    "estilo": estilo_campo,
                 }
                 layouts.append(lay)
                 if not texto:
                     continue
                 tam = alvo["tamanho"]
                 tc = _espacamento_do_marcador(fonte, alvo["chars"], tam)
+                if estilo_campo.get("tamanho_pt") is not None:
+                    novo_tam = float(estilo_campo["tamanho_pt"])
+                    if tam > 0:
+                        tc *= novo_tam / tam
+                    tam = novo_tam
                 alinhar = campo.get("alinhamento") or "auto"
+                if estilo_campo.get("align_h"):
+                    alinhar = str(estilo_campo["align_h"])
                 if alinhar == "auto":
                     alinhar = alinhamento_sugerido(bbox.x0, bbox.x1, largura_pg)
                 ancora = campo.get("ancora") or "auto"
+                av_ui = estilo_campo.get("align_v")
+                if av_ui:
+                    ancora_ui = ancora_de_align_v(str(av_ui))
+                    if ancora_ui:
+                        ancora = ancora_ui
                 if ancora == "auto":
                     ancora = ancora_sugerida(bbox.y0, bbox.y1, altura_pg)
                 segs_linhas = _segmentos_por_linha(texto, ranges_negrito)
@@ -1659,6 +1682,22 @@ def renderizar(
                 if lay["vazio"]:
                     if lay["regiao"] is not None:
                         lay["regiao"]["area"] = _area_relativa(lay["area"], largura_pg, altura_pg)
+                        lay["regiao"]["tamanho_pt"] = float(
+                            (lay.get("estilo") or {}).get("tamanho_pt") or lay["alvo"]["tamanho"]
+                        )
+                        alinhar_vazio = (lay.get("estilo") or {}).get("align_h") or lay["campo"].get(
+                            "alinhamento"
+                        ) or "esquerda"
+                        if alinhar_vazio == "auto":
+                            alinhar_vazio = "esquerda"
+                        lay["regiao"]["align_h"] = alinhar_vazio
+                        ancora_vazio = lay.get("ancora") or (lay.get("estilo") or {}).get("align_v") or "topo"
+                        if ancora_vazio in ("topo", "centro", "base"):
+                            lay["regiao"]["align_v"] = align_v_de_ancora(ancora_vazio)
+                        else:
+                            lay["regiao"]["align_v"] = align_v_de_ancora(
+                                ancora_de_align_v(str(ancora_vazio)) or "topo"
+                            )
                     continue
                 alvo, fonte, fonte_bold = lay["alvo"], lay["fonte"], lay["fonte_bold"]
                 bold_recurso, medida, area = lay["bold_recurso"], lay["medida"], lay["area"]
@@ -1703,6 +1742,9 @@ def renderizar(
                         cursor += f_use.largura(trecho, tam, tc)
                 if lay["regiao"] is not None:
                     lay["regiao"]["area"] = _area_relativa(area, largura_pg, altura_pg)
+                    lay["regiao"]["tamanho_pt"] = float(tam)
+                    lay["regiao"]["align_h"] = alinhar if alinhar in ("esquerda", "centro", "direita") else "esquerda"
+                    lay["regiao"]["align_v"] = align_v_de_ancora(ancora)
             ops.append("Q")
             if regioes is not None:
                 # Textos não editados (base da repetição): clicáveis, mas intactos.
@@ -1815,6 +1857,7 @@ def renderizar_composicao(
     estilo_redes: Optional[str] = None,
     *,
     textos: Optional[dict[str, str]] = None,
+    estilos: Optional[dict[str, dict[str, Any]]] = None,
     regioes: Optional[list[dict[str, Any]]] = None,
 ) -> bytes:
     """
@@ -1842,6 +1885,9 @@ def renderizar_composicao(
             ]
             prefixo = f"{mid}:"
             textos_modelo = {k[len(prefixo):]: v for k, v in (textos or {}).items() if k.startswith(prefixo)}
+            estilos_modelo = {
+                k[len(prefixo) :]: v for k, v in (estilos or {}).items() if k.startswith(prefixo)
+            }
             regioes_face: list[dict[str, Any]] = []
             conteudo = (
                 renderizar(
@@ -1851,6 +1897,7 @@ def renderizar_composicao(
                     avisos=avisos,
                     exigir_campos=False,
                     textos=textos_modelo,
+                    estilos=estilos_modelo,
                     regioes=regioes_face if regioes is not None else None,
                 )
                 if campos
@@ -1950,6 +1997,9 @@ def previa_png(
         textos = normalizar_textos((dados or {}).get(TEXTOS_DADOS_KEY))
     except ProvaPdfError:
         textos = {}
+    from services.papelaria_campos_estilo_service import campos_estilo_dos_dados
+
+    estilos = campos_estilo_dos_dados(dados or {})
     regioes: list[dict[str, Any]] = []
     if composicao is not None:
         saida = renderizar_composicao(
@@ -1959,6 +2009,7 @@ def previa_png(
             redes=redes,
             estilo_redes=estilo_redes,
             textos=textos,
+            estilos=estilos,
             regioes=regioes,
         )
     else:
@@ -1972,6 +2023,7 @@ def previa_png(
                 avisos=avisos,
                 exigir_campos=False,
                 textos={k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)},
+                estilos={k[len(prefixo):]: v for k, v in estilos.items() if k.startswith(prefixo)},
                 regioes=regioes_modelo,
             )
             if campos
@@ -2066,9 +2118,22 @@ def renderizar_base_repeticao(
         textos = {}
     prefixo = f"{MODELO_ID_REPETICAO}:"
     locais = {k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)}
+    from services.papelaria_campos_estilo_service import campos_estilo_dos_dados
+
+    estilos_todos = campos_estilo_dos_dados(brutos)
+    estilos_locais = {k[len(prefixo) :]: v for k, v in estilos_todos.items() if k.startswith(prefixo)}
     regioes_base: list[dict[str, Any]] = []
     conteudo = (
-        renderizar(pdf, campos, {}, avisos=avisos, exigir_campos=False, textos=locais, regioes=regioes_base)
+        renderizar(
+            pdf,
+            campos,
+            {},
+            avisos=avisos,
+            exigir_campos=False,
+            textos=locais,
+            estilos=estilos_locais,
+            regioes=regioes_base,
+        )
         if campos
         else pdf.read_bytes()
     )
@@ -2125,12 +2190,15 @@ def renderizar_base_repeticao(
                 ]
                 prefixo_m = f"{mid}:"
                 textos_m = {k[len(prefixo_m):]: v for k, v in textos.items() if k.startswith(prefixo_m)}
+                estilos_m = {
+                    k[len(prefixo_m) :]: v for k, v in estilos_todos.items() if k.startswith(prefixo_m)
+                }
                 editados += len(textos_m)
                 regioes_m: list[dict[str, Any]] = []
                 parte = (
                     renderizar(
                         pdf_m, campos_m, dados_m, avisos=avisos, exigir_campos=False,
-                        textos=textos_m, regioes=regioes_m,
+                        textos=textos_m, estilos=estilos_m, regioes=regioes_m,
                     )
                     if campos_m
                     else pdf_m.read_bytes()
@@ -2221,6 +2289,9 @@ def renderizar_pdf_final(
         textos = normalizar_textos(brutos.get(TEXTOS_DADOS_KEY))
     except ProvaPdfError:
         textos = {}
+    from services.papelaria_campos_estilo_service import campos_estilo_dos_dados
+
+    estilos = campos_estilo_dos_dados(brutos)
     if composicao is not None:
         # Frente de um modelo + verso de outro (frente e verso independentes).
         n_campos = sum(
@@ -2237,6 +2308,7 @@ def renderizar_pdf_final(
             redes=redes_sel,
             estilo_redes=estilo_sel,
             textos=textos,
+            estilos=estilos,
             regioes=regioes_comp,
         )
         for r in regioes_comp:
@@ -2265,6 +2337,7 @@ def renderizar_pdf_final(
             avisos=avisos,
             exigir_campos=False,
             textos={k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)},
+            estilos={k[len(prefixo):]: v for k, v in estilos.items() if k.startswith(prefixo)},
             regioes=regioes_modelo,
         )
         if campos

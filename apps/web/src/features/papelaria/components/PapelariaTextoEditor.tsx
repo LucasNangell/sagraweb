@@ -200,6 +200,20 @@ export function PapelariaTextoEditor({
     };
   }, [posicionar]);
 
+  const onCancelarRef = useRef(onCancelar);
+  onCancelarRef.current = onCancelar;
+  // ESC cancela mesmo com foco na toolbar (pt / mm / alinhamento), não só no textarea.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      onCancelarRef.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
   const aplicar = () => {
     onAplicar(texto, {
       tamanho_pt: tamanhoPt,
@@ -269,6 +283,11 @@ export function PapelariaTextoEditor({
         maxWidth: `calc(100vw - ${2 * MARGEM}px)`,
       }}
       onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        // Se o clique direito cair no modal (sobre a região), fecha para o menu da prévia aparecer no próximo uso.
+        e.preventDefault();
+        onCancelarRef.current();
+      }}
     >
       <PapelariaEstiloToolbar
         className="mb-2"

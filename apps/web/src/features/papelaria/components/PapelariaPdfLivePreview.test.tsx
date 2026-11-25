@@ -264,13 +264,47 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(screen.getByRole("group", { name: /Alinhamento/i })).toBeInTheDocument();
   });
 
-  it("Esc cancela sem aplicar", async () => {
+  it("Esc cancela sem aplicar e fecha o modal", async () => {
     const { onEditarTexto } = renderEditavel();
     fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    expect(screen.getByRole("dialog", { name: "Editar texto da prévia" })).toBeInTheDocument();
     const campo = screen.getByRole("textbox", { name: "Texto" });
     fireEvent.change(campo, { target: { value: "X" } });
-    fireEvent.keyDown(campo, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(onEditarTexto).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Editar texto da prévia" })).not.toBeInTheDocument();
+  });
+
+  it("Esc cancela com foco no tamanho da tipografia", async () => {
+    const { onEditarTexto } = renderEditavel();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar texto: Ana" }));
+    const tam = screen.getByTestId("papelaria-extra-tamanho");
+    tam.focus();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onEditarTexto).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Editar texto da prévia" })).not.toBeInTheDocument();
+  });
+
+  it("botão direito fecha o editor antes do menu de contexto", async () => {
+    const onAdicionar = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview
+          modeloId={7}
+          values={{ nome_deputado: "Ana" }}
+          onEditarTexto={vi.fn()}
+          permitirCamposExtras
+          onAdicionarCampoExtra={onAdicionar}
+        />
+      </QueryClientProvider>,
+    );
+    const regiao = await screen.findByRole("button", { name: "Editar texto: Ana" });
+    fireEvent.click(regiao);
+    expect(screen.getByRole("dialog", { name: "Editar texto da prévia" })).toBeInTheDocument();
+    fireEvent.contextMenu(regiao);
+    expect(screen.queryByRole("dialog", { name: "Editar texto da prévia" })).not.toBeInTheDocument();
+    expect(await screen.findByTestId("papelaria-previa-extras-menu")).toBeInTheDocument();
   });
 
   it("texto editado oferece restaurar o original", async () => {

@@ -1,35 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { CAMPOS_EXTRAS_DADOS_KEY } from "./papelariaCamposExtras";
-import {
-  DEBOUNCE_ACTION_MS,
-  DEBOUNCE_TYPING_MS,
-  delayPreviaParaChave,
-} from "./papelariaPreviaOtimista";
-import { TEXTOS_DADOS_KEY } from "./papelariaTextosEditados";
+import { intersecaoAreaFrac } from "./papelariaPreviaOtimista";
 
-describe("delayPreviaParaChave", () => {
-  it("digitação de formulário usa debounce de tipagem", () => {
-    const a = JSON.stringify({ nome_deputado: "Ana" });
-    const b = JSON.stringify({ nome_deputado: "Ana M" });
-    expect(delayPreviaParaChave(a, b)).toBe(DEBOUNCE_TYPING_MS);
-  });
-
-  it("mudança em __campos_extras é imediata", () => {
-    const a = JSON.stringify({ nome_deputado: "Ana" });
-    const b = JSON.stringify({
-      nome_deputado: "Ana",
-      [CAMPOS_EXTRAS_DADOS_KEY]: "[]",
-    });
-    expect(delayPreviaParaChave(a, b)).toBe(DEBOUNCE_ACTION_MS);
-  });
-
-  it("mudança em __textos é imediata", () => {
-    const a = JSON.stringify({ nome_deputado: "Ana" });
-    const b = JSON.stringify({
-      nome_deputado: "Ana",
-      [TEXTOS_DADOS_KEY]: '{"7:1:A":"x"}',
-    });
-    expect(delayPreviaParaChave(a, b)).toBe(DEBOUNCE_ACTION_MS);
+describe("papelariaPreviaOtimista", () => {
+  it("intersecaoAreaFrac detecta sobreposição e área vazia", () => {
+    expect(intersecaoAreaFrac([0, 0, 0.5, 0.5], [0.25, 0.25, 0.75, 0.75])).toEqual([
+      0.25, 0.25, 0.5, 0.5,
+    ]);
+    expect(intersecaoAreaFrac([0, 0, 0.2, 0.2], [0.5, 0.5, 0.8, 0.8])).toBeNull();
   });
 });

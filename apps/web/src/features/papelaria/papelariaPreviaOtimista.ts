@@ -37,10 +37,25 @@ export function delayPreviaParaChave(prevChave: string, nextChave: string): numb
 
 export type AreaFrac = [number, number, number, number];
 
-/** Recorta a fração da página do `<img>` para data-URL PNG. */
+/** Interseção de duas áreas fracionárias; null se vazia. */
+export function intersecaoAreaFrac(a: AreaFrac, b: AreaFrac): AreaFrac | null {
+  const x0 = Math.max(a[0], b[0]);
+  const y0 = Math.max(a[1], b[1]);
+  const x1 = Math.min(a[2], b[2]);
+  const y1 = Math.min(a[3], b[3]);
+  if (x1 <= x0 || y1 <= y0) return null;
+  return [x0, y0, x1, y1];
+}
+
+/**
+ * Recorta a fração da página do `<img>` para data-URL PNG.
+ * ``mascaras`` (outras regiões da página) são pintadas de branco no recorte,
+ * para o fantasma do arraste não carregar tipografia/arte de elementos atrás.
+ */
 export function cropRegiaoDaImagem(
   img: HTMLImageElement,
   area: AreaFrac,
+  mascaras: AreaFrac[] = [],
 ): string | null {
   const nw = img.naturalWidth;
   const nh = img.naturalHeight;
@@ -57,6 +72,18 @@ export function cropRegiaoDaImagem(
   if (!ctx) return null;
   try {
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    if (mascaras.length && sw > 0 && sh > 0) {
+      ctx.fillStyle = "#ffffff";
+      for (const m of mascaras) {
+        const hit = intersecaoAreaFrac(area, m);
+        if (!hit) continue;
+        const mx = ((hit[0] - x0) / (x1 - x0)) * canvas.width;
+        const my = ((hit[1] - y0) / (y1 - y0)) * canvas.height;
+        const mw = ((hit[2] - hit[0]) / (x1 - x0)) * canvas.width;
+        const mh = ((hit[3] - hit[1]) / (y1 - y0)) * canvas.height;
+        if (mw > 0 && mh > 0) ctx.fillRect(mx, my, mw, mh);
+      }
+    }
     return canvas.toDataURL("image/png");
   } catch {
     return null;

@@ -43,7 +43,9 @@ import {
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
 import {
+  cropRegiaoDaImagem,
   delayPreviaParaChave,
+  intersecaoAreaFrac,
   type AreaFrac,
   type ConteudoOtimistaExtra,
 } from "@/features/papelaria/papelariaPreviaOtimista";
@@ -96,8 +98,8 @@ type DragState = {
   committed?: boolean;
   align_h: CampoExtraAlignH;
   align_v: CampoExtraAlignV;
-  /** Fantasma tipográfico (evita carregar pixels de elementos atrás). */
-  ghost?: ConteudoOtimistaExtra | null;
+  /** Recorte PNG da região (formatação fiel), sem pixels de outras regiões. */
+  cropDataUrl?: string | null;
 };
 
 /**
@@ -752,7 +754,10 @@ export function PapelariaPdfLivePreview({
                           )),
                         ]
                       : null}
-                    {drag && drag.pagina === i && drag.moved ? (
+                    {drag &&
+                    drag.pagina === i &&
+                    drag.moved &&
+                    drag.cropDataUrl ? (
                       <>
                         <div
                           aria-hidden
@@ -760,36 +765,14 @@ export function PapelariaPdfLivePreview({
                           className="pointer-events-none absolute z-[5] bg-white"
                           style={estiloAreaFrac(drag.orig, caixa)}
                         />
-                        {drag.ghost ? (
-                          <div
-                            aria-hidden
-                            data-testid="papelaria-extra-clone"
-                            className="pointer-events-none absolute z-[25] overflow-hidden whitespace-pre leading-none text-neutral-900"
-                            style={{
-                              ...estiloAreaFrac(drag.cur, caixa),
-                              fontSize: `${Math.max(4, Math.min(72, drag.ghost.tamanho_pt))}pt`,
-                              fontFamily: fonteCssPreview(drag.ghost.fonte),
-                              textAlign:
-                                drag.ghost.align_h === "centro"
-                                  ? "center"
-                                  : drag.ghost.align_h === "direita"
-                                    ? "right"
-                                    : "left",
-                            }}
-                          >
-                            {segmentosComNegrito(
-                              drag.ghost.texto || " ",
-                              drag.ghost.negrito,
-                            ).map((seg, si) => (
-                              <span
-                                key={si}
-                                style={{ fontWeight: seg.negrito ? 700 : 400 }}
-                              >
-                                {seg.texto}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
+                        <img
+                          aria-hidden
+                          data-testid="papelaria-extra-clone"
+                          src={drag.cropDataUrl}
+                          alt=""
+                          className="pointer-events-none absolute z-[25] object-fill"
+                          style={estiloAreaFrac(drag.cur, caixa)}
+                        />
                       </>
                     ) : null}
                     {regioesPagina.map((r) => {
@@ -859,6 +842,8 @@ export function PapelariaPdfLivePreview({
                                 if (e.button !== 0) return;
                                 e.preventDefault();
                                 e.stopPropagation();
+                                // Arraste e edição não convivem.
+                                setEditando(null);
                                 try {
                                   e.currentTarget.setPointerCapture(e.pointerId);
                                 } catch {
@@ -882,15 +867,7 @@ export function PapelariaPdfLivePreview({
                                   committed: false,
                                   align_h: metaExtra?.align_h ?? align_h,
                                   align_v: metaExtra?.align_v ?? align_v,
-                                  ghost: {
-                                    texto: r.texto || "",
-                                    tamanho_pt:
-                                      metaExtra?.tamanho_pt ?? r.tamanho_pt ?? 11,
-                                    negrito: metaExtra?.negrito ?? r.negrito ?? [],
-                                    align_h: metaExtra?.align_h ?? align_h,
-                                    align_v: metaExtra?.align_v ?? align_v,
-                                    fonte: r.fonte,
-                                  },
+                                  cropDataUrl: null,
                                 });
                               }
                             : undefined,
@@ -919,7 +896,22 @@ export function PapelariaPdfLivePreview({
                                   ny0 = Math.max(0, Math.min(1 - h, ny0));
                                   const cur: AreaFrac = [nx0, ny0, nx0 + w, ny0 + h];
                                   calcGuides(i, cur, r.chave, caixa);
-                                  return { ...prev, cur, moved: true };
+                                  let cropDataUrl = prev.cropDataUrl;
+                                  if (!cropDataUrl) {
+                                    const img = imgRefs.current[i];
+                                    if (img) {
+                                      const mascaras = regioesPagina
+                                        .filter((o) => o.chave !== r.chave)
+                                        .map((o) => o.area as AreaFrac)
+                                        .filter((a) => intersecaoAreaFrac(prev.orig, a));
+                                      cropDataUrl = cropRegiaoDaImagem(
+                                        img,
+                                        prev.orig,
+                                        mascaras,
+                                      );
+                                    }
+                                  }
+                                  return { ...prev, cur, moved: true, cropDataUrl };
                                 });
                               }
                             : undefined,
@@ -1007,12 +999,22 @@ export function PapelariaPdfLivePreview({
                       return (
                         <div key={r.chave} className="contents">
                           {overlayOtimista}
-                          <ContextMenu>
+                          <ContextMenu
+                            onOpenChange={(open) => {
+                              if (open) {
+                                // Editor (z-200) cobre o menu (z-50); fecha antes de abrir.
+                                setEditando(null);
+                              }
+                            }}
+                          >
                           <ContextMenuTrigger asChild>
-                            <button {...botaoProps} />
+                            <button
+                              {...botaoProps}
+                              onContextMenu={() => setEditando(null)}
+                            />
                           </ContextMenuTrigger>
                           <ContextMenuContent
-                            className="w-56"
+                            className="z-[220] w-56"
                             data-testid="papelaria-previa-extras-menu"
                           >
                             <ContextMenuLabel>Adicionar texto</ContextMenuLabel>

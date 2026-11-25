@@ -159,3 +159,54 @@ def test_aplicar_campos_extras_texto_emite_regiao():
     assert extras_regs
     assert extras_regs[0]["chave"] == "extra:extra_1"
     assert extras_regs[0].get("page_w")
+
+
+def test_previa_pdf_rota_encaminha_campos_extras(monkeypatch):
+    """A prévia ao vivo não pode filtrar ``__campos_extras`` (bug 0.120.x)."""
+    from routers.papelaria_routes import (
+        PapelariaProvaPdfPreviaPayload,
+        previa_pdf_ao_vivo,
+    )
+    from security.session_auth import SessionData
+
+    capturado: dict = {}
+
+    monkeypatch.setattr(
+        "services.papelaria_models_service.get_modelo_by_id",
+        lambda *_a, **_k: {"id": 15, "produto": "Cartão"},
+    )
+    monkeypatch.setattr(
+        "services.papelaria_faces_service.validar_composicao",
+        lambda *_a, **_k: None,
+    )
+
+    def _previa(modelo_id, dados, **_kw):
+        capturado["dados"] = dict(dados or {})
+        return {"paginas": [], "ms": 1, "avisos": [], "regioes": []}
+
+    monkeypatch.setattr(
+        "services.papelaria_prova_pdf_service.previa_png",
+        _previa,
+    )
+
+    extras = json.dumps(
+        [
+            {
+                "id": "extra_1",
+                "tipo": "texto",
+                "ancora_chave": "15:1:LEB",
+                "direcao": "abaixo",
+                "texto": "X",
+            }
+        ]
+    )
+    previa_pdf_ao_vivo(
+        15,
+        PapelariaProvaPdfPreviaPayload(
+            dados={"nome": "Ana", "__campos_extras": extras, "__segredo": "nao"}
+        ),
+        _session=SessionData(ponto=1, nome="t", ip="127.0.0.1", iat=0),
+    )
+    assert "__campos_extras" in capturado["dados"]
+    assert capturado["dados"]["__campos_extras"] == extras
+    assert "__segredo" not in capturado["dados"]

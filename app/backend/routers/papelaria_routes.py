@@ -1228,11 +1228,14 @@ def previa_repeticao(
     import json as _json
 
     from services import papelaria_prova_pdf_service as svc
+    from services.papelaria_campos_extras_service import CAMPOS_EXTRAS_DADOS_KEY
 
     dados = {
         k: v
         for k, v in (payload.dados or {}).items()
-        if not str(k).startswith("__") or k in (svc.TEXTOS_DADOS_KEY, "__redes", "__redes_estilo")
+        if not str(k).startswith("__")
+        or k
+        in (svc.TEXTOS_DADOS_KEY, "__redes", "__redes_estilo", CAMPOS_EXTRAS_DADOS_KEY)
     }
     if payload.composicao:
         dados["__composicao"] = _json.dumps(payload.composicao)
@@ -1275,11 +1278,14 @@ def previa_pdf_ao_vivo(
         raise HTTPException(404, "Modelo não encontrado.")
     from services.papelaria_faces_service import ComposicaoError, validar_composicao
 
-    # Chaves internas ficam de fora, menos a escolha de redes sociais.
+    # Chaves internas ficam de fora, menos textos/redes/campos extras da prévia.
+    from services.papelaria_campos_extras_service import CAMPOS_EXTRAS_DADOS_KEY
+
     dados = {
         k: v
         for k, v in (payload.dados or {}).items()
-        if not str(k).startswith("__") or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY)
+        if not str(k).startswith("__")
+        or k in ("__redes", "__redes_estilo", svc.TEXTOS_DADOS_KEY, CAMPOS_EXTRAS_DADOS_KEY)
     }
     try:
         composicao = validar_composicao(payload.composicao, modelo) if payload.composicao else None

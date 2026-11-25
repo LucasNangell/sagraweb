@@ -371,7 +371,29 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(screen.getByTestId("papelaria-previa-regiao-bloqueada")).toBeInTheDocument();
   });
 
-  it("menu de campos extras abre modal de texto", async () => {
+  it("menu de campos extras abre modal de texto herdando estilo da âncora", async () => {
+    api.previaPdfAoVivo.mockResolvedValue({
+      paginas: ["data:image/png;base64,AAA"],
+      ms: 5,
+      regioes: [
+        {
+          chave: "7:1:NOME",
+          modelo_id: 7,
+          pagina: 1,
+          pagina_saida: 0,
+          marcador: "NOME",
+          area: [0.1, 0.2, 0.6, 0.3],
+          texto: "Ana",
+          negrito: [],
+          template: "{nome_deputado}",
+          valores: { nome_deputado: "Ana" },
+          editado: false,
+          tamanho_pt: 9,
+          align_h: "centro",
+          align_v: "base",
+        },
+      ],
+    });
     const onAdicionar = vi.fn();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -390,8 +412,7 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(await screen.findByTestId("papelaria-previa-extras-menu")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("papelaria-extra-texto-abaixo"));
     expect(await screen.findByTestId("papelaria-extra-texto-dialog")).toBeInTheDocument();
-    expect(screen.getByTestId("papelaria-extra-tamanho")).toBeInTheDocument();
-    fireEvent.change(screen.getByTestId("papelaria-extra-tamanho"), { target: { value: "14" } });
+    expect(screen.getByTestId("papelaria-extra-tamanho")).toHaveValue(9);
     fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "Cargo" } });
     fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
     expect(onAdicionar).toHaveBeenCalledWith(
@@ -400,9 +421,9 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
         ancora_chave: "7:1:NOME",
         direcao: "abaixo",
         texto: "Cargo",
-        tamanho_pt: 14,
-        align_h: "esquerda",
-        align_v: "topo",
+        tamanho_pt: 9,
+        align_h: "centro",
+        align_v: "base",
       }),
     );
   });

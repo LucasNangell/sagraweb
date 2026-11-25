@@ -355,22 +355,47 @@ export function PapelariaPdfLivePreview({
   const menuExtrasAtivo =
     permitirCamposExtras && Boolean(onAdicionarCampoExtra) && editavel;
 
-  const resetEstiloCriacao = useCallback(() => {
+  /** Limpa só o conteúdo digitável; a tipografia vem da âncora. */
+  const limparConteudoCriacao = useCallback(() => {
     setTextoNovo("");
-    setTextoTamanhoPt(11);
     setTextoNegrito([]);
-    setTextoAlignH("esquerda");
-    setTextoAlignV("topo");
+    setTextoSel({ start: 0, end: 0 });
     setTextoXMm(0);
     setTextoYMm(0);
     setTextoTemPos(false);
-    setRedeTamanhoPt(11);
-    setRedeAlignH("esquerda");
-    setRedeAlignV("topo");
+    setRedeChave("");
+    setRedeValor("");
     setRedeXMm(0);
     setRedeYMm(0);
     setRedeTemPos(false);
   }, []);
+
+  /**
+   * Herda tipografia/alinhamento do campo em que o usuário abriu o menu
+   * (região + extrasMeta), para o modal já nascer no mesmo padrão.
+   */
+  const aplicarEstiloDaAncora = useCallback(
+    (regiao: ProvaPdfRegiao) => {
+      const eid =
+        regiao.extra_id ??
+        (regiao.chave.startsWith("extra:") ? regiao.chave.slice(6) : null);
+      const meta =
+        (eid ? extrasMeta?.[eid] : undefined) ?? extrasMeta?.[regiao.chave];
+      const tamanho = Math.max(
+        4,
+        Math.min(72, Number(meta?.tamanho_pt ?? regiao.tamanho_pt ?? 11) || 11),
+      );
+      const align_h = meta?.align_h ?? regiao.align_h ?? "esquerda";
+      const align_v = meta?.align_v ?? regiao.align_v ?? "topo";
+      setTextoTamanhoPt(tamanho);
+      setTextoAlignH(align_h);
+      setTextoAlignV(align_v);
+      setRedeTamanhoPt(tamanho);
+      setRedeAlignH(align_h);
+      setRedeAlignV(align_v);
+    },
+    [extrasMeta],
+  );
 
   const confirmarRedeExtra = useCallback(() => {
     if (!redeDialog || !onAdicionarCampoExtra || !redeChave) return;
@@ -388,9 +413,7 @@ export function PapelariaPdfLivePreview({
       negrito: [],
     });
     setRedeDialog(null);
-    setRedeChave("");
-    setRedeValor("");
-    resetEstiloCriacao();
+    limparConteudoCriacao();
   }, [
     redeDialog,
     onAdicionarCampoExtra,
@@ -402,7 +425,7 @@ export function PapelariaPdfLivePreview({
     redeTemPos,
     redeXMm,
     redeYMm,
-    resetEstiloCriacao,
+    limparConteudoCriacao,
   ]);
 
   const confirmarTextoExtra = useCallback(() => {
@@ -420,7 +443,7 @@ export function PapelariaPdfLivePreview({
       y_pt: textoTemPos ? mmParaPt(textoYMm) : null,
     });
     setTextoDialog(null);
-    resetEstiloCriacao();
+    limparConteudoCriacao();
   }, [
     textoDialog,
     onAdicionarCampoExtra,
@@ -432,7 +455,7 @@ export function PapelariaPdfLivePreview({
     textoTemPos,
     textoXMm,
     textoYMm,
-    resetEstiloCriacao,
+    limparConteudoCriacao,
   ]);
 
   const aplicarNegritoCriacao = useCallback(() => {
@@ -1023,7 +1046,8 @@ export function PapelariaPdfLivePreview({
                                 key={`t-${d.id}`}
                                 data-testid={`papelaria-extra-texto-${d.id}`}
                                 onSelect={() => {
-                                  resetEstiloCriacao();
+                                  limparConteudoCriacao();
+                                  aplicarEstiloDaAncora(r);
                                   setTextoDialog({
                                     ancora_chave: r.chave,
                                     direcao: d.id,
@@ -1040,9 +1064,9 @@ export function PapelariaPdfLivePreview({
                                 key={`r-${d.id}`}
                                 data-testid={`papelaria-extra-rede-${d.id}`}
                                 onSelect={() => {
-                                  resetEstiloCriacao();
+                                  limparConteudoCriacao();
+                                  aplicarEstiloDaAncora(r);
                                   setRedeChave(redesCatalogo[0]?.chave ?? "instagram");
-                                  setRedeValor("");
                                   setRedeDialog({
                                     ancora_chave: r.chave,
                                     direcao: d.id,

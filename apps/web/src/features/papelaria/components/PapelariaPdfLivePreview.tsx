@@ -845,7 +845,7 @@ export function PapelariaPdfLivePreview({
                           outroArrasteAtivo && "pointer-events-none",
                           ativa
                             ? "bg-secondary-blue/10 outline outline-secondary-blue"
-                            : r.editado || isExtra
+                            : r.editado && !isExtra
                               ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
                               : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
                           arrastandoEsta && drag?.moved && "opacity-0",

@@ -191,6 +191,8 @@ def send_web_push_to_ponto(
     ano: int | None = None,
     notification_id: int | None = None,
     urgent: bool = False,
+    icon: str | None = None,
+    badge: str | None = None,
 ) -> int:
     _, private, subject = _load_vapid_keys()
     if not private:
@@ -217,6 +219,10 @@ def send_web_push_to_ponto(
         payload_obj["notification_id"] = int(notification_id)
     if urgent:
         payload_obj["urgent"] = True
+    if icon:
+        payload_obj["icon"] = icon
+    if badge:
+        payload_obj["badge"] = badge
     payload = json.dumps(payload_obj, ensure_ascii=False)
     sent = 0
     subs = _subscriptions_for_ponto(ponto)

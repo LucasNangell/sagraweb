@@ -88,7 +88,7 @@ describe("UserDrawer", () => {
     expect(screen.getByRole("checkbox", { name: /Conta ativa/ })).not.toBeChecked();
 
     fireEvent.click(screen.getByText("Permissões"));
-    const gerencia = await screen.findByRole("checkbox", { name: /Gerência/ });
+    const gerencia = await screen.findByRole("checkbox", { name: /^Gerência/ });
     fireEvent.click(gerencia);
     fireEvent.click(screen.getByRole("button", { name: /Salvar permissões/ }));
 

@@ -69,6 +69,8 @@ class IPPermission(BaseModel):
     sb_lombada: bool = False
     sb_credenciais_depol: bool = False
     sb_manipular_imagem: bool = False
+    sb_manutencao_gerencia: bool = False
+    sb_manutencao_operador: bool = False
     sb_reiniciar_sistema: bool = False
 
 class AccessRequest(BaseModel):
@@ -133,6 +135,8 @@ class IPPermissionUpdate(BaseModel):
     sb_lombada: Optional[bool] = None
     sb_credenciais_depol: Optional[bool] = None
     sb_manipular_imagem: Optional[bool] = None
+    sb_manutencao_gerencia: Optional[bool] = None
+    sb_manutencao_operador: Optional[bool] = None
     sb_reiniciar_sistema: Optional[bool] = None
 
 class IPDelete(BaseModel):
@@ -198,6 +202,8 @@ def _full_access_permissions(client_ip: str) -> dict:
         "sb_lombada": True,
         "sb_credenciais_depol": True,
         "sb_manipular_imagem": True,
+        "sb_manutencao_gerencia": True,
+        "sb_manutencao_operador": True,
         "sb_reiniciar_sistema": True,
         "ip": client_ip,
     }
@@ -279,6 +285,8 @@ def get_client_permissions(client_ip: str) -> dict:
                     'sb_lombada': bool(exact_match.get('sb_lombada', False)),
                     'sb_credenciais_depol': bool(exact_match.get('sb_credenciais_depol', False)),
                     'sb_manipular_imagem': bool(exact_match.get('sb_manipular_imagem', False)),
+                    'sb_manutencao_gerencia': bool(exact_match.get('sb_manutencao_gerencia', False)),
+                    'sb_manutencao_operador': bool(exact_match.get('sb_manutencao_operador', False)),
                     'sb_reiniciar_sistema': bool(exact_match.get('sb_reiniciar_sistema', False)),
                     'ip': client_ip  # Retorna o IP do cliente
                 }
@@ -340,6 +348,8 @@ def get_client_permissions(client_ip: str) -> dict:
                         'sb_lombada': bool(ip_data.get('sb_lombada', False)),
                         'sb_credenciais_depol': bool(ip_data.get('sb_credenciais_depol', False)),
                         'sb_manipular_imagem': bool(ip_data.get('sb_manipular_imagem', False)),
+                        'sb_manutencao_gerencia': bool(ip_data.get('sb_manutencao_gerencia', False)),
+                        'sb_manutencao_operador': bool(ip_data.get('sb_manutencao_operador', False)),
                         'sb_reiniciar_sistema': bool(ip_data.get('sb_reiniciar_sistema', False)),
                         'ip': client_ip  # Retorna o IP do cliente
                     }
@@ -405,6 +415,8 @@ def _to_permissions_response(
         sb_lombada=bool(perms.get("sb_lombada", False)),
         sb_credenciais_depol=bool(perms.get("sb_credenciais_depol", False)),
         sb_manipular_imagem=bool(perms.get("sb_manipular_imagem", False)),
+        sb_manutencao_gerencia=bool(perms.get("sb_manutencao_gerencia", False)),
+        sb_manutencao_operador=bool(perms.get("sb_manutencao_operador", False)),
         sb_reiniciar_sistema=bool(perms.get("sb_reiniciar_sistema", False)),
         ponto=ponto,
     )
@@ -518,7 +530,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio=%s, sb_gerencia=%s, sb_email=%s, sb_analise=%s,
                         sb_papelaria=%s, sb_usuario=%s, sb_configuracoes=%s,
                         sb_relatorio=%s, sb_dashboard_setor=%s, sb_admin_ips=%s,
-                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s, sb_manipular_imagem=%s, sb_reiniciar_sistema=%s,
+                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s, sb_manipular_imagem=%s, sb_manutencao_gerencia=%s, sb_manutencao_operador=%s, sb_reiniciar_sistema=%s,
                         ctx_prova_web=%s, ctx_comparar_versoes=%s, sb_dashboard_global=%s, sb_dashboard_tablet=%s
                     WHERE id=%s
                 """, (
@@ -528,7 +540,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
-                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem, data.sb_reiniciar_sistema,
+                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem, data.sb_manutencao_gerencia, data.sb_manutencao_operador, data.sb_reiniciar_sistema,
                     data.ctx_prova_web, data.ctx_comparar_versoes, data.sb_dashboard_global, data.sb_dashboard_tablet,
                     ip_id
                 ))
@@ -542,14 +554,14 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio, sb_gerencia, sb_email, sb_analise,
                         sb_papelaria, sb_usuario, sb_configuracoes,
                         sb_relatorio, sb_dashboard_setor, sb_admin_ips,
-                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol, sb_manipular_imagem, sb_reiniciar_sistema,
+                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol, sb_manipular_imagem, sb_manutencao_gerencia, sb_manutencao_operador, sb_reiniciar_sistema,
                         ctx_prova_web, ctx_comparar_versoes, sb_dashboard_global, sb_dashboard_tablet
                     ) VALUES (
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s
                     )
                 """, (
@@ -559,7 +571,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
-                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem, data.sb_reiniciar_sistema,
+                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem, data.sb_manutencao_gerencia, data.sb_manutencao_operador, data.sb_reiniciar_sistema,
                     data.ctx_prova_web, data.ctx_comparar_versoes, data.sb_dashboard_global, data.sb_dashboard_tablet,
                 ))
 

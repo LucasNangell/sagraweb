@@ -30,6 +30,8 @@ _EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("sb_lombada", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("sb_credenciais_depol", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("sb_manipular_imagem", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("sb_manutencao_gerencia", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("sb_manutencao_operador", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("sb_reiniciar_sistema", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("ctx_prova_web", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("ctx_comparar_versoes", "TINYINT(1) NOT NULL DEFAULT 0"),
@@ -82,6 +84,8 @@ CREATE TABLE IF NOT EXISTS ip_permissions (
     sb_lombada TINYINT(1) DEFAULT 0,
     sb_credenciais_depol TINYINT(1) DEFAULT 0,
     sb_manipular_imagem TINYINT(1) DEFAULT 0,
+    sb_manutencao_gerencia TINYINT(1) DEFAULT 0,
+    sb_manutencao_operador TINYINT(1) DEFAULT 0,
     sb_reiniciar_sistema TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

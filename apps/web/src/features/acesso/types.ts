@@ -44,6 +44,8 @@ export interface IpPermissionRecord {
   sb_lombada: boolean | number;
   sb_credenciais_depol: boolean | number;
   sb_manipular_imagem: boolean | number;
+  sb_manutencao_gerencia: boolean | number;
+  sb_manutencao_operador: boolean | number;
   sb_reiniciar_sistema: boolean | number;
 }
 

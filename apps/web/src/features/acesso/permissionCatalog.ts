@@ -20,6 +20,7 @@ export type PermissionCategory =
   | "paineis"
   | "gravacao"
   | "estoque"
+  | "manutencao"
   | "outros";
 
 export type PermissionTarget = "ip" | "user";
@@ -47,6 +48,7 @@ export const PERMISSION_CATEGORIES: ReadonlyArray<{
   { id: "paineis", label: "Painéis" },
   { id: "gravacao", label: "Gravação" },
   { id: "estoque", label: "Estoque" },
+  { id: "manutencao", label: "Manutenção de máquinas" },
   { id: "outros", label: "Administração e outros" },
 ];
 
@@ -133,6 +135,24 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
   entry("sb_lombada", "Lom", "Calculadora de lombada", "outros", "both", false),
   entry("sb_credenciais_depol", "Dep", "Credenciais DEPOL", "menu", "both", false),
   entry("sb_manipular_imagem", "Img", "Manipular Imagem", "menu", "both", false),
+  entry(
+    "sb_manutencao_gerencia",
+    "MnG",
+    "Manutenção — Gerência",
+    "manutencao",
+    "both",
+    false,
+    "Aba Gerência: solicitar manutenções, priorizar a fila e cadastrar máquinas e recorrentes.",
+  ),
+  entry(
+    "sb_manutencao_operador",
+    "MnO",
+    "Manutenção — Operador",
+    "manutencao",
+    "both",
+    false,
+    "Aba Operador: receber pedidos, executar, registrar a solução e concluir.",
+  ),
   entry(
     "sb_reiniciar_sistema",
     "Rst",

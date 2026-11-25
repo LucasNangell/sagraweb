@@ -107,6 +107,9 @@ def is_cloudflare_public_path(path: str, method: str) -> bool:
     if api_path.startswith("/api/"):
         if api_path.startswith("/api/auth/"):
             return True
+        # Abertura de chamado de manutenção pelo QR Code da máquina.
+        if api_path.startswith("/api/manutencao/publico/"):
+            return True
         if is_painel_api_route(api_path, verb):
             return True
         if verb == "GET" and is_painel_data_api_route(api_path, verb):

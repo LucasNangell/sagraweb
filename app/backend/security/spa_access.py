@@ -33,6 +33,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/estoque": "sb_estoque",
     "/credenciais-depol": "sb_credenciais_depol",
     "/manipular-imagem": "sb_manipular_imagem",
+    "/manutencao": "sb_manutencao_gerencia",
     "/prova-web": "ctx_prova_web",
     "/orcamento": "ctx_orcamento",
     "/gravacao-externa": "sb_gravacao_externa",
@@ -148,6 +149,9 @@ def is_public_spa_path(app_path: str) -> bool:
         return True
     if app_path.startswith("/portal"):
         return True
+    # Abertura de chamado de manutenção pelo QR Code da máquina.
+    if app_path == "/chamado" or app_path.startswith("/chamado/"):
+        return True
     return False
 
 
@@ -255,6 +259,11 @@ def has_screen_access_for_spa_path(app_path: str, perms: dict) -> bool:
 
     if app_path == "/estoque" or app_path.startswith("/estoque/"):
         return bool(perms.get("sb_estoque") or perms.get("sb_estoque_gerente"))
+
+    if app_path == "/manutencao" or app_path.startswith("/manutencao/"):
+        return bool(
+            perms.get("sb_manutencao_gerencia") or perms.get("sb_manutencao_operador")
+        )
 
     return bool(perms.get(required, False))
 

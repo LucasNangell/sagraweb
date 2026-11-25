@@ -26,6 +26,8 @@ from routers import (
     papelaria_worker_routes,
     credenciais_depol_routes,
     manipular_imagem_routes,
+    manutencao_routes,
+    manutencao_publico_routes,
     settings_routes,
     ip_admin_routes,
     auth_routes,
@@ -1295,6 +1297,12 @@ def startup_init():
         logger.error("Erro ao garantir schema Credenciais DEPOL no startup: %s", exc)
 
     try:
+        from manutencao_schema import ensure_manutencao_schema
+        ensure_manutencao_schema()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema Manutenção no startup: %s", exc)
+
+    try:
         from custo_funcao_schema import ensure_custo_funcao_schema
         ensure_custo_funcao_schema()
     except Exception as exc:
@@ -1367,6 +1375,8 @@ app.include_router(cotas_graf_routes.router, prefix="/api")
 app.include_router(estoque_routes.router, prefix="/api")
 app.include_router(credenciais_depol_routes.router, prefix="/api")
 app.include_router(manipular_imagem_routes.router, prefix="/api")
+app.include_router(manutencao_routes.router, prefix="/api")
+app.include_router(manutencao_publico_routes.router, prefix="/api")
 app.include_router(gravacao_externa_routes.router, prefix="/api")
 app.include_router(gravacao_pendente_routes.router, prefix="/api")
 app.include_router(painel_gravacao_routes.router)

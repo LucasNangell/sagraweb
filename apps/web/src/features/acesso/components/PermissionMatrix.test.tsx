@@ -46,7 +46,7 @@ describe("PermissionMatrix", () => {
     render(
       <PermissionMatrix target="ip" values={{ sb_inicio: true, sb_pcp: true }} onChange={vi.fn()} />,
     );
-    expect(screen.getByTestId("permission-matrix-count")).toHaveTextContent("2 de 40 ativas");
+    expect(screen.getByTestId("permission-matrix-count")).toHaveTextContent("2 de 43 ativas");
     fireEvent.change(screen.getByPlaceholderText("Buscar permissão…"), {
       target: { value: "orcamento" },
     });

@@ -20,6 +20,8 @@ function parsePushPayload(event) {
     ano: null,
     notification_id: null,
     urgent: false,
+    icon: null,
+    badge: null,
   };
   if (!event.data) {
     return defaults;
@@ -49,8 +51,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || "SAGRA Web", {
       body: payload.body || "",
-      icon: assetUrl("icons/icon-192.png"),
-      badge: assetUrl("icons/favicon-32.png"),
+      icon: assetUrl(payload.icon || "icons/icon-192.png"),
+      badge: assetUrl(payload.badge || "icons/favicon-32.png"),
       data: {
         url: targetUrl,
         nro: payload.nro ?? null,

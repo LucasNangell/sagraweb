@@ -1,13 +1,13 @@
 import {
   usePainelOsManifest,
-  type PainelPwaVariant,
+  type SagraPwaVariant,
 } from "@/components/pwa/usePainelOsManifest";
 
 /** Aplica head/manifest do PWA do painel enquanto montado. */
 export function PainelOsPwaHead({
   variant = "tablet",
 }: {
-  variant?: PainelPwaVariant;
+  variant?: SagraPwaVariant;
 }) {
   usePainelOsManifest(true, variant);
   return null;

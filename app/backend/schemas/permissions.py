@@ -59,5 +59,7 @@ class ClientPermissionsResponse(BaseModel):
     sb_lombada: bool = False
     sb_credenciais_depol: bool = False
     sb_manipular_imagem: bool = False
+    sb_manutencao_gerencia: bool = False
+    sb_manutencao_operador: bool = False
     sb_reiniciar_sistema: bool = False
     ponto: int | None = Field(None, description="Ponto autenticado na sessão (Fase B)")

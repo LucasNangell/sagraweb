@@ -40,6 +40,8 @@ export type PermissionKey =
   | "sb_lombada"
   | "sb_credenciais_depol"
   | "sb_manipular_imagem"
+  | "sb_manutencao_gerencia"
+  | "sb_manutencao_operador"
   | "sb_reiniciar_sistema";
 
 export interface Permissions extends Record<PermissionKey, boolean> {
@@ -89,6 +91,8 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   "sb_lombada",
   "sb_credenciais_depol",
   "sb_manipular_imagem",
+  "sb_manutencao_gerencia",
+  "sb_manutencao_operador",
   "sb_reiniciar_sistema",
 ];
 
@@ -148,6 +152,8 @@ export interface PermissionsResponse {
   sb_lombada?: boolean;
   sb_credenciais_depol?: boolean;
   sb_manipular_imagem?: boolean;
+  sb_manutencao_gerencia?: boolean;
+  sb_manutencao_operador?: boolean;
   sb_reiniciar_sistema?: boolean;
 }
 

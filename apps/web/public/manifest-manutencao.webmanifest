@@ -1,0 +1,49 @@
+{
+  "id": "manutencao-app",
+  "name": "SAGRA Manutenção",
+  "short_name": "Manutenção",
+  "description": "Manutenção de máquinas da gráfica — pedidos, fila e execução",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "scope": "manutencao",
+  "start_url": "manutencao?aba=operador&origem=pwa",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icons/manutencao-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/manutencao-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/manutencao-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Fila do operador",
+      "short_name": "Operador",
+      "url": "manutencao?aba=operador",
+      "icons": [{ "src": "icons/manutencao-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Gerência de pedidos",
+      "short_name": "Gerência",
+      "url": "manutencao?aba=gerencia",
+      "icons": [{ "src": "icons/manutencao-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

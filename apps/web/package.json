@@ -1,6 +1,6 @@
 {
   "name": "@sagra/web",
-  "version": "0.123.0",
+  "version": "0.124.0",
   "private": true,
   "type": "module",
   "description": "SAGRA Web SPA — React 19 + Vite 6",
@@ -31,6 +31,7 @@
     "lucide-react": "^0.469.0",
     "page-flip": "2.0.7",
     "pdfjs-dist": "^4.10.38",
+    "qrcode": "1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
@@ -45,6 +46,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.5",
+    "@types/qrcode": "1.5.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.185.3",

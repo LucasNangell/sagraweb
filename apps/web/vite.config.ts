@@ -175,6 +175,11 @@ export default defineConfig(({ mode }) => {
         "icons/painel-os-192.png",
         "icons/painel-os-512.png",
         "icons/painel-os-maskable-512.png",
+        "manifest-manutencao.webmanifest",
+        "icons/manutencao-192.png",
+        "icons/manutencao-512.png",
+        "icons/manutencao-maskable-512.png",
+        "icons/manutencao-badge-96.png",
       ],
       manifest: {
         id: "/sagra-web",

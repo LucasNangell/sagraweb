@@ -2,6 +2,9 @@ import { useEffect } from "react";
 
 export type PainelPwaVariant = "tablet" | "setor-moderno";
 
+/** Variantes de PWA instalável com manifest próprio. */
+export type SagraPwaVariant = PainelPwaVariant | "manutencao";
+
 const MAIN_TITLE = "SAGRA Web";
 const MAIN_APPLE_TITLE = "SAGRA";
 const MAIN_THEME = "#121214";
@@ -17,6 +20,11 @@ const TABLET_MANIFEST = "manifest-painel-os.webmanifest";
 
 const SETOR_MODERNO_TITLE = "Painel Setor";
 const SETOR_MODERNO_MANIFEST = "manifest-painel-setor-moderno.webmanifest";
+
+const MANUTENCAO_TITLE = "SAGRA Manutenção";
+const MANUTENCAO_APPLE_TITLE = "Manutenção";
+const MANUTENCAO_MANIFEST = "manifest-manutencao.webmanifest";
+const MANUTENCAO_ICON = "icons/manutencao-192.png";
 
 function withBase(path: string): string {
   const base = import.meta.env.BASE_URL || "/";
@@ -51,37 +59,61 @@ function ensureMeta(name: string): HTMLMetaElement {
   return el;
 }
 
-function applyHead(mode: "main" | PainelPwaVariant): void {
-  const isPainel = mode !== "main";
-  const isSetorModerno = mode === "setor-moderno";
-  const manifestHref = withBase(
-    isSetorModerno
-      ? SETOR_MODERNO_MANIFEST
-      : isPainel
-        ? TABLET_MANIFEST
-        : MAIN_MANIFEST,
-  );
-  const iconHref = withBase(isPainel ? PAINEL_ICON : MAIN_ICON);
-  const icon32Href = withBase(isPainel ? PAINEL_ICON : MAIN_ICON_32);
-  const title = isSetorModerno
-    ? SETOR_MODERNO_TITLE
-    : isPainel
-      ? TABLET_TITLE
-      : MAIN_TITLE;
-  const appleTitle = isSetorModerno
-    ? SETOR_MODERNO_TITLE
-    : isPainel
-      ? TABLET_TITLE
-      : MAIN_APPLE_TITLE;
-  const theme = isPainel ? PAINEL_THEME : MAIN_THEME;
+interface HeadConfig {
+  manifest: string;
+  icon: string;
+  icon32: string;
+  title: string;
+  appleTitle: string;
+  theme: string;
+}
 
-  document.title = title;
+const HEAD_CONFIG: Record<"main" | SagraPwaVariant, HeadConfig> = {
+  main: {
+    manifest: MAIN_MANIFEST,
+    icon: MAIN_ICON,
+    icon32: MAIN_ICON_32,
+    title: MAIN_TITLE,
+    appleTitle: MAIN_APPLE_TITLE,
+    theme: MAIN_THEME,
+  },
+  tablet: {
+    manifest: TABLET_MANIFEST,
+    icon: PAINEL_ICON,
+    icon32: PAINEL_ICON,
+    title: TABLET_TITLE,
+    appleTitle: TABLET_TITLE,
+    theme: PAINEL_THEME,
+  },
+  "setor-moderno": {
+    manifest: SETOR_MODERNO_MANIFEST,
+    icon: PAINEL_ICON,
+    icon32: PAINEL_ICON,
+    title: SETOR_MODERNO_TITLE,
+    appleTitle: SETOR_MODERNO_TITLE,
+    theme: PAINEL_THEME,
+  },
+  manutencao: {
+    manifest: MANUTENCAO_MANIFEST,
+    icon: MANUTENCAO_ICON,
+    icon32: MANUTENCAO_ICON,
+    title: MANUTENCAO_TITLE,
+    appleTitle: MANUTENCAO_APPLE_TITLE,
+    theme: PAINEL_THEME,
+  },
+};
+
+function applyHead(mode: "main" | SagraPwaVariant): void {
+  const cfg = HEAD_CONFIG[mode];
+  const iconHref = withBase(cfg.icon);
+
+  document.title = cfg.title;
 
   const manifest = ensureLink("manifest");
-  manifest.href = manifestHref;
+  manifest.href = withBase(cfg.manifest);
 
-  ensureMeta("theme-color").content = theme;
-  ensureMeta("apple-mobile-web-app-title").content = appleTitle;
+  ensureMeta("theme-color").content = cfg.theme;
+  ensureMeta("apple-mobile-web-app-title").content = cfg.appleTitle;
 
   const appleIcon = ensureLink("apple-touch-icon", { sizes: "192x192" });
   appleIcon.href = iconHref;
@@ -97,7 +129,7 @@ function applyHead(mode: "main" | PainelPwaVariant): void {
     'link[rel="icon"][sizes="32x32"][type="image/png"]',
   );
   if (icon32) {
-    icon32.href = icon32Href;
+    icon32.href = withBase(cfg.icon32);
   }
 }
 
@@ -107,7 +139,7 @@ function applyHead(mode: "main" | PainelPwaVariant): void {
  */
 export function usePainelOsManifest(
   enabled: boolean,
-  variant: PainelPwaVariant = "tablet",
+  variant: SagraPwaVariant = "tablet",
 ): void {
   useEffect(() => {
     if (!enabled) return;
@@ -138,11 +170,15 @@ function isSetorModernoPath(value: string): boolean {
   return matchesPath(value, "/painel/setor-moderno");
 }
 
+function isManutencaoPath(value: string): boolean {
+  return matchesPath(value, "/manutencao");
+}
+
 /** Variante de PWA/ícone a aplicar, ou null fora do contexto de instalação do painel. */
 export function getPainelOsInstallVariant(
   pathname: string,
   redirect?: string | null,
-): PainelPwaVariant | null {
+): SagraPwaVariant | null {
   const path = normalizePath(pathname);
   if (isSetorModernoPath(path)) {
     return "setor-moderno";
@@ -150,11 +186,17 @@ export function getPainelOsInstallVariant(
   if (isTabletPainelPath(path)) {
     return "tablet";
   }
+  if (isManutencaoPath(path)) {
+    return "manutencao";
+  }
   if (path === "/login" || path.endsWith("/login")) {
     if (!redirect) {
       return null;
     }
-    const redirectPath = normalizePath(redirect);
+    const redirectPath = normalizePath(redirect.split(/[?#]/)[0] ?? "");
+    if (isManutencaoPath(redirectPath)) {
+      return "manutencao";
+    }
     if (isSetorModernoPath(redirectPath)) {
       return "setor-moderno";
     }

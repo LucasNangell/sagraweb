@@ -18,6 +18,7 @@ import {
   Printer,
   Settings,
   Shield,
+  Wrench,
 } from "lucide-react";
 
 import { isPainelConfigAdminPonto } from "@/features/auth/painelConfigAdmin";
@@ -90,6 +91,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "PCP", to: "/pcp", icon: ClipboardList, permission: "sb_pcp" },
   { label: "Cotas Graf", to: "/cotas-graf", icon: Coins, permission: "sb_cotas_graf" },
   { label: "Estoque", to: "/estoque", icon: Package, permission: "sb_estoque" },
+  {
+    label: "Manutenção",
+    to: "/manutencao",
+    icon: Wrench,
+    // Visível com sb_manutencao_gerencia OU sb_manutencao_operador (ver getVisibleNavItems).
+    permission: "sb_manutencao_gerencia",
+  },
   { label: "Gravação", to: "/gravacao-externa", icon: HardDrive, permission: "sb_gravacao_externa" },
   { label: "Gravação", to: "/gravacao", icon: Disc3, permission: "sb_gravacao" },
   {
@@ -132,6 +140,14 @@ export function hasAcessoAdminAccess(permissions: Permissions): boolean {
   );
 }
 
+/** Manutenção: aba Gerência (sb_manutencao_gerencia) e/ou aba Operador (sb_manutencao_operador). */
+export function hasManutencaoAccess(permissions: Permissions): boolean {
+  return (
+    hasPermission(permissions, "sb_manutencao_gerencia") ||
+    hasPermission(permissions, "sb_manutencao_operador")
+  );
+}
+
 /** Itens do menu lateral permitidos para o IP/sessão atual. */
 export function getVisibleNavItems(
   permissions: Permissions,
@@ -166,6 +182,9 @@ export function getVisibleNavItems(
         hasPermission(permissions, "sb_estoque_gerente")
       );
     }
+    if (item.to === "/manutencao") {
+      return hasManutencaoAccess(permissions);
+    }
     return hasPermission(permissions, item.permission);
   });
 }
@@ -191,6 +210,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/pcp": "sb_pcp",
   "/cotas-graf": "sb_cotas_graf",
   "/estoque": "sb_estoque",
+  "/manutencao": "sb_manutencao_gerencia",
   "/gravacao-externa": "sb_gravacao_externa",
   "/gravacao": "sb_gravacao",
   // Rotas legadas (redirecionam para /admin/acesso).
@@ -267,6 +287,9 @@ export function canAccessRoute(
       hasPermission(permissions, "sb_estoque") ||
       hasPermission(permissions, "sb_estoque_gerente")
     );
+  }
+  if (normalized === "/manutencao" || normalized.startsWith("/manutencao/")) {
+    return hasManutencaoAccess(permissions);
   }
   if (
     normalized === "/analise-lab" ||

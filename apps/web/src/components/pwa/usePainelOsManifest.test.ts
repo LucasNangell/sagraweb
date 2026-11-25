@@ -74,3 +74,29 @@ describe("getPainelOsInstallVariant", () => {
     expect(getPainelOsInstallVariant("/painel/setor")).toBeNull();
   });
 });
+
+describe("PWA Manutenção", () => {
+  it("usa o manifest exclusivo em /manutencao e no login com redirect", () => {
+    expect(getPainelOsInstallVariant("/manutencao")).toBe("manutencao");
+    expect(getPainelOsInstallVariant("/sagra/manutencao/")).toBe("manutencao");
+    expect(getPainelOsInstallVariant("/login", "/manutencao?aba=operador&pedido=3")).toBe(
+      "manutencao",
+    );
+    expect(getPainelOsInstallVariant("/login", "/gerencia")).toBeNull();
+  });
+
+  it("aplica e restaura manifest, título e ícone", async () => {
+    const { renderHook } = await import("@testing-library/react");
+    const { usePainelOsManifest } = await import("@/components/pwa/usePainelOsManifest");
+    const { unmount } = renderHook(() => usePainelOsManifest(true, "manutencao"));
+    const manifest = document.head.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    expect(manifest?.getAttribute("href")).toMatch(/manifest-manutencao\.webmanifest$/);
+    expect(document.title).toBe("SAGRA Manutenção");
+    expect(
+      document.head.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')?.getAttribute("href"),
+    ).toMatch(/icons\/manutencao-192\.png$/);
+    unmount();
+    expect(manifest?.getAttribute("href")).toMatch(/manifest\.webmanifest$/);
+    expect(document.title).toBe("SAGRA Web");
+  });
+});

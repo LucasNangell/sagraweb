@@ -19,9 +19,32 @@ import {
 } from "react";
 
 import { previaPdfAoVivo, type ProvaPdfPrevia, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
+import {
+  DIRECOES_EXTRA,
+  type CampoExtraDirecao,
+  type CampoExtraTipo,
+} from "@/features/papelaria/papelariaCamposExtras";
 
 import { PapelariaTextoEditor } from "./PapelariaTextoEditor";
+
+export type RedeCatalogoItem = { chave: string; nome: string };
+
+export type AdicionarCampoExtraPayload = {
+  tipo: CampoExtraTipo;
+  ancora_chave: string;
+  direcao: CampoExtraDirecao;
+  rede_chave?: string;
+  rede_valor?: string;
+};
 
 const DEBOUNCE_MS = 450;
 const ZOOM_MIN = 0.5;
@@ -132,6 +155,11 @@ export function PapelariaPdfLivePreview({
   queryKeyPrefix = "papelaria",
   /** `stack` = frente acima do verso; `row` = frente à esquerda, verso à direita. */
   layout = "stack",
+  /** Menu de contexto para campos extras (operador). Portal passa `false`. */
+  permitirCamposExtras = true,
+  redesCatalogo = [],
+  onAdicionarCampoExtra,
+  onRemoverCampoExtra,
 }: {
   modeloId: number;
   values: Record<string, string>;
@@ -147,6 +175,10 @@ export function PapelariaPdfLivePreview({
   /** Prefixo da queryKey (ex.: portal) para não misturar caches. */
   queryKeyPrefix?: string;
   layout?: "stack" | "row";
+  permitirCamposExtras?: boolean;
+  redesCatalogo?: RedeCatalogoItem[];
+  onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
+  onRemoverCampoExtra?: (extraId: string) => void;
 }) {
   const chave = useMemo(() => chaveValores(values), [values]);
   const chaveDebounced = useDebounced(chave, DEBOUNCE_MS);
@@ -189,9 +221,33 @@ export function PapelariaPdfLivePreview({
   );
   const [editando, setEditando] = useState<string | null>(null);
   const regiaoEditada = todasRegioes.find((r) => r.chave === editando) ?? null;
+  const [redeDialog, setRedeDialog] = useState<{
+    ancora_chave: string;
+    direcao: CampoExtraDirecao;
+  } | null>(null);
+  const [redeChave, setRedeChave] = useState("");
+  const [redeValor, setRedeValor] = useState("");
   useEffect(() => {
     setEditando(null);
+    setRedeDialog(null);
   }, [modeloId]);
+
+  const menuExtrasAtivo =
+    permitirCamposExtras && Boolean(onAdicionarCampoExtra) && editavel;
+
+  const confirmarRedeExtra = useCallback(() => {
+    if (!redeDialog || !onAdicionarCampoExtra || !redeChave) return;
+    onAdicionarCampoExtra({
+      tipo: "rede",
+      ancora_chave: redeDialog.ancora_chave,
+      direcao: redeDialog.direcao,
+      rede_chave: redeChave,
+      rede_valor: redeValor.trim(),
+    });
+    setRedeDialog(null);
+    setRedeChave("");
+    setRedeValor("");
+  }, [redeDialog, onAdicionarCampoExtra, redeChave, redeValor]);
 
   const [zoom, setZoom] = useState(1);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -451,25 +507,89 @@ export function PapelariaPdfLivePreview({
                           />
                         );
                       }
+                      const botaoProps = {
+                        type: "button" as const,
+                        "aria-label": `Editar texto: ${r.texto || r.marcador}`,
+                        title: menuExtrasAtivo
+                          ? "Clique para editar · botão direito para campos extras"
+                          : r.editado
+                            ? "Texto editado — clique para alterar"
+                            : "Clique para editar",
+                        "data-testid": "papelaria-previa-regiao",
+                        "data-editado": r.editado ? ("true" as const) : undefined,
+                        className: cn(
+                          "absolute cursor-text rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
+                          ativa
+                            ? "bg-secondary-blue/10 outline outline-secondary-blue"
+                            : r.editado
+                              ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
+                              : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
+                        ),
+                        style: estiloArea,
+                        onClick: () => setEditando(r.chave),
+                      };
+                      if (!menuExtrasAtivo) {
+                        return <button key={r.chave} {...botaoProps} />;
+                      }
+                      const isExtra =
+                        r.tipo === "campo_extra" || r.tipo === "rede_extra";
+                      const extraId = r.extra_id ?? (r.chave.startsWith("extra:") ? r.chave.slice(6) : null);
                       return (
-                        <button
-                          key={r.chave}
-                          type="button"
-                          aria-label={`Editar texto: ${r.texto || r.marcador}`}
-                          title={r.editado ? "Texto editado — clique para alterar" : "Clique para editar"}
-                          data-testid="papelaria-previa-regiao"
-                          data-editado={r.editado ? "true" : undefined}
-                          className={cn(
-                            "absolute cursor-text rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
-                            ativa
-                              ? "bg-secondary-blue/10 outline outline-secondary-blue"
-                              : r.editado
-                                ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
-                                : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
-                          )}
-                          style={estiloArea}
-                          onClick={() => setEditando(r.chave)}
-                        />
+                        <ContextMenu key={r.chave}>
+                          <ContextMenuTrigger asChild>
+                            <button {...botaoProps} />
+                          </ContextMenuTrigger>
+                          <ContextMenuContent
+                            className="w-56"
+                            data-testid="papelaria-previa-extras-menu"
+                          >
+                            <ContextMenuLabel>Adicionar texto</ContextMenuLabel>
+                            {DIRECOES_EXTRA.map((d) => (
+                              <ContextMenuItem
+                                key={`t-${d.id}`}
+                                data-testid={`papelaria-extra-texto-${d.id}`}
+                                onSelect={() =>
+                                  onAdicionarCampoExtra?.({
+                                    tipo: "texto",
+                                    ancora_chave: r.chave,
+                                    direcao: d.id,
+                                  })
+                                }
+                              >
+                                {d.label}
+                              </ContextMenuItem>
+                            ))}
+                            <ContextMenuSeparator />
+                            <ContextMenuLabel>Adicionar rede social</ContextMenuLabel>
+                            {DIRECOES_EXTRA.map((d) => (
+                              <ContextMenuItem
+                                key={`r-${d.id}`}
+                                data-testid={`papelaria-extra-rede-${d.id}`}
+                                onSelect={() => {
+                                  setRedeChave(redesCatalogo[0]?.chave ?? "");
+                                  setRedeValor("");
+                                  setRedeDialog({
+                                    ancora_chave: r.chave,
+                                    direcao: d.id,
+                                  });
+                                }}
+                              >
+                                {d.label}
+                              </ContextMenuItem>
+                            ))}
+                            {isExtra && extraId && onRemoverCampoExtra ? (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem
+                                  data-testid="papelaria-extra-remover"
+                                  onSelect={() => onRemoverCampoExtra(extraId)}
+                                >
+                                  Remover campo extra
+                                </ContextMenuItem>
+                              </>
+                            ) : null}
+                          </ContextMenuContent>
+                        </ContextMenu>
                       );
                     })}
                     {regiaoEditada &&
@@ -500,7 +620,10 @@ export function PapelariaPdfLivePreview({
                           if (texto !== regiaoEditada.texto) onEditarTexto(regiaoEditada, texto);
                         }}
                         onRestaurar={
-                          (regiaoEditada.editado || regiaoEditada.tipo === "rede") &&
+                          (regiaoEditada.editado ||
+                            regiaoEditada.tipo === "rede" ||
+                            regiaoEditada.tipo === "campo_extra" ||
+                            regiaoEditada.tipo === "rede_extra") &&
                           onRestaurarTexto
                             ? () => {
                                 setEditando(null);
@@ -541,6 +664,84 @@ export function PapelariaPdfLivePreview({
           {aviso}
         </p>
       ))}
+
+      {redeDialog ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Adicionar rede social"
+          data-testid="papelaria-extra-rede-dialog"
+          onClick={() => setRedeDialog(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-sagra-border bg-white p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-neutral-800">Rede social extra</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              Escolha a rede e o perfil. A tipografia segue o campo âncora.
+            </p>
+            <label className="mt-3 block text-[11px] font-medium text-neutral-700">
+              Rede
+              <select
+                className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
+                value={redeChave}
+                onChange={(e) => setRedeChave(e.target.value)}
+              >
+                {(redesCatalogo.length
+                  ? redesCatalogo
+                  : [
+                      { chave: "instagram", nome: "Instagram" },
+                      { chave: "facebook", nome: "Facebook" },
+                      { chave: "x", nome: "X" },
+                      { chave: "linkedin", nome: "LinkedIn" },
+                      { chave: "youtube", nome: "YouTube" },
+                      { chave: "tiktok", nome: "TikTok" },
+                      { chave: "threads", nome: "Threads" },
+                      { chave: "whatsapp", nome: "WhatsApp" },
+                    ]
+                ).map((r) => (
+                  <option key={r.chave} value={r.chave}>
+                    {r.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-2 block text-[11px] font-medium text-neutral-700">
+              Perfil / handle
+              <input
+                className="mt-0.5 w-full rounded border border-sagra-border px-2 py-1.5 text-sm"
+                value={redeValor}
+                onChange={(e) => setRedeValor(e.target.value)}
+                placeholder="@usuario"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmarRedeExtra();
+                  if (e.key === "Escape") setRedeDialog(null);
+                }}
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-3 py-1.5 text-xs text-neutral-600 hover:bg-slate-100"
+                onClick={() => setRedeDialog(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                onClick={confirmarRedeExtra}
+                disabled={!redeChave}
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

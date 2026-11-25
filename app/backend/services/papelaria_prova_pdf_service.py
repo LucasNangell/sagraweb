@@ -1759,6 +1759,34 @@ def _aplicar_redes(
     )
 
 
+def _aplicar_campos_extras(
+    conteudo: bytes,
+    dados: dict[str, Any],
+    regioes: list[dict[str, Any]],
+    *,
+    modelo_id: int,
+    estilo_redes: Optional[str] = None,
+    avisos: Optional[list[str]] = None,
+) -> bytes:
+    """Desenha ``__campos_extras`` relativos às regiões já calculadas."""
+    from services.papelaria_campos_extras_service import (
+        aplicar_campos_extras,
+        campos_extras_dos_dados,
+    )
+
+    extras = campos_extras_dos_dados(dados or {})
+    if not extras:
+        return conteudo
+    return aplicar_campos_extras(
+        conteudo,
+        extras,
+        regioes,
+        modelo_id=int(modelo_id),
+        estilo_redes=estilo_redes,
+        avisos=avisos,
+    )
+
+
 def estilo_redes_dos_dados(dados: dict[str, Any]) -> Optional[str]:
     """Estilo de logo escolhido pelo usuário (chave ``__redes_estilo``)."""
     from services import papelaria_redes_service as redes_svc
@@ -1970,14 +1998,23 @@ def previa_png(
                     "pagina_saida": int(r["pagina"]) - 1,
                 }
             )
+    for r in regioes:
+        if not r.get("chave"):
+            r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+    saida = _aplicar_campos_extras(
+        saida,
+        dados or {},
+        regioes,
+        modelo_id=int(modelo_id),
+        estilo_redes=estilo_redes,
+        avisos=avisos,
+    )
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
         paginas = [_png_da_pagina(p, dpi) for p in doc]
     finally:
         doc.close()
-    for r in regioes:
-        r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
     return {"paginas": paginas, "ms": ms, "avisos": avisos, "regioes": regioes}
 
 
@@ -2122,14 +2159,23 @@ def previa_repeticao(ano: int, nro: int, dados: dict[str, Any], dpi: Optional[in
     regioes: list[dict[str, Any]] = []
     t0 = time.perf_counter()
     saida, _n = renderizar_base_repeticao(ano, nro, dados, avisos=avisos, regioes=regioes)
+    for r in regioes:
+        if not r.get("chave"):
+            r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+    saida = _aplicar_campos_extras(
+        saida,
+        dados or {},
+        regioes,
+        modelo_id=0,
+        estilo_redes=estilo_redes_dos_dados(dados or {}),
+        avisos=avisos,
+    )
     ms = int((time.perf_counter() - t0) * 1000)
     doc = fitz.open(stream=saida, filetype="pdf")
     try:
         paginas = [_png_da_pagina(p, dpi) for p in doc]
     finally:
         doc.close()
-    for r in regioes:
-        r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
     return {"paginas": paginas, "ms": ms, "avisos": avisos, "regioes": regioes}
 
 
@@ -2151,7 +2197,22 @@ def renderizar_pdf_final(
     repeticao = repeticao_dos_dados(brutos)
     if repeticao is not None:
         # Repetição de SP: a prova sai da base recortada da prova antiga.
-        return renderizar_base_repeticao(repeticao[0], repeticao[1], brutos, avisos=avisos)
+        regioes_rep: list[dict[str, Any]] = []
+        conteudo, n = renderizar_base_repeticao(
+            repeticao[0], repeticao[1], brutos, avisos=avisos, regioes=regioes_rep
+        )
+        for r in regioes_rep:
+            if not r.get("chave"):
+                r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+        conteudo = _aplicar_campos_extras(
+            conteudo,
+            brutos,
+            regioes_rep,
+            modelo_id=0,
+            estilo_redes=estilo_redes_dos_dados(brutos),
+            avisos=avisos,
+        )
+        return conteudo, n
     dados = preparar_dados({k: v for k, v in brutos.items() if not str(k).startswith("__")}, modelo)
     composicao = composicao_do_job({"modelo_id": modelo_id, "dados": brutos})
     redes_sel = selecao_redes_dos_dados(brutos)
@@ -2168,8 +2229,26 @@ def renderizar_pdf_final(
             for c in carregar_config(composicao[face]["modelo_id"]).get("campos") or []
             if c.get("template")
         )
+        regioes_comp: list[dict[str, Any]] = []
         conteudo = renderizar_composicao(
-            composicao, dados, avisos=avisos, redes=redes_sel, estilo_redes=estilo_sel, textos=textos
+            composicao,
+            dados,
+            avisos=avisos,
+            redes=redes_sel,
+            estilo_redes=estilo_sel,
+            textos=textos,
+            regioes=regioes_comp,
+        )
+        for r in regioes_comp:
+            if not r.get("chave"):
+                r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+        conteudo = _aplicar_campos_extras(
+            conteudo,
+            brutos,
+            regioes_comp,
+            modelo_id=int(modelo_id),
+            estilo_redes=estilo_sel,
+            avisos=avisos,
         )
         return conteudo, n_campos
     campos = [c for c in carregar_config(int(modelo_id)).get("campos") or [] if c.get("template")]
@@ -2177,6 +2256,7 @@ def renderizar_pdf_final(
     if not pdf.is_file():
         raise ProvaPdfError("O modelo não tem PDF configurado.")
     prefixo = f"{int(modelo_id)}:"
+    regioes_modelo: list[dict[str, Any]] = []
     conteudo = (
         renderizar(
             pdf,
@@ -2185,11 +2265,38 @@ def renderizar_pdf_final(
             avisos=avisos,
             exigir_campos=False,
             textos={k[len(prefixo):]: v for k, v in textos.items() if k.startswith(prefixo)},
+            regioes=regioes_modelo,
         )
         if campos
         else pdf.read_bytes()
     )
-    conteudo = _aplicar_redes(int(modelo_id), conteudo, redes_sel, avisos, estilo=estilo_sel)
+    regioes: list[dict[str, Any]] = [
+        {**r, "modelo_id": int(modelo_id), "pagina_saida": int(r["pagina"]) - 1}
+        for r in regioes_modelo
+    ]
+    regioes_redes: list[dict[str, Any]] = []
+    conteudo = _aplicar_redes(
+        int(modelo_id), conteudo, redes_sel, avisos, estilo=estilo_sel, regioes=regioes_redes
+    )
+    for r in regioes_redes:
+        regioes.append(
+            {
+                **r,
+                "modelo_id": int(modelo_id),
+                "pagina_saida": int(r["pagina"]) - 1,
+            }
+        )
+    for r in regioes:
+        if not r.get("chave"):
+            r["chave"] = f"{r['modelo_id']}:{r['pagina']}:{r['marcador']}"
+    conteudo = _aplicar_campos_extras(
+        conteudo,
+        brutos,
+        regioes,
+        modelo_id=int(modelo_id),
+        estilo_redes=estilo_sel,
+        avisos=avisos,
+    )
     return conteudo, len(campos)
 
 

@@ -60,6 +60,8 @@ import { previaRepeticao, type ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 import {
   deveUsarPreviaPdfAoVivo,
   PapelariaPdfLivePreview,
+  type AdicionarCampoExtraPayload,
+  type RedeCatalogoItem,
 } from "./PapelariaPdfLivePreview";
 import { mockupJsonEfetivo, type ModeloComMockup } from "../mockup/mockupProduto";
 import type { PapelariaComposicao } from "@/features/papelaria/types";
@@ -108,6 +110,11 @@ type Props = {
   /** Texto editado direto na prévia do PDF. */
   onEditarTextoPrevia?: (regiao: ProvaPdfRegiao, texto: string) => void;
   onRestaurarTextoPrevia?: (regiao: ProvaPdfRegiao) => void;
+  /** Campos extras (só operador): menu de contexto na prévia PDF. */
+  permitirCamposExtras?: boolean;
+  redesCatalogoExtras?: RedeCatalogoItem[];
+  onAdicionarCampoExtra?: (payload: AdicionarCampoExtraPayload) => void;
+  onRemoverCampoExtra?: (extraId: string) => void;
   /** Coluna à esquerda dentro do box (lista de modelos da página Papelaria). */
   ladoEsquerdo?: ReactNode;
   /** Conteúdo fixo no topo da prévia (ex.: resumo do pedido de alteração do cliente). */
@@ -166,6 +173,10 @@ export function PapelariaProofPanel({
   onLivePreviewValueChange,
   onEditarTextoPrevia,
   onRestaurarTextoPrevia,
+  permitirCamposExtras = true,
+  redesCatalogoExtras = [],
+  onAdicionarCampoExtra,
+  onRemoverCampoExtra,
   ladoEsquerdo,
   provaStatus = null,
   criarProva = null,
@@ -918,6 +929,10 @@ export function PapelariaProofPanel({
                 : {})}
               onEditarTexto={onEditarTextoPrevia}
               onRestaurarTexto={onRestaurarTextoPrevia}
+              permitirCamposExtras={permitirCamposExtras}
+              redesCatalogo={redesCatalogoExtras}
+              onAdicionarCampoExtra={onAdicionarCampoExtra}
+              onRemoverCampoExtra={onRemoverCampoExtra}
               className="min-h-0 flex-1"
             />
           ) : hasLivePreview && runtimePreviewConfig ? (

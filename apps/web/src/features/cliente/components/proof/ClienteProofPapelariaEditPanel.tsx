@@ -60,6 +60,7 @@ function PdfEditLayout({
           fetchPrevia={fetchPrevia}
           queryKeyPrefix="portal"
           layout="row"
+          permitirCamposExtras={false}
           onEditarTexto={disabled ? undefined : onEditarTextoPrevia}
           onRestaurarTexto={disabled ? undefined : onRestaurarTextoPrevia}
           className="cliente-proof-edit-preview-pdf h-full min-h-0 w-full flex-1"

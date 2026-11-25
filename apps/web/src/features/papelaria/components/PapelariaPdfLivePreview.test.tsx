@@ -315,4 +315,49 @@ describe("PapelariaPdfLivePreview — edição de texto", () => {
     expect(screen.queryByRole("button", { name: /Editar texto/ })).not.toBeInTheDocument();
     expect(screen.getByTestId("papelaria-previa-regiao-bloqueada")).toBeInTheDocument();
   });
+
+  it("menu de campos extras aparece com permitirCamposExtras", async () => {
+    const onAdicionar = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview
+          modeloId={7}
+          values={{ nome_deputado: "Ana" }}
+          onEditarTexto={vi.fn()}
+          permitirCamposExtras
+          onAdicionarCampoExtra={onAdicionar}
+        />
+      </QueryClientProvider>,
+    );
+    const regiao = await screen.findByTestId("papelaria-previa-regiao");
+    fireEvent.contextMenu(regiao);
+    expect(await screen.findByTestId("papelaria-previa-extras-menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("papelaria-extra-texto-abaixo"));
+    expect(onAdicionar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: "texto",
+        ancora_chave: "7:1:NOME",
+        direcao: "abaixo",
+      }),
+    );
+  });
+
+  it("portal sem permitirCamposExtras não oferece menu de extras", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PapelariaPdfLivePreview
+          modeloId={7}
+          values={{ nome_deputado: "Ana" }}
+          onEditarTexto={vi.fn()}
+          permitirCamposExtras={false}
+          onAdicionarCampoExtra={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    const regiao = await screen.findByTestId("papelaria-previa-regiao");
+    fireEvent.contextMenu(regiao);
+    expect(screen.queryByTestId("papelaria-previa-extras-menu")).not.toBeInTheDocument();
+  });
 });

@@ -47,10 +47,17 @@ import {
 } from "./PapelariaFrenteVersoPicker";
 import type { ProvaPdfRegiao } from "@/api/papelariaProvaPdf";
 import {
+  CAMPOS_EXTRAS_DADOS_KEY,
+  camposExtrasParaDados,
+  novoIdCampoExtra,
+  type CampoExtra,
+} from "@/features/papelaria/papelariaCamposExtras";
+import {
   interpretarEdicao,
   TEXTOS_DADOS_KEY,
   textosParaDados,
 } from "@/features/papelaria/papelariaTextosEditados";
+import type { AdicionarCampoExtraPayload } from "./PapelariaPdfLivePreview";
 
 import { PapelariaModelosLista, resumoListaModelos } from "./PapelariaModelosLista";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
@@ -209,6 +216,7 @@ export function PapelariaCorelPanel({
   const [excludedFields, setExcludedFields] = useState<string[]>([]);
   /** Textos digitados direto na prévia (`modelo:pagina:marcador` → texto). */
   const [textosEditados, setTextosEditados] = useState<Record<string, string>>({});
+  const [camposExtras, setCamposExtras] = useState<CampoExtra[]>([]);
   const [activeDynamicFields, setActiveDynamicFields] = useState<
     ActiveDynamicFieldPlacement[]
   >([]);
@@ -809,6 +817,7 @@ export function PapelariaCorelPanel({
       replicarSp(anoNum, nroNum, origem, { propria: Boolean(contextQuery.data?.repeticao?.propria) }),
     onSuccess: () => {
       setTextosEditados({});
+      setCamposExtras([]);
       setUsarRepeticao(true);
       repeticaoComposicaoAplicada.current = false;
       setViewMode("previa");
@@ -1105,17 +1114,20 @@ export function PapelariaCorelPanel({
     }
     const textos = textosParaDados(textosEditados);
     if (textos) base[TEXTOS_DADOS_KEY] = textos;
+    const extras = camposExtrasParaDados(camposExtras);
+    if (extras) base[CAMPOS_EXTRAS_DADOS_KEY] = extras;
     if (repeticaoAtiva) {
       // Repetição de SP: a prova sai da base recortada da prova antiga; cada
       // face da composição vem dela (modelo 0) ou de um modelo escolhido.
       base[REPETICAO_DADOS_KEY] = `${anoNum}-${nroNum}`;
     }
     return base;
-  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, repeticaoAtiva]);
+  }, [activeDynamicFields, fieldValues, excludedFields, camposProduto, composicao, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras, repeticaoAtiva]);
 
   const valoresPrevia = useMemo(() => {
     const textos = textosParaDados(textosEditados);
-    if (!redesBloco && !textos) return fieldValues;
+    const extras = camposExtrasParaDados(camposExtras);
+    if (!redesBloco && !textos && !extras) return fieldValues;
     return {
       ...fieldValues,
       ...(redesBloco
@@ -1125,8 +1137,9 @@ export function PapelariaCorelPanel({
           }
         : {}),
       ...(textos ? { [TEXTOS_DADOS_KEY]: textos } : {}),
+      ...(extras ? { [CAMPOS_EXTRAS_DADOS_KEY]: extras } : {}),
     };
-  }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados]);
+  }, [fieldValues, redesBloco, redesEscolha, redesEstilo, textosEditados, camposExtras]);
 
   /** Prova PDF: detalhe do modelo, lista do contexto ou composição frente/verso. */
   const temProvaPdfModelo =
@@ -1153,6 +1166,17 @@ export function PapelariaCorelPanel({
    */
   const handleEditarTextoPrevia = useCallback(
     (regiao: ProvaPdfRegiao, texto: string) => {
+      if (regiao.tipo === "campo_extra" || regiao.tipo === "rede_extra") {
+        const eid = regiao.extra_id ?? regiao.chave.replace(/^extra:/, "");
+        setCamposExtras((prev) =>
+          prev.map((e) => {
+            if (e.id !== eid) return e;
+            if (e.tipo === "rede") return { ...e, rede_valor: texto.trim() };
+            return { ...e, texto };
+          }),
+        );
+        return;
+      }
       if (regiao.tipo === "rede" && regiao.rede_chave) {
         const chaveRede = regiao.rede_chave;
         const valor = texto.trim();
@@ -1179,6 +1203,11 @@ export function PapelariaCorelPanel({
 
   const handleRestaurarTextoPrevia = useCallback(
     (regiao: ProvaPdfRegiao) => {
+      if (regiao.tipo === "campo_extra" || regiao.tipo === "rede_extra") {
+        const eid = regiao.extra_id ?? regiao.chave.replace(/^extra:/, "");
+        setCamposExtras((prev) => prev.filter((e) => e.id !== eid));
+        return;
+      }
       if (regiao.tipo === "rede" && regiao.rede_chave) {
         const chaveRede = regiao.rede_chave;
         setRedesEscolha((prev) =>
@@ -1190,6 +1219,25 @@ export function PapelariaCorelPanel({
     },
     [removerTextoEditado],
   );
+
+  const handleAdicionarCampoExtra = useCallback((payload: AdicionarCampoExtraPayload) => {
+    setCamposExtras((prev) => [
+      ...prev,
+      {
+        id: novoIdCampoExtra(),
+        tipo: payload.tipo,
+        ancora_chave: payload.ancora_chave,
+        direcao: payload.direcao,
+        texto: "",
+        rede_chave: payload.tipo === "rede" ? (payload.rede_chave ?? "") : "",
+        rede_valor: payload.tipo === "rede" ? (payload.rede_valor ?? "") : "",
+      },
+    ]);
+  }, []);
+
+  const handleRemoverCampoExtra = useCallback((extraId: string) => {
+    setCamposExtras((prev) => prev.filter((e) => e.id !== extraId));
+  }, []);
 
   const runGerarArquivo = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
@@ -2123,6 +2171,13 @@ export function PapelariaCorelPanel({
             }
             onEditarTextoPrevia={handleEditarTextoPrevia}
             onRestaurarTextoPrevia={handleRestaurarTextoPrevia}
+            permitirCamposExtras
+            redesCatalogoExtras={(redesBloco?.redes ?? []).map((r) => ({
+              chave: r.chave,
+              nome: r.nome,
+            }))}
+            onAdicionarCampoExtra={handleAdicionarCampoExtra}
+            onRemoverCampoExtra={handleRemoverCampoExtra}
             provaStatus={contextQuery.data?.prova_status ?? null}
             previaRepeticao={repeticaoAtiva ? { ano: anoNum, nro: nroNum } : null}
             topoPrevia={
@@ -2191,6 +2246,7 @@ export function PapelariaCorelPanel({
                             onSelect: () => {
                               setUsarRepeticao(true);
                               setTextosEditados({});
+                              setCamposExtras([]);
                             },
                           }
                         : null

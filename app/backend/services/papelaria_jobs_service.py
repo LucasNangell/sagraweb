@@ -337,6 +337,23 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
             if textos:
                 cleaned[key_stripped] = json.dumps(textos, ensure_ascii=False)
             continue
+        if key_stripped == "__campos_extras":
+            from services.papelaria_campos_extras_service import (
+                CamposExtrasError,
+                normalizar_campos_extras,
+            )
+
+            try:
+                extras = normalizar_campos_extras(value)
+            except CamposExtrasError as exc:
+                raise ValueError(str(exc)) from exc
+            for extra in extras:
+                for trecho in (extra.get("texto") or "", extra.get("rede_valor") or ""):
+                    if _PATH_PATTERN.search(trecho) or "\\\\" in trecho:
+                        raise ValueError("Campo extra não pode conter caminho de arquivo.")
+            if extras:
+                cleaned[key_stripped] = json.dumps(extras, ensure_ascii=False)
+            continue
         if key_stripped == "__composicao":
             from services.papelaria_faces_service import ComposicaoError, normalizar_composicao
 
@@ -1204,6 +1221,7 @@ def create_imposicao_job(
     variante: Optional[str] = None,
     imposicao_config: Optional[dict[str, Any]] = None,
     juntada_os: Optional[list[dict[str, Any]]] = None,
+    slot_os: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Gera JDF Apogee (sync) ou enfileira pipeline pré-impresso/juntada (worker)."""
     ensure_papelaria_jobs_tables()
@@ -1256,6 +1274,7 @@ def create_imposicao_job(
             variante=var_v2,
             registro=perfis_ativos[var_v2],
             juntada_os=juntada_os,
+            slot_os=slot_os,
         )
 
     opcoes = produto_imp_svc.resolve_imposicao_opcoes(
@@ -1276,6 +1295,7 @@ def create_imposicao_job(
             variante=only_var,
             registro=only_reg,
             juntada_os=juntada_os,
+            slot_os=slot_os,
         )
     if not disponiveis:
         raise ValueError(

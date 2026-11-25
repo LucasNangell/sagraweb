@@ -272,9 +272,20 @@ function PedidoDetalheBody({
           </dl>
         </section>
 
-        {pedido.status === "pausado" && pedido.pausa_motivo ? (
+        {pedido.status === "pausado" ? (
           <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
-            <strong>Pausado:</strong> {pedido.pausa_motivo}
+            <p className="font-semibold">
+              Pausado por{" "}
+              {pedido.pausado_por
+                ? pessoa(pedido.pausado_por_nome, pedido.pausado_por)
+                : pessoa(pedido.iniciado_por_nome, pedido.iniciado_por)}
+              {pedido.pausado_em ? ` · ${formatDataHora(pedido.pausado_em)}` : ""}
+            </p>
+            {pedido.pausa_motivo ? (
+              <p>
+                <span className="font-medium">Motivo:</span> {pedido.pausa_motivo}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

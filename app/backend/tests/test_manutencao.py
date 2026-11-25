@@ -469,3 +469,27 @@ def test_edicoes_aceitam_post_pelo_endereco_publico(caminho):
             metodos |= set(rota.methods)
     assert "POST" in metodos
     assert metodos & {"PUT", "PATCH"}  # compatibilidade com telas antigas
+
+
+def test_pausados_trazem_quem_pausou_e_quando():
+    itens = [
+        {"id": 1, "status": "pausado", "iniciado_por": "100"},
+        {"id": 2, "status": "em_execucao", "iniciado_por": "100"},
+    ]
+    linhas = [{"pedido_id": 1, "ponto": 200, "criado_em": datetime(2026, 11, 25, 10, 30)}]
+    with (
+        patch.object(svc.db, "execute_query", return_value=linhas) as q,
+        patch.object(svc, "_nomes_por_ponto", return_value={"200": "Operador Fulano"}),
+    ):
+        svc._anexar_pausa(itens)
+    assert q.call_args.args[1] == (1,)  # só consulta os pausados
+    assert itens[0]["pausado_por"] == "200"
+    assert itens[0]["pausado_por_nome"] == "Operador Fulano"
+    assert itens[0]["pausado_em"].startswith("2026-11-25T10:30")
+    assert "pausado_por" not in itens[1]
+
+
+def test_sem_pausados_nao_consulta_eventos():
+    with patch.object(svc.db, "execute_query") as q:
+        svc._anexar_pausa([{"id": 2, "status": "fila"}])
+    q.assert_not_called()

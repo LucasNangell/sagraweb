@@ -576,6 +576,7 @@ def list_pedidos(
         )
     items = [_serialize_pedido(r) for r in out_rows]
     _with_names(items, _PONTO_FIELDS)
+    _anexar_pausa(items)
     if incluir_similares:
         try:
             contagem = contar_similares(items)
@@ -586,6 +587,37 @@ def list_pedidos(
             if it["status"] in STATUS_ABERTOS:
                 it["similares_count"] = contagem.get(it["id"], 0)
     return items
+
+
+def _anexar_pausa(items: list[dict[str, Any]]) -> None:
+    """Quem pausou e quando (último evento "pausado"), para a Gerência acompanhar."""
+    pausados = [it for it in items if it.get("status") == STATUS_PAUSADO]
+    if not pausados:
+        return
+    ids = [int(it["id"]) for it in pausados]
+    ph = ", ".join(["%s"] * len(ids))
+    try:
+        rows = db.execute_query(
+            f"""
+            SELECT e.pedido_id, e.ponto, e.criado_em
+            FROM tab_manutencao_evento e
+            JOIN (
+                SELECT pedido_id, MAX(id) AS id FROM tab_manutencao_evento
+                WHERE tipo = 'pausado' AND pedido_id IN ({ph})
+                GROUP BY pedido_id
+            ) ult ON ult.id = e.id
+            """,
+            tuple(ids),
+        ) or []
+    except Exception as exc:  # pragma: no cover - informação auxiliar
+        logger.warning("Manutenção: falha ao buscar pausas: %s", exc)
+        rows = []
+    por_pedido = {int(r["pedido_id"]): r for r in rows}
+    for it in pausados:
+        r = por_pedido.get(int(it["id"])) or {}
+        it["pausado_por"] = _ponto_str(r.get("ponto")) or None
+        it["pausado_em"] = _iso(r.get("criado_em"))
+    _with_names(pausados, ("pausado_por",))
 
 
 def list_eventos(pedido_id: int) -> list[dict[str, Any]]:
@@ -619,6 +651,7 @@ def get_pedido(pedido_id: int, include_eventos: bool = False) -> dict[str, Any]:
         raise ManutencaoNotFound("Pedido de manutenção não encontrado")
     item = _serialize_pedido(rows[0])
     _with_names([item], _PONTO_FIELDS)
+    _anexar_pausa([item])
     if include_eventos:
         item["eventos"] = list_eventos(pedido_id)
     return item

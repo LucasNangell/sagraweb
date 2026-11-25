@@ -204,6 +204,8 @@ function PedidosView({
   }, [busca, maquinaFiltro, pedidosQ.data]);
 
   const { fila, execucao, finalizados } = useMemo(() => agruparPedidos(filtrados), [filtrados]);
+  const pausados = execucao.filter((p) => p.status === "pausado");
+  const emAndamento = execucao.filter((p) => p.status !== "pausado");
   const finalizadosVisiveis = mostrarCancelados
     ? finalizados
     : finalizados.filter((p) => p.status === "concluido");
@@ -336,15 +338,27 @@ function PedidosView({
               description="Serviços iniciados pelos operadores"
             />
             <div className="flex-1 space-y-2 p-3">
-              {execucao.length ? (
-                execucao.map((p) => <PedidoCard key={p.id} pedido={p} onAbrir={onAbrir} />)
-              ) : (
+              {pausados.length ? (
+                <div className="space-y-2 rounded-lg bg-violet-50/60 p-2 ring-1 ring-violet-200">
+                  <p className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-violet-800">
+                    <PauseCircle className="h-3.5 w-3.5" aria-hidden />
+                    Pausados ({pausados.length})
+                  </p>
+                  {pausados.map((p) => (
+                    <PedidoCard key={p.id} pedido={p} onAbrir={onAbrir} />
+                  ))}
+                </div>
+              ) : null}
+              {emAndamento.map((p) => (
+                <PedidoCard key={p.id} pedido={p} onAbrir={onAbrir} />
+              ))}
+              {!execucao.length ? (
                 <EmptyState
                   icon={PlayCircle}
                   title="Nenhum serviço em andamento"
                   description="Quando um operador iniciar um pedido, ele aparece aqui."
                 />
-              )}
+              ) : null}
             </div>
           </Panel>
           <Panel className="flex min-h-[12rem] flex-col">

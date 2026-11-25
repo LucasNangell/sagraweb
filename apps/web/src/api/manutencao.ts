@@ -125,6 +125,10 @@ export interface ManutencaoPedido {
   diagnostico?: string | null;
   solucao_passos: string[];
   pausa_motivo?: string | null;
+  /** Só com status "pausado": quem pausou e quando. */
+  pausado_por?: string | null;
+  pausado_por_nome?: string | null;
+  pausado_em?: string | null;
   concluido_por?: string | null;
   concluido_por_nome?: string | null;
   concluido_em?: string | null;

@@ -137,11 +137,14 @@ export function PapelariaTextoEditor({
     if (regiao.rede_chave) return [{ chave: regiao.rede_chave, valor: regiao.texto || "" }];
     return [{ chave: "instagram", valor: regiao.texto || "" }];
   });
+  // Só o meta local guarda a intenção do operador (null = herdar da prova).
+  // `regiao.estilo` / `regiao.icone_pt` são o valor já resolvido no desenho —
+  // usá-los aqui “fixava” herança e fazia a logo parecer não reagir.
   const [estiloRede, setEstiloRede] = useState<PapelariaRedeEstilo | null>(
-    extraMeta?.estilo ?? (regiao.estilo as PapelariaRedeEstilo | null) ?? null,
+    extraMeta?.estilo ?? null,
   );
   const [iconePt, setIconePt] = useState<number | null>(
-    extraMeta?.icone_pt ?? regiao.icone_pt ?? null,
+    extraMeta?.icone_pt ?? null,
   );
 
   const caixaRef = useRef<HTMLDivElement>(null);

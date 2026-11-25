@@ -72,6 +72,38 @@ describe("papelariaCamposExtras", () => {
     expect(camposExtrasParaDados([])).toBeNull();
   });
 
+  it("icone_pt null na serialização omite a chave (herda no backend)", () => {
+    const json = camposExtrasParaDados([
+      {
+        id: "extra_r",
+        tipo: "rede",
+        ancora_chave: "7:1:NOME",
+        direcao: "abaixo",
+        texto: "",
+        rede_chave: "instagram",
+        rede_valor: "@ana",
+        redes: [
+          { chave: "instagram", valor: "@ana" },
+          { chave: "x", valor: "@x" },
+        ],
+        estilo: null,
+        icone_pt: null,
+        x_pt: null,
+        y_pt: null,
+        offset_x_pt: 0,
+        offset_y_pt: 0,
+        align_h: "esquerda",
+        align_v: "topo",
+        tamanho_pt: 10,
+        negrito: [],
+      },
+    ]);
+    expect(json).toContain('"redes"');
+    expect(json).toContain('"x"');
+    expect(json).not.toContain("icone_pt");
+    expect(json).not.toContain('"estilo"');
+  });
+
   it("compat legado e multi-rede com estilo/icone", () => {
     const legado = normalizarCamposExtras([
       {

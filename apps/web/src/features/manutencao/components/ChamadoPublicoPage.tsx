@@ -102,7 +102,8 @@ export function ChamadoPublicoPage({ codigo }: { codigo: string }) {
   const maquina = maquinaQ.data;
 
   return (
-    <div className="min-h-dvh bg-slate-100">
+    // html/body/#root têm overflow:hidden (layout do app) — a página rola no próprio contêiner.
+    <div className="h-dvh overflow-y-auto overscroll-y-contain bg-slate-100 [-webkit-overflow-scrolling:touch]">
       <header className="bg-slate-900 px-4 pb-16 pt-6 text-white">
         <div className="mx-auto flex max-w-lg items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">

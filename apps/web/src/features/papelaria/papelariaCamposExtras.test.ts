@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAMPOS_EXTRAS_DADOS_KEY,
   alignParaCelula,
+  ancoraPtDeAreaFrac,
   camposExtrasParaDados,
   celulaParaAlign,
   mmParaPt,
@@ -80,6 +81,22 @@ describe("papelariaCamposExtras", () => {
   it("mapeia grade 3x3", () => {
     expect(celulaParaAlign(0, 1)).toEqual({ align_h: "centro", align_v: "topo" });
     expect(alignParaCelula("direita", "base")).toEqual({ row: 2, col: 2 });
+  });
+
+  it("ancoraPtDeAreaFrac usa o ponto 3×3, não o canto SE", () => {
+    const area: [number, number, number, number] = [0.1, 0.2, 0.5, 0.4];
+    expect(ancoraPtDeAreaFrac(area, 100, 200, "esquerda", "topo")).toEqual({
+      x_pt: 10,
+      y_pt: 40,
+    });
+    expect(ancoraPtDeAreaFrac(area, 100, 200, "centro", "meio")).toEqual({
+      x_pt: 30,
+      y_pt: 60,
+    });
+    expect(ancoraPtDeAreaFrac(area, 100, 200, "direita", "base")).toEqual({
+      x_pt: 50,
+      y_pt: 80,
+    });
   });
 
   it("toggle negrito no intervalo", () => {

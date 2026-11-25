@@ -32,6 +32,7 @@ import {
 import type { PapelariaComposicao } from "@/features/papelaria/types";
 import {
   DIRECOES_EXTRA,
+  ancoraPtDeAreaFrac,
   mmParaPt,
   segmentosComNegrito,
   selecaoEstaEmNegrito,
@@ -42,7 +43,6 @@ import {
   type CampoExtraTipo,
 } from "@/features/papelaria/papelariaCamposExtras";
 import {
-  cropRegiaoDaImagem,
   delayPreviaParaChave,
   type AreaFrac,
   type ConteudoOtimistaExtra,
@@ -94,8 +94,10 @@ type DragState = {
   moved: boolean;
   /** Após soltar: mantém área até a prévia nova confirmar. */
   committed?: boolean;
-  /** Recorte PNG da posição original (clone visual). */
-  cropDataUrl?: string | null;
+  align_h: CampoExtraAlignH;
+  align_v: CampoExtraAlignV;
+  /** Fantasma tipográfico (evita carregar pixels de elementos atrás). */
+  ghost?: ConteudoOtimistaExtra | null;
 };
 
 /**
@@ -750,25 +752,44 @@ export function PapelariaPdfLivePreview({
                           )),
                         ]
                       : null}
-                    {drag &&
-                    drag.pagina === i &&
-                    drag.moved &&
-                    drag.cropDataUrl ? (
+                    {drag && drag.pagina === i && drag.moved ? (
                       <>
                         <div
                           aria-hidden
                           data-testid="papelaria-extra-tapa-origem"
-                          className="pointer-events-none absolute bg-white"
+                          className="pointer-events-none absolute z-[5] bg-white"
                           style={estiloAreaFrac(drag.orig, caixa)}
                         />
-                        <img
-                          aria-hidden
-                          data-testid="papelaria-extra-clone"
-                          src={drag.cropDataUrl}
-                          alt=""
-                          className="pointer-events-none absolute object-fill"
-                          style={estiloAreaFrac(drag.cur, caixa)}
-                        />
+                        {drag.ghost ? (
+                          <div
+                            aria-hidden
+                            data-testid="papelaria-extra-clone"
+                            className="pointer-events-none absolute z-[25] overflow-hidden whitespace-pre leading-none text-neutral-900"
+                            style={{
+                              ...estiloAreaFrac(drag.cur, caixa),
+                              fontSize: `${Math.max(4, Math.min(72, drag.ghost.tamanho_pt))}pt`,
+                              fontFamily: fonteCssPreview(drag.ghost.fonte),
+                              textAlign:
+                                drag.ghost.align_h === "centro"
+                                  ? "center"
+                                  : drag.ghost.align_h === "direita"
+                                    ? "right"
+                                    : "left",
+                            }}
+                          >
+                            {segmentosComNegrito(
+                              drag.ghost.texto || " ",
+                              drag.ghost.negrito,
+                            ).map((seg, si) => (
+                              <span
+                                key={si}
+                                style={{ fontWeight: seg.negrito ? 700 : 400 }}
+                              >
+                                {seg.texto}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
                     {regioesPagina.map((r) => {
@@ -780,6 +801,8 @@ export function PapelariaPdfLivePreview({
                         drag && drag.chave === r.chave ? drag.cur : r.area;
                       const bloqueada = Boolean(r.bloquear_edicao);
                       const ativa = !bloqueada && r.chave === editando;
+                      const arrastandoEsta = Boolean(drag && drag.chave === r.chave);
+                      const outroArrasteAtivo = Boolean(drag && drag.chave !== r.chave);
                       const estiloArea = estiloAreaFrac(area, caixa);
                       const otimista =
                         extraId && conteudosOtimistas[extraId]
@@ -812,16 +835,20 @@ export function PapelariaPdfLivePreview({
                         className: cn(
                           "absolute rounded-[2px] outline-1 outline-offset-1 transition-colors focus-visible:outline-2 focus-visible:outline-secondary-blue",
                           isExtra && menuExtrasAtivo ? "cursor-grab active:cursor-grabbing" : "cursor-text",
+                          arrastandoEsta && "z-20 cursor-grabbing",
+                          outroArrasteAtivo && "pointer-events-none",
                           ativa
                             ? "bg-secondary-blue/10 outline outline-secondary-blue"
                             : r.editado || isExtra
                               ? "outline-dashed outline-amber-400/80 hover:bg-amber-100/30"
                               : "outline-dashed outline-transparent hover:bg-secondary-blue/5 hover:outline-secondary-blue/70",
+                          arrastandoEsta && drag?.moved && "opacity-0",
                         ),
                         style: estiloArea,
                         onClick: (e: ReactMouseEvent) => {
                           if (drag?.moved) {
                             e.preventDefault();
+                            e.stopPropagation();
                             return;
                           }
                           setEditando(r.chave);
@@ -830,12 +857,17 @@ export function PapelariaPdfLivePreview({
                           isExtra && menuExtrasAtivo && extraId && onMoverCampoExtra
                             ? (e: ReactPointerEvent<HTMLButtonElement>) => {
                                 if (e.button !== 0) return;
+                                e.preventDefault();
+                                e.stopPropagation();
                                 try {
                                   e.currentTarget.setPointerCapture(e.pointerId);
                                 } catch {
                                   /* jsdom / captura indisponível */
                                 }
                                 const orig = [...r.area] as AreaFrac;
+                                const align_h = r.align_h ?? "esquerda";
+                                const align_v = r.align_v ?? "topo";
+                                const metaExtra = extrasMeta?.[extraId];
                                 setDrag({
                                   chave: r.chave,
                                   extraId,
@@ -848,7 +880,17 @@ export function PapelariaPdfLivePreview({
                                   pageH: r.page_h || 842,
                                   moved: false,
                                   committed: false,
-                                  cropDataUrl: null,
+                                  align_h: metaExtra?.align_h ?? align_h,
+                                  align_v: metaExtra?.align_v ?? align_v,
+                                  ghost: {
+                                    texto: r.texto || "",
+                                    tamanho_pt:
+                                      metaExtra?.tamanho_pt ?? r.tamanho_pt ?? 11,
+                                    negrito: metaExtra?.negrito ?? r.negrito ?? [],
+                                    align_h: metaExtra?.align_h ?? align_h,
+                                    align_v: metaExtra?.align_v ?? align_v,
+                                    fonte: r.fonte,
+                                  },
                                 });
                               }
                             : undefined,
@@ -865,6 +907,7 @@ export function PapelariaPdfLivePreview({
                                     prev.moved ||
                                     Math.hypot(dxPx, dyPx) >= DRAG_THRESHOLD_PX;
                                   if (!moved) return prev;
+                                  e.stopPropagation();
                                   const dx = dxPx / caixa.width;
                                   const dy = dyPx / caixa.height;
                                   const [a0, a1, a2, a3] = prev.orig;
@@ -876,12 +919,7 @@ export function PapelariaPdfLivePreview({
                                   ny0 = Math.max(0, Math.min(1 - h, ny0));
                                   const cur: AreaFrac = [nx0, ny0, nx0 + w, ny0 + h];
                                   calcGuides(i, cur, r.chave, caixa);
-                                  let cropDataUrl = prev.cropDataUrl;
-                                  if (!cropDataUrl) {
-                                    const img = imgRefs.current[i];
-                                    if (img) cropDataUrl = cropRegiaoDaImagem(img, prev.orig);
-                                  }
-                                  return { ...prev, cur, moved: true, cropDataUrl };
+                                  return { ...prev, cur, moved: true };
                                 });
                               }
                             : undefined,
@@ -893,15 +931,23 @@ export function PapelariaPdfLivePreview({
                                 } catch {
                                   /* ignore */
                                 }
+                                e.stopPropagation();
                                 setDrag((prev) => {
                                   if (!prev || prev.chave !== r.chave) return prev;
                                   setGuides({ v: [], h: [] });
                                   if (!prev.moved) return null;
                                   if (onMoverCampoExtra) {
+                                    const ancora = ancoraPtDeAreaFrac(
+                                      prev.cur,
+                                      prev.pageW,
+                                      prev.pageH,
+                                      prev.align_h,
+                                      prev.align_v,
+                                    );
                                     onMoverCampoExtra({
                                       extraId: prev.extraId,
-                                      x_pt: prev.cur[0] * prev.pageW,
-                                      y_pt: prev.cur[1] * prev.pageH,
+                                      x_pt: ancora.x_pt,
+                                      y_pt: ancora.y_pt,
                                     });
                                   }
                                   // Mantém cur até !atualizando (sem snap-back).

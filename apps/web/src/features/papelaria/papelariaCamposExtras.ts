@@ -185,6 +185,29 @@ export function alignParaCelula(
   };
 }
 
+/**
+ * Converte a área relativa da região (hitbox) no ponto âncora 3×3 em pt.
+ * O backend grava ``x_pt``/``y_pt`` como âncora (não canto superior-esquerdo).
+ */
+export function ancoraPtDeAreaFrac(
+  area: [number, number, number, number],
+  pageW: number,
+  pageH: number,
+  align_h: CampoExtraAlignH = "esquerda",
+  align_v: CampoExtraAlignV = "topo",
+): { x_pt: number; y_pt: number } {
+  const [x0, y0, x1, y1] = area;
+  const left = x0 * pageW;
+  const right = x1 * pageW;
+  const top = y0 * pageH;
+  const bottom = y1 * pageH;
+  const x_pt =
+    align_h === "direita" ? right : align_h === "centro" ? (left + right) / 2 : left;
+  const y_pt =
+    align_v === "base" ? bottom : align_v === "meio" ? (top + bottom) / 2 : top;
+  return { x_pt, y_pt };
+}
+
 /** Segmentos consecutivos com flag de negrito (para preview tipográfico). */
 export function segmentosComNegrito(
   texto: string,

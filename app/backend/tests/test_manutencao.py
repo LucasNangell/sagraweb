@@ -10,6 +10,13 @@ from routers import manutencao_routes as routes
 from services import manutencao_service as svc
 
 
+@pytest.fixture(autouse=True)
+def _sem_horario_de_trabalho():
+    """Sem horário configurado: todos são avisados (não consulta o banco)."""
+    with patch("services.manutencao_horario_service.horarios_por_ponto", return_value={}):
+        yield
+
+
 def _req(perms):
     request = MagicMock()
     request.state.sagra_permissions = perms

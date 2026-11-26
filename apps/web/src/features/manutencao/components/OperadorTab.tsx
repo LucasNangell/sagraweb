@@ -28,6 +28,7 @@ import {
 } from "../manutencaoUi";
 import { useMaquinas, useManutencaoMutation, usePedidos } from "../useManutencaoData";
 import { ExecucaoDialog } from "./ExecucaoDialog";
+import { HorarioTrabalhoCard } from "./HorarioTrabalhoCard";
 import { ManutencaoNotificacoesCard } from "./ManutencaoNotificacoesCard";
 import {
   Badge,
@@ -131,6 +132,7 @@ export function OperadorTab({
 
       {/* No app Android as notificações são nativas (serviço em segundo plano). */}
       {isSagraManutencaoApp() ? null : <ManutencaoNotificacoesCard />}
+      <HorarioTrabalhoCard />
 
       <AlertaFila
         total={fila.length}

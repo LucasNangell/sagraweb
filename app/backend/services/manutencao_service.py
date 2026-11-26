@@ -1362,9 +1362,21 @@ def _notify(
     except Exception as exc:  # pragma: no cover
         logger.debug("Manutenção: push indisponível: %s", exc)
         return
-    alvos = [p for p in dict.fromkeys(pontos) if p]
+    todos = [p for p in dict.fromkeys(pontos) if p]
+    # Fora do horário de trabalho do usuário: fica só o registro na central de
+    # notificações — sem tocar o celular (app Android/Web Push) nem o navegador.
+    try:
+        from services.manutencao_horario_service import filtrar_por_horario
+
+        alvos, fora_horario = filtrar_por_horario(todos, urgente=urgent)
+    except Exception as exc:  # pragma: no cover - nunca deixar de avisar por isso
+        logger.warning("Manutenção: filtro de horário falhou: %s", exc)
+        alvos, fora_horario = todos, []
+    if fora_horario:
+        logger.info("Manutenção: aviso silenciado (fora do horário) para %s", ", ".join(fora_horario))
     ids: dict[str, Optional[int]] = {}
-    for ponto in alvos:
+    for ponto in todos:
+        alertar = ponto in alvos
         try:
             nid = insert_user_notification(
                 ponto=ponto,
@@ -1385,8 +1397,8 @@ def _notify(
                 ano=0,
                 notification_id=nid,
                 action="manutencao",
-                browser_notify=True,
-                urgent=urgent,
+                browser_notify=alertar,
+                urgent=urgent and alertar,
             )
         except Exception as exc:
             logger.warning("Manutenção: falha ao notificar ponto %s: %s", ponto, exc)

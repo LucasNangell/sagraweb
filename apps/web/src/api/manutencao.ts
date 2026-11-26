@@ -226,6 +226,7 @@ export const manutencaoKeys = {
     ["manutencao", "historico", q, maquinaId] as const,
   aparelhos: ["manutencao", "aparelhos"] as const,
   appVersao: ["manutencao", "app-versao"] as const,
+  horario: ["manutencao", "horario"] as const,
 };
 
 function json(method: string, body?: unknown): RequestInit {
@@ -446,4 +447,24 @@ export function revogarManutencaoAparelho(id: number) {
 
 export function fetchManutencaoAppVersao() {
   return apiFetch<ManutencaoAppVersao>("/manutencao/app/versao");
+}
+
+/** Horário de trabalho: fora dele o celular não recebe avisos (dias ISO: 1 = seg … 7 = dom). */
+export interface ManutencaoHorario {
+  ativo: boolean;
+  dias: number[];
+  inicio: string;
+  fim: string;
+  urgentes_fora: boolean;
+  atualizado_em?: string | null;
+  /** Calculado no servidor: o usuário está dentro do horário agora. */
+  avisando_agora?: boolean;
+}
+
+export function fetchManutencaoHorario() {
+  return apiFetch<ManutencaoHorario>("/manutencao/horario");
+}
+
+export function salvarManutencaoHorario(body: Omit<ManutencaoHorario, "atualizado_em" | "avisando_agora">) {
+  return apiFetch<ManutencaoHorario>("/manutencao/horario", json("POST", body));
 }

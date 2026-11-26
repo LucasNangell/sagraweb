@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from services import manutencao_app_service as app_svc
+from services import manutencao_horario_service as horario_svc
 from services import manutencao_service as svc
 
 logger = logging.getLogger(__name__)
@@ -375,6 +376,53 @@ def post_push_teste(request: Request):
         raise HTTPException(status_code=401, detail="Sessão sem ponto identificado")
     return _run(lambda: svc.enviar_push_teste(ponto))
 
+
+
+# ------------------------------------------------------- horário de trabalho
+
+
+class HorarioPayload(BaseModel):
+    ativo: bool = False
+    dias: list[int] = Field(default_factory=lambda: list(horario_svc.DIAS_PADRAO), max_length=7)
+    inicio: str = Field(default=horario_svc.INICIO_PADRAO, pattern=r"^\d{2}:\d{2}$")
+    fim: str = Field(default=horario_svc.FIM_PADRAO, pattern=r"^\d{2}:\d{2}$")
+    urgentes_fora: bool = False
+
+
+def _horario_resposta(cfg: dict) -> dict:
+    return {**cfg, "avisando_agora": horario_svc.dentro_do_horario(cfg)}
+
+
+def _ponto_obrigatorio(request: Request) -> str:
+    ponto = _ponto(request)
+    if not ponto or ponto.strip("0") == "":
+        raise HTTPException(status_code=401, detail="Sessão sem ponto identificado")
+    return ponto
+
+
+@router.get("/horario")
+def get_horario(request: Request):
+    """Horário de trabalho do usuário logado (fora dele o celular não recebe avisos)."""
+    _require_view(request)
+    return _horario_resposta(horario_svc.obter_horario(_ponto_obrigatorio(request)))
+
+
+@router.post("/horario")
+def post_horario(body: HorarioPayload, request: Request):
+    _require_view(request)
+    ponto = _ponto_obrigatorio(request)
+    try:
+        cfg = horario_svc.salvar_horario(
+            ponto,
+            ativo=body.ativo,
+            dias=body.dias,
+            inicio=body.inicio,
+            fim=body.fim,
+            urgentes_fora=body.urgentes_fora,
+        )
+    except horario_svc.HorarioInvalido as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _horario_resposta(cfg)
 
 
 # ------------------------------------------------- visualizações e app Android

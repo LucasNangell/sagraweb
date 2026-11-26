@@ -175,6 +175,18 @@ _DDL = (
         KEY idx_manut_app_notif_criado (criado_em)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    # Horário de trabalho por usuário: fora dele o app/push não avisa.
+    """
+    CREATE TABLE IF NOT EXISTS tab_manutencao_horario (
+        ponto VARCHAR(32) NOT NULL PRIMARY KEY,
+        ativo TINYINT(1) NOT NULL DEFAULT 0,
+        dias VARCHAR(20) NOT NULL DEFAULT '1,2,3,4,5',
+        inicio CHAR(5) NOT NULL DEFAULT '07:00',
+        fim CHAR(5) NOT NULL DEFAULT '17:00',
+        urgentes_fora TINYINT(1) NOT NULL DEFAULT 0,
+        atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 )
 
 

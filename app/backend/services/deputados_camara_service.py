@@ -232,7 +232,9 @@ def _parse_deputado(id_dep: int, list_item: dict[str, Any], detail: dict[str, An
     partido = str(status.get("siglaPartido") or list_item.get("siglaPartido") or "").strip()
     uf = str(status.get("siglaUf") or list_item.get("siglaUf") or "").strip()
     gabinete, andar = _formatar_gabinete(gab)
-    nome_eleitoral = str(status.get("nomeEleitoral") or status.get("nome") or list_item.get("nome") or "").strip()
+    # Nome usado nos campos = coluna ``Nome`` da tabDeputadosCamara (ultimoStatus.nome),
+    # com acentos e maiúsculas/minúsculas; o eleitoral só na falta dele.
+    nome_eleitoral = str(status.get("nome") or status.get("nomeEleitoral") or list_item.get("nome") or "").strip()
     nome = str(list_item.get("nome") or nome_eleitoral or "").strip()
     email = _resolver_email(list_item, status, gab)
     foto = str(status.get("urlFoto") or list_item.get("urlFoto") or "").strip()
@@ -375,20 +377,58 @@ ON DUPLICATE KEY UPDATE
 """
 
 
+# DDL embutido: a release de produção não leva ``deploy/sql`` (o arquivo
+# ``deploy/sql/create_tab_deputados_camara.sql`` fica para migração manual e
+# um teste garante que os dois continuam iguais).
+_DDL_TAB_DEPUTADOS_CAMARA = """
+CREATE TABLE IF NOT EXISTS tabDeputadosCamara (
+    IdCamara INT NOT NULL,
+    Uri VARCHAR(255) NOT NULL DEFAULT '',
+    NomeCivil VARCHAR(255) NOT NULL DEFAULT '',
+    Nome VARCHAR(255) NOT NULL DEFAULT '',
+    NomeEleitoral VARCHAR(255) NOT NULL DEFAULT '',
+    NomeNormalizado VARCHAR(255) NOT NULL DEFAULT '',
+    NomeCivilNormalizado VARCHAR(255) NOT NULL DEFAULT '',
+    SiglaPartido VARCHAR(20) NOT NULL DEFAULT '',
+    UriPartido VARCHAR(255) NOT NULL DEFAULT '',
+    SiglaUf CHAR(2) NOT NULL DEFAULT '',
+    IdLegislatura INT NULL,
+    UrlFoto VARCHAR(500) NOT NULL DEFAULT '',
+    Email VARCHAR(255) NOT NULL DEFAULT '',
+    DataStatus DATE NULL,
+    GabineteNome VARCHAR(40) NOT NULL DEFAULT '',
+    GabinetePredio VARCHAR(20) NOT NULL DEFAULT '',
+    GabineteSala VARCHAR(40) NOT NULL DEFAULT '',
+    GabineteAndar VARCHAR(20) NOT NULL DEFAULT '',
+    GabineteTelefone VARCHAR(40) NOT NULL DEFAULT '',
+    GabineteEmail VARCHAR(255) NOT NULL DEFAULT '',
+    Situacao VARCHAR(80) NOT NULL DEFAULT '',
+    CondicaoEleitoral VARCHAR(80) NOT NULL DEFAULT '',
+    DescricaoStatus VARCHAR(255) NOT NULL DEFAULT '',
+    Cpf VARCHAR(14) NOT NULL DEFAULT '',
+    Sexo CHAR(1) NOT NULL DEFAULT '',
+    UrlWebsite VARCHAR(500) NOT NULL DEFAULT '',
+    RedeSocial MEDIUMTEXT NULL,
+    DataNascimento DATE NULL,
+    DataFalecimento DATE NULL,
+    UfNascimento CHAR(2) NOT NULL DEFAULT '',
+    MunicipioNascimento VARCHAR(120) NOT NULL DEFAULT '',
+    Escolaridade VARCHAR(120) NOT NULL DEFAULT '',
+    DadosJson MEDIUMTEXT NOT NULL,
+    AtualizadoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (IdCamara),
+    KEY idx_dep_camara_nome_norm (NomeNormalizado),
+    KEY idx_dep_camara_nome_civil_norm (NomeCivilNormalizado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+"""
+
+
 def ensure_tab_deputados_camara(executar=None) -> None:
     global _schema_tab_deputados_ok
     executar = executar or db.execute_query
     if executar is db.execute_query and _schema_tab_deputados_ok:
         return
-    ddl_path = (
-        __import__("pathlib").Path(__file__).resolve().parents[3]
-        / "deploy"
-        / "sql"
-        / "create_tab_deputados_camara.sql"
-    )
-    sql = ddl_path.read_text(encoding="utf-8")
-    sql = sql[sql.index("CREATE TABLE"):]
-    executar(sql)
+    executar(_DDL_TAB_DEPUTADOS_CAMARA.strip())
     if executar is db.execute_query:
         _schema_tab_deputados_ok = True
 
@@ -472,8 +512,16 @@ def _deputado_de_dados(dados: dict[str, Any]) -> DeputadoCamara:
     return _parse_deputado(dep_id, list_item, dados)
 
 
+def _garantir_tabela_para_leitura() -> None:
+    """Cria a tabela se faltar; sem conseguir, a leitura segue (a tabela pode já existir)."""
+    try:
+        ensure_tab_deputados_camara()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Não foi possível verificar/criar %s: %s", _TAB_DEPUTADOS_CAMARA, exc)
+
+
 def _buscar_deputado_na_tabela(nome: str) -> Optional[DeputadoCamara]:
-    ensure_tab_deputados_camara()
+    _garantir_tabela_para_leitura()
     rows = db.execute_query(
         """
         SELECT IdCamara, Nome, NomeEleitoral, NomeCivil
@@ -515,7 +563,7 @@ def _buscar_deputado_na_tabela(nome: str) -> Optional[DeputadoCamara]:
 
 
 def _buscar_deputado_na_tabela_por_id(deputado_id: int) -> Optional[DeputadoCamara]:
-    ensure_tab_deputados_camara()
+    _garantir_tabela_para_leitura()
     rows = db.execute_query(
         "SELECT DadosJson FROM tabDeputadosCamara WHERE IdCamara = %s LIMIT 1",
         (deputado_id,),

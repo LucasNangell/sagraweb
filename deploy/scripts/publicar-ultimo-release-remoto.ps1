@@ -14,7 +14,7 @@
 
 .USAGE
   powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1
-  powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1 -ReleaseName "20260925_122557"
+  powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1 -ReleaseName "staging_20261127_152233"
   powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1 -Force
   powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1 -ResetCredential
 #>
@@ -107,14 +107,35 @@ $remoteScript = {
     }
 
     if (-not $ReleaseName) {
-        $latest = Get-ChildItem -LiteralPath $releasesRoot -Directory |
-            Where-Object { $_.Name -match '^\d{8}_\d{6}$' } |
-            Sort-Object Name -Descending |
+        # A mais recente e escolhida pela data de deploy (deployed_at do RELEASE.txt),
+        # nao pelo nome: vale para "AAAAMMDD_HHMMSS", "staging_...", ou qualquer outro padrao.
+        # Sem deployed_at legivel, usa a data de gravacao do RELEASE.txt.
+        $candidates = foreach ($dir in Get-ChildItem -LiteralPath $releasesRoot -Directory) {
+            if ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            $marker = Join-Path $dir.FullName "RELEASE.txt"
+            if (-not (Test-Path -LiteralPath $marker)) { continue }
+            $stamp = (Get-Item -LiteralPath $marker).LastWriteTime
+            $line = Get-Content -LiteralPath $marker -Encoding UTF8 -ErrorAction SilentlyContinue |
+                Where-Object { $_ -match '^\s*deployed_at\s*=' } |
+                Select-Object -First 1
+            if ($line) {
+                $parsed = [DateTimeOffset]::MinValue
+                $raw = ($line -split '=', 2)[1].Trim()
+                if ([DateTimeOffset]::TryParse($raw, [Globalization.CultureInfo]::InvariantCulture,
+                        [Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                    $stamp = $parsed.LocalDateTime
+                }
+            }
+            [pscustomobject]@{ Name = $dir.Name; Stamp = $stamp }
+        }
+        $latest = $candidates |
+            Sort-Object -Property @{ Expression = "Stamp"; Descending = $true }, @{ Expression = "Name"; Descending = $true } |
             Select-Object -First 1
         if (-not $latest) {
-            throw "Nenhuma release no formato AAAAMMDD_HHMMSS encontrada em: $releasesRoot"
+            throw "Nenhuma release completa (com RELEASE.txt) encontrada em: $releasesRoot"
         }
         $ReleaseName = $latest.Name
+        Write-Host ("  Mais recente por data de deploy: {0} ({1:dd/MM/yyyy HH:mm:ss})" -f $latest.Name, $latest.Stamp)
     }
 
     $releasePath = Join-Path $releasesRoot $ReleaseName

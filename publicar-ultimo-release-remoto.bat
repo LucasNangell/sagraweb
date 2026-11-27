@@ -7,7 +7,8 @@ rem Requer WinRM no servidor e conta com privilegio administrativo nele.
 rem Na primeira execucao pede a senha e guarda cifrada no perfil do usuario.
 rem Uso:
 rem   publicar-ultimo-release-remoto.bat
-rem   publicar-ultimo-release-remoto.bat -ReleaseName 20260925_122557
+rem   publicar-ultimo-release-remoto.bat -ReleaseName staging_20261127_152233
+rem   (sem -ReleaseName publica a release com deploy mais recente, qualquer que seja o nome)
 rem   publicar-ultimo-release-remoto.bat -Force            (republica mesmo se ja ativa)
 rem   publicar-ultimo-release-remoto.bat -ResetCredential  (pede a senha novamente)
 

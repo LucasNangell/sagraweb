@@ -2187,12 +2187,24 @@ export function PapelariaCorelPanel({
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                     {usarRepeticao || repeticaoAmbasFaces ? (
-                      <p className="p-4 text-center text-xs text-neutral-500" data-testid="papelaria-repeticao-aviso-campos">
-                        {contextQuery.data?.repeticao?.propria
-                          ? "Prova anterior (padrão antigo)"
-                          : `Repetição da SP ${contextQuery.data?.repeticao?.rotulo ?? ""}`}
-                        : os textos vêm da prova antiga — clique neles na prévia para editar.
-                      </p>
+                      <>
+                        <p className="p-4 text-center text-xs text-neutral-500" data-testid="papelaria-repeticao-aviso-campos">
+                          {contextQuery.data?.repeticao?.propria
+                            ? "Prova anterior (padrão antigo)"
+                            : `Repetição da SP ${contextQuery.data?.repeticao?.rotulo ?? ""}`}
+                          : os textos vêm da prova antiga — clique neles na prévia para editar.
+                        </p>
+                        {/* Sem o formulário, o erro de «Criar prova» precisa aparecer aqui. */}
+                        {formError ? (
+                          <p
+                            className="mx-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-sagra-danger"
+                            role="alert"
+                            data-testid="papelaria-repeticao-erro"
+                          >
+                            {formError}
+                          </p>
+                        ) : null}
+                      </>
                     ) : selectedModelId == null ? (
                       <p className="p-4 text-center text-xs text-neutral-500">
                         Selecione um modelo na Visualização para preencher os campos.

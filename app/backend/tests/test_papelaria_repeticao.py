@@ -505,3 +505,45 @@ def test_imposicao_limpa_base_sefoc_montada_antes_da_correcao(tmp_path, monkeypa
     doc.close()
     assert jobs.resolve_base_sefoc_pdf_path(2026, 6242) == os.path.normpath(str(base))
     _sem_moldura(base.read_bytes())
+
+
+def test_create_job_repeticao_frente_e_verso_da_base(monkeypatch, tmp_path):
+    """Frente e verso da repetição (modelo 0 nas duas faces): a prova é criada no servidor."""
+    from services import papelaria_jobs_service as jobs
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+    from tests.test_papelaria_prova_pdf import _run_create
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    base, _ = rep.montar_base(_prova_a4(), (85, 50), 2)
+    rep._pasta_base(2026, 5954).mkdir(parents=True)
+    rep.caminho_base(2026, 5954).write_bytes(base)
+    comp = {"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 0, "pagina": 2}}
+    original = jobs.create_job
+    monkeypatch.setattr(
+        jobs,
+        "create_job",
+        lambda **kw: original(
+            **{
+                **kw,
+                # Na repetição o formulário fica escondido: campos obrigatórios podem vir vazios.
+                "dados": {"__repeticao": "2026-5954", "__composicao": json.dumps(comp)},
+            }
+        ),
+    )
+    r = _run_create(monkeypatch, modo="prova_pdf", tem_pdf=False)
+    assert r["gerados"] == [42]
+    dados = json.loads(r["inserted"]["dados"])
+    assert dados["__repeticao"] == "2026-5954" and json.loads(dados["__composicao"]) == comp
+
+
+def test_campos_obrigatorios_so_dispensados_sem_face_de_modelo():
+    from services.papelaria_jobs_service import _textos_da_repeticao
+
+    so_base = {"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 0, "pagina": 2}}
+    verso_modelo = {"frente": {"modelo_id": 0, "pagina": 1}, "verso": {"modelo_id": 9, "pagina": 1}}
+    assert _textos_da_repeticao({"__repeticao": "2026-1"}) is True
+    assert _textos_da_repeticao({"__repeticao": "2026-1", "__composicao": json.dumps(so_base)}) is True
+    # Verso de um modelo: os campos dele aparecem no formulário e continuam obrigatórios.
+    assert _textos_da_repeticao({"__repeticao": "2026-1", "__composicao": json.dumps(verso_modelo)}) is False
+    assert _textos_da_repeticao({"nome_deputado": "x"}) is False

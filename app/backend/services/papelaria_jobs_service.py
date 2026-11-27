@@ -403,6 +403,20 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
     return cleaned
 
 
+def _textos_da_repeticao(dados: dict[str, Any]) -> bool:
+    """Prova só com faces da base da repetição (nenhuma face de modelo)."""
+    if "__repeticao" not in dados:
+        return False
+    bruto = dados.get("__composicao")
+    if not bruto:
+        return True
+    try:
+        comp = json.loads(bruto) if isinstance(bruto, str) else bruto
+        return all(int((comp.get(face) or {}).get("modelo_id") or 0) == 0 for face in ("frente", "verso"))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def _validate_required_fields(
     modelo: dict[str, Any],
     dados: dict[str, str],
@@ -537,7 +551,9 @@ def create_job(
             dados_clean["__campos_produto"] = json.dumps(produto, ensure_ascii=False)
         else:
             dados_clean.pop("__campos_produto", None)
-    missing = _validate_required_fields(modelo, dados_clean)
+    # Repetição de SP sem face de modelo: os textos vêm da prova antiga (o
+    # formulário nem aparece), então os campos obrigatórios do modelo não valem.
+    missing = [] if _textos_da_repeticao(dados_clean) else _validate_required_fields(modelo, dados_clean)
     if missing:
         raise ValueError(f"Campos obrigatórios ausentes: {', '.join(missing)}")
 
@@ -5213,7 +5229,7 @@ def finalize_manual_corel_job(
         raise LookupError("Modelo não encontrado ou inativo.")
 
     dados_clean = _sanitize_dados(dados)
-    missing = _validate_required_fields(modelo, dados_clean)
+    missing = [] if _textos_da_repeticao(dados_clean) else _validate_required_fields(modelo, dados_clean)
     if missing:
         raise ValueError(f"Campos obrigatórios ausentes: {', '.join(missing)}")
 

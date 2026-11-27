@@ -9,7 +9,10 @@ import { AndamentoClock } from "@/features/dashboard-setor-modern/components/And
 import { ModernQueueCard } from "@/features/dashboard-setor-modern/components/ModernQueueCard";
 import "@/features/dashboard-setor-modern/dashboard-setor-modern.css";
 import "@/features/dashboard-setor-modern/dashboard-setor-modern-cards.css";
-import { showsAndamentoTime } from "@/features/dashboard-setor/normalizeConfig";
+import {
+  resolveDashboardHeading,
+  showsAndamentoTime,
+} from "@/features/dashboard-setor/normalizeConfig";
 import type {
   DashboardColumnConfig,
   DashboardConfig,
@@ -66,7 +69,7 @@ export function PainelLivePreviewBoard({
   ]);
 
   const columnsToShow = compact ? columns.slice(0, 1) : columns;
-  const heading = `OPs na ${config.sector}`;
+  const heading = resolveDashboardHeading(config);
 
   return (
     <div

@@ -23,6 +23,7 @@ import { useDashboardSetorData } from "@/features/dashboard-setor/hooks/useDashb
 import { useScreenWakeLock } from "@/features/dashboard-setor/hooks/useScreenWakeLock";
 import {
   normalizeDashboardConfigFromRemote,
+  resolveDashboardHeading,
   showsAndamentoTime,
 } from "@/features/dashboard-setor/normalizeConfig";
 import type { DashboardConfig } from "@/features/dashboard-setor/types";
@@ -79,6 +80,7 @@ export function DashboardSetorModernPage() {
   const freshness = useDashboardFreshness(data);
   const syncAlert = useSyncAndamentosServiceAlert();
   const showTime = showsAndamentoTime(config);
+  const heading = resolveDashboardHeading(config);
   const cardSkinKey = useMemo(
     () => JSON.stringify(config.cardStyle ?? null),
     [config.cardStyle],
@@ -203,7 +205,7 @@ export function DashboardSetorModernPage() {
             </div>
           </div>
           <div className="setor-modern-heading">
-            <h1 title={`OPs na ${config.sector}`}>OPs na {config.sector}</h1>
+            <h1 title={heading}>{heading}</h1>
           </div>
           <div className="setor-modern-actions">
             {document.fullscreenEnabled && (

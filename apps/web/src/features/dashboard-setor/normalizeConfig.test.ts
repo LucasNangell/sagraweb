@@ -4,8 +4,10 @@ import { DEFAULT_DASHBOARD_CONFIG, INBOX_COLUMN_SOURCE } from "./constants";
 import {
   normalizeDashboardColumns,
   normalizeDashboardConfigFromRemote,
+  resolveDashboardHeading,
   showsAndamentoTime,
 } from "./normalizeConfig";
+import { buildDashboardConfigSignature } from "./utils";
 
 describe("normalizeDashboardColumns", () => {
   it("preserva fonte inbox e descarta setor da coluna", () => {
@@ -124,5 +126,41 @@ describe("tema do board", () => {
       theme: { cardGap: 8, pageBg: "red", headerBg: "#fff" },
     });
     expect(config.theme).toEqual({ headerBg: "#fff" });
+  });
+});
+
+describe("título do header", () => {
+  it("usa “OPs na {setor}” quando não há título personalizado", () => {
+    const config = normalizeDashboardConfigFromRemote({ sector: "SEPAC" });
+    expect(config.headerTitle).toBeUndefined();
+    expect(resolveDashboardHeading(config)).toBe("OPs na SEPAC");
+    expect(
+      resolveDashboardHeading({ sector: "SEPAC", headerTitle: "   " }),
+    ).toBe("OPs na SEPAC");
+  });
+
+  it("substitui o texto inteiro pelo título configurado (com trim)", () => {
+    const config = normalizeDashboardConfigFromRemote({
+      sector: "SEPAC",
+      headerTitle: "  Fila da Acabamento  ",
+    });
+    expect(config.headerTitle).toBe("Fila da Acabamento");
+    expect(resolveDashboardHeading(config)).toBe("Fila da Acabamento");
+  });
+
+  it("limita o tamanho e ignora valores não textuais", () => {
+    const long = normalizeDashboardConfigFromRemote({
+      headerTitle: "x".repeat(500),
+    });
+    expect(long.headerTitle).toHaveLength(120);
+    const invalid = normalizeDashboardConfigFromRemote({ headerTitle: 42 });
+    expect(invalid.headerTitle).toBeUndefined();
+  });
+
+  it("muda a assinatura para o painel aplicar a configuração remota", () => {
+    const base = normalizeDashboardConfigFromRemote({ sector: "SEFOC" });
+    expect(buildDashboardConfigSignature(base)).not.toBe(
+      buildDashboardConfigSignature({ ...base, headerTitle: "Produção" }),
+    );
   });
 });

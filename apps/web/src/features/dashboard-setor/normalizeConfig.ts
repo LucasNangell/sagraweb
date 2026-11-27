@@ -80,6 +80,26 @@ export function normalizeDashboardTheme(
   return Object.keys(theme).length > 0 ? theme : undefined;
 }
 
+export const DASHBOARD_HEADER_TITLE_MAX = 120;
+
+/** Título do header informado pelo admin (trim + limite); vazio = padrão. */
+export function normalizeDashboardHeaderTitle(raw: unknown): string {
+  if (typeof raw !== "string") {
+    return "";
+  }
+  return raw.trim().slice(0, DASHBOARD_HEADER_TITLE_MAX);
+}
+
+/** Texto exibido no header: título personalizado ou “OPs na {setor}”. */
+export function resolveDashboardHeading(
+  config: Pick<DashboardConfig, "sector" | "headerTitle">,
+): string {
+  return (
+    normalizeDashboardHeaderTitle(config.headerTitle) ||
+    `OPs na ${config.sector}`
+  );
+}
+
 /** Omitido ou qualquer valor que não seja `false` mantém o relógio visível. */
 export function showsAndamentoTime(
   config: Pick<DashboardConfig, "showAndamentoTime">,
@@ -99,11 +119,13 @@ export function normalizeDashboardConfigFromRemote(
   const notificationSounds = normalizeNotificationSounds(
     parsed.notificationSounds,
   );
+  const headerTitle = normalizeDashboardHeaderTitle(parsed.headerTitle);
   return {
     sector:
       parsed.sector ||
       fallbackSector ||
       DEFAULT_DASHBOARD_CONFIG.sector,
+    ...(headerTitle ? { headerTitle } : {}),
     columnCount: columns.length,
     columns,
     ...(parsed.showAndamentoTime === false ? { showAndamentoTime: false } : {}),

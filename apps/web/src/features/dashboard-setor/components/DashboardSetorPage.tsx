@@ -9,6 +9,7 @@ import {
   saveDashboardConfig,
 } from "../configStorage";
 import { DEFAULT_DASHBOARD_CONFIG } from "../constants";
+import { resolveDashboardHeading } from "../normalizeConfig";
 import { useSyncAndamentosServiceAlert } from "@/features/sync-andamentos/useSyncAndamentosServiceAlert";
 
 import { useDashboardFreshness } from "../hooks/useDashboardFreshness";
@@ -143,7 +144,7 @@ export function DashboardSetorPage() {
         </div>
 
         <div className="dashboard-setor-header-center">
-          <h1>OPs na {config.sector}</h1>
+          <h1>{resolveDashboardHeading(config)}</h1>
         </div>
 
         <div className="dashboard-setor-header-right">

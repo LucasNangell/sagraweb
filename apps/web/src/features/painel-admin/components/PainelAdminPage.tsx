@@ -30,7 +30,10 @@ import {
 } from "@/api/painelRemote";
 import { DashboardSetorSettingsForm } from "@/features/dashboard-setor/components/DashboardSetorSettingsForm";
 import { DEFAULT_DASHBOARD_CONFIG } from "@/features/dashboard-setor/constants";
-import { normalizeDashboardConfigFromRemote } from "@/features/dashboard-setor/normalizeConfig";
+import {
+  DASHBOARD_HEADER_TITLE_MAX,
+  normalizeDashboardConfigFromRemote,
+} from "@/features/dashboard-setor/normalizeConfig";
 import { NOTIFICATION_SOUND_SLOTS } from "@/features/dashboard-setor/notificationSounds";
 import type {
   DashboardConfig,
@@ -244,6 +247,15 @@ export function PainelAdminPage() {
     setConfig(normalized);
   };
 
+  // Sem normalizar a cada tecla: o trim só acontece ao salvar (permite digitar espaços).
+  const handleHeaderTitleChange = (value: string) => {
+    setConfig((prev) => {
+      const next = { ...prev, headerTitle: value };
+      configRef.current = next;
+      return next;
+    });
+  };
+
   const handleCardStyleChange = (cardStyle: DashboardConfig["cardStyle"]) => {
     setConfig((prev) => {
       const next = cardStyle
@@ -453,6 +465,20 @@ export function PainelAdminPage() {
                           onChange={(e) => setDescricao(e.target.value)}
                           placeholder="Ex.: Monitor do corredor"
                         />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700 sm:col-span-2">
+                        Título do painel
+                        <input
+                          className="rounded border border-slate-300 px-2 py-1.5 text-sm font-normal text-slate-800"
+                          value={config.headerTitle ?? ""}
+                          maxLength={DASHBOARD_HEADER_TITLE_MAX}
+                          onChange={(e) => handleHeaderTitleChange(e.target.value)}
+                          placeholder={`OPs na ${config.sector}`}
+                        />
+                        <span className="text-[11px] font-normal text-slate-500">
+                          Texto exibido no topo do painel. Deixe em branco para
+                          usar o padrão “OPs na {config.sector}”.
+                        </span>
                       </label>
                     </div>
 

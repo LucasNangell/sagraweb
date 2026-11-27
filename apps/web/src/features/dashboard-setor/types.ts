@@ -114,6 +114,8 @@ export interface DashboardTheme {
 
 export interface DashboardConfig {
   sector: string;
+  /** Texto do header do painel. Omitido ou vazio = “OPs na {sector}”. */
+  headerTitle?: string;
   columnCount: number;
   columns: DashboardColumnConfig[];
   /** Painel moderno. `false` oculta o relógio nos cards; omitido continua exibindo. */

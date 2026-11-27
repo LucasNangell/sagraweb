@@ -685,6 +685,7 @@ export function getVisibleDashboardColumns(
 export function buildDashboardConfigSignature(config: DashboardConfig): string {
   return JSON.stringify({
     sector: config.sector,
+    headerTitle: config.headerTitle ?? null,
     columnCount: config.columnCount,
     showAndamentoTime: config.showAndamentoTime !== false,
     cardStyle: config.cardStyle ?? null,

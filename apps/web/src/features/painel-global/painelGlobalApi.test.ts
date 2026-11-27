@@ -7,6 +7,7 @@ vi.mock("@/lib/api", () => ({
 
 import { apiFetch } from "@/lib/api";
 import {
+  fetchPainelLegacyBySetor,
   fetchPainelQueueBySetor,
   fetchPainelVolumeDrill,
   fetchPainelVolumeMensal,
@@ -30,6 +31,20 @@ describe("painelGlobalApi", () => {
     expect(url).toContain("setor=SEFOC");
     expect(url).toContain("painel=1");
     expect(items[0]?.fetchedSector).toBe("SEFOC");
+  });
+
+  it("fetchPainelLegacyBySetor trata Gravação como setor comum", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      data: [{ nr_os: 1, ano: 2026, setor: "Gravação", situacao: "Em Execução" }],
+    });
+
+    const items = await fetchPainelLegacyBySetor("Gravação");
+
+    const url = String(apiFetchMock.mock.calls[0]?.[0] ?? "");
+    expect(url).toContain(`setor=${encodeURIComponent("Gravação")}`);
+    expect(url).not.toContain("setor=SEFOC");
+    expect(items).toHaveLength(1);
+    expect(items[0]?.fetchedSector).toBe("Gravação");
   });
 
   it("fetchPainelVolumeMensal chama /os/volume-mensal", async () => {

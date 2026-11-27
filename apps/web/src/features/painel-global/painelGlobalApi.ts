@@ -63,21 +63,15 @@ export async function fetchPainelQueueBySetor(
 export async function fetchPainelLegacyBySetor(
   setor: string,
 ): Promise<PainelRawOp[]> {
-  const isGravacao = setor === "Gravação";
   const params = new URLSearchParams({
-    setor: isGravacao ? "SEFOC" : setor,
+    setor,
     include_finished: "false",
     limit: "200",
     pcp_order: "true",
   });
 
   const result = await apiFetch<OsSearchResponse>(`/os/search?${params}`);
-  let data = result.data ?? result.items ?? [];
-
-  if (isGravacao) {
-    const allowed = new Set(["Gravação", "Gravação Parcial"]);
-    data = data.filter((item) => allowed.has(item.situacao ?? ""));
-  }
+  const data = result.data ?? result.items ?? [];
 
   return data.map((item) => ({ ...item, fetchedSector: setor }));
 }

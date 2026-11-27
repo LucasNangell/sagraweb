@@ -1467,7 +1467,6 @@ def create_imposicao_job(
         lote_payload = []
         for idx, item in enumerate(lote):
             ia, ir = int(item["ano"]), int(item["nro"])
-            cdr_info = select_os_usable_cdr(ia, ir)
             sefoc_m = resolve_os_papelaria_dir(ia, ir, create=True)
             pre_name = build_pre_impresso_pdf_name(ia, ir)
             lote_payload.append(
@@ -1476,12 +1475,15 @@ def create_imposicao_job(
                     "nro": ir,
                     "tiragem": tiragens[idx],
                     "slots": int(slots_info["slots"][idx]) if slots_info else 1,
-                    "cdr_path": cdr_info["absolute_path"],
                     "pre_pdf_name": pre_name,
                     "pre_pdf_path": os.path.normpath(os.path.join(sefoc_m, pre_name)),
                     "label": get_os_folder_basename(ia, ir),
                 }
             )
+        # Arte do .cdr (worker) ou do PDF base (prova sem Corel / sem .cdr).
+        from services import papelaria_imposicao_arte_pdf as arte_pdf_svc
+
+        imposicao_no_servidor = arte_pdf_svc.aplicar_arte_no_lote(lote_payload)
         gang_name = build_imposicao_gang_pdf_name(ano, nro)
         gang_path = os.path.normpath(os.path.join(sefoc_dir, gang_name))
         comment = juntada_svc.format_juntada_descricao(
@@ -1518,7 +1520,7 @@ def create_imposicao_job(
             "modelo_id": int(modelo["id"]),
             "arquivo": (modelo.get("arquivo_modelo") or "").strip(),
             "dados": json.dumps(dados_clean, ensure_ascii=False),
-            "status": STATUS_PENDING,
+            "status": STATUS_PROCESSING if imposicao_no_servidor else STATUS_PENDING,
             "ordem": ordem,
             "ponto": solicitado_por,
             "job_pai": None,
@@ -1541,12 +1543,17 @@ def create_imposicao_job(
                 """,
                 insert_params,
             )
-            return int(cursor.lastrowid)
+            novo_id = int(cursor.lastrowid)
+            if imposicao_no_servidor:
+                arte_pdf_svc.reservar_para_servidor(cursor, novo_id)
+            return novo_id
 
         job_id = int(db.execute_transaction([_insert_pending])[0])
         job = get_job(job_id)
         if not job:
             raise RuntimeError("Falha ao recuperar job criado.")
+        if imposicao_no_servidor:
+            return arte_pdf_svc.processar_no_servidor(job_id)
         n_membros = len(membros_meta)
         append_job_log(
             job_id,

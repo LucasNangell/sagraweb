@@ -192,6 +192,55 @@ def test_perfil_pre_impresso_enfileira_worker_com_slots(ambiente, monkeypatch, t
     assert len(dados["imposicao_config"]["grid"]["ocupadas"]) == 3
 
 
+def test_perfil_pre_impresso_sem_corel_processa_no_servidor(ambiente, monkeypatch, tmp_path):
+    """Lote todo com prova só em PDF: o servidor faz a imposição (sem worker)."""
+    from services import papelaria_imposicao_arte_pdf as arte_pdf_svc
+
+    svc = ambiente["svc"]
+    perfil = perfil_svc.perfil_vazio()
+    perfil["folha"] = {"largura_mm": 600, "altura_mm": 400}
+    perfil["pagina"] = {"fonte": "fixa", "largura_mm": 200, "altura_mm": 150}
+    perfil["posicionamento"] = "manual"
+    perfil["slots"]["frente"] = [
+        {"id": 1, "x_mm": 150, "y_mm": 105, "rotacao": 0, "pagina": 1},
+        {"id": 2, "x_mm": 400, "y_mm": 105, "rotacao": 0, "pagina": 1},
+    ]
+    perfil["arte"]["fonte"] = "pre_impresso"
+    perfil["saida"]["destino_pdf"] = "offset"
+    registro = {"id": 5, "perfil": perfil_svc.normalize_perfil(perfil), "ativo": True}
+    monkeypatch.setattr(
+        "services.papelaria_imposicao_perfil_store.get_perfil_ativo",
+        lambda produto, variante: registro if variante == "offset" else None,
+    )
+    monkeypatch.setattr(svc, "_load_os_tiragem", lambda ano, nro: 500)
+    monkeypatch.setattr(svc, "_validate_os_exists", lambda ano, nro, **k: {"produto": "Produto X"})
+    monkeypatch.setattr(
+        arte_pdf_svc, "arte_da_os", lambda ano, nro: {"cdr_path": "", "arte_pdf_path": "/base.pdf"}
+    )
+    gerados = []
+    monkeypatch.setattr(
+        arte_pdf_svc, "gerar_pre_impresso_de_pdf", lambda src, dest: gerados.append((src, dest)) or []
+    )
+    reservados = []
+    monkeypatch.setattr(
+        arte_pdf_svc, "reservar_para_servidor", lambda cursor, job_id: reservados.append(job_id)
+    )
+    processados = []
+    monkeypatch.setattr(
+        arte_pdf_svc, "processar_no_servidor", lambda job_id: processados.append(job_id) or {"id": job_id}
+    )
+    job = svc.create_imposicao_job(
+        ano=2026, nro=5954, solicitado_por="1", modelo_id=7, variante="offset"
+    )
+    assert processados == [job["id"]]
+    assert reservados == [job["id"]]
+    assert gerados and gerados[0][0] == "/base.pdf"
+    salvo = svc.get_job(job["id"])
+    assert salvo["status"] == svc.STATUS_PROCESSING
+    assert salvo["dados"]["juntada_lote"][0]["pre_pdf_pronto"] is True
+    assert salvo["dados"]["juntada_lote"][0]["cdr_path"] == ""
+
+
 def test_juntada_recusada_quando_perfil_nao_permite(ambiente, monkeypatch):
     svc = ambiente["svc"]
     registro = {"id": 4, "perfil": _perfil_offset(), "ativo": True}

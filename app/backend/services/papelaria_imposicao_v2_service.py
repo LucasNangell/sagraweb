@@ -220,7 +220,12 @@ def preparar_config_pipeline(
 
     gang_src = os.path.normpath((gang_pdf_path or "").strip())
     if not gang_src or not os.path.isfile(gang_src):
-        raise FileNotFoundError(f"PDF combinado (pré-impresso) ausente: {gang_src or '(vazio)'}")
+        # Apagado (limpeza após o Apogee) ou nunca gerado: refaz a partir dos PDFs base.
+        from services import papelaria_imposicao_arte_pdf as arte_pdf_svc
+
+        if not (gang_pdf_path or "").strip():
+            raise FileNotFoundError("PDF combinado (pré-impresso) ausente: (vazio)")
+        arte_pdf_svc.garantir_pdfs_pre_impresso(dados if isinstance(dados, dict) else {}, gang_src)
 
     base_cfg = perfil_svc.compilar_config_jdf(perfil, slots_frente=lote_slots)
     cols = int(base_cfg["grid"]["colunas"])
@@ -393,7 +398,6 @@ def create_imposicao_job_v2(
         lote_payload = []
         for idx, item in enumerate(lote):
             ia, ir = int(item["ano"]), int(item["nro"])
-            cdr_info = jobs.select_os_usable_cdr(ia, ir)
             sefoc_m = jobs.resolve_os_papelaria_dir(ia, ir, create=True)
             pre_name = jobs.build_pre_impresso_pdf_name(ia, ir)
             lote_payload.append(
@@ -402,12 +406,15 @@ def create_imposicao_job_v2(
                     "nro": ir,
                     "tiragem": tiragens[idx],
                     "slots": int(slots_info["slots"][idx]),
-                    "cdr_path": cdr_info["absolute_path"],
                     "pre_pdf_name": pre_name,
                     "pre_pdf_path": os.path.normpath(os.path.join(sefoc_m, pre_name)),
                     "label": jobs.get_os_folder_basename(ia, ir),
                 }
             )
+        # Arte do .cdr (worker) ou do PDF base (prova sem Corel / sem .cdr).
+        from services import papelaria_imposicao_arte_pdf as arte_pdf_svc
+
+        imposicao_no_servidor = arte_pdf_svc.aplicar_arte_no_lote(lote_payload)
         from services.papelaria_imposicao_juntada_service import format_juntada_descricao
 
         ancora_label = jobs.get_os_folder_basename(ano, nro)
@@ -444,7 +451,7 @@ def create_imposicao_job_v2(
             "modelo_id": int(modelo["id"]),
             "arquivo": (modelo.get("arquivo_modelo") or "").strip(),
             "dados": json.dumps(dados_clean, ensure_ascii=False),
-            "status": jobs.STATUS_PENDING,
+            "status": jobs.STATUS_PROCESSING if imposicao_no_servidor else jobs.STATUS_PENDING,
             "ordem": ordem,
             "ponto": solicitado_por,
             "prova_revisao": jobs.PROVA_REVISAO_NA,
@@ -465,12 +472,17 @@ def create_imposicao_job_v2(
                 """,
                 insert_params,
             )
-            return int(cursor.lastrowid)
+            novo_id = int(cursor.lastrowid)
+            if imposicao_no_servidor:
+                arte_pdf_svc.reservar_para_servidor(cursor, novo_id)
+            return novo_id
 
         job_id = int(db.execute_transaction([_insert_pending])[0])
         job = jobs.get_job(job_id)
         if not job:
             raise RuntimeError("Falha ao recuperar job criado.")
+        if imposicao_no_servidor:
+            return arte_pdf_svc.processar_no_servidor(job_id)
         jobs.append_job_log(
             job_id,
             (

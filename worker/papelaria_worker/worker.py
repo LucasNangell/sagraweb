@@ -435,6 +435,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 )
                 return
             for item in lote:
+                if item.get("pre_pdf_pronto"):
+                    # Arte já gerada pelo servidor a partir do PDF base.
+                    continue
                 cdr = str(item.get("cdr_path") or "").strip()
                 if not cdr or not os.path.isfile(cdr):
                     api.fail(
@@ -697,6 +700,15 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 for item in lote:
                     cdr = str(item.get("cdr_path") or "")
                     pre_path = str(item.get("pre_pdf_path") or "")
+                    if item.get("pre_pdf_pronto") and os.path.isfile(pre_path):
+                        # PDF base sem Brasão já gerado pelo servidor (sem .cdr).
+                        api.append_log(
+                            job_id,
+                            f"Pré-impresso do servidor: {os.path.basename(pre_path)}",
+                            "info",
+                        )
+                        pre_pdfs.append(pre_path)
+                        continue
                     api.append_log(
                         job_id,
                         f"Pré-impresso — exportando sem Brasao: "

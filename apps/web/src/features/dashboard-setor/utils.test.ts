@@ -210,16 +210,16 @@ describe("osBelongsToDashboardSector", () => {
     ).toBe(false);
   });
 
-  it("Gravação filtra por situação", () => {
+  it("Gravação é um setor comum (filtra pelo setor, não pela situação)", () => {
     expect(
       osBelongsToDashboardSector(
-        { nr_os: 1, ano: 2026, situacao: "Gravação", setor: "SEFOC" },
+        { nr_os: 1, ano: 2026, situacao: "Em Execução", setor: "Gravação" },
         "Gravação",
       ),
     ).toBe(true);
     expect(
       osBelongsToDashboardSector(
-        { nr_os: 1, ano: 2026, situacao: "Em Execução", setor: "SEFOC" },
+        { nr_os: 1, ano: 2026, situacao: "Gravação", setor: "SEFOC" },
         "Gravação",
       ),
     ).toBe(false);

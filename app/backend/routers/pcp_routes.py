@@ -40,12 +40,9 @@ def invalidate_pcp_queue_cache(setor: str | None = None) -> None:
     _invalidate_pcp_queue_cache(setor)
 
 
-VIRTUAL_SETORES = {
-    "Gravação": {
-        "base_setor": "SEFOC",
-        "situacoes": ["Gravação", "Gravação Parcial"],
-    }
-}
+# Setores virtuais (setor exibido -> setor físico + situações). "Gravação" já foi
+# mapeado para SEFOC; hoje é um setor real e segue o fluxo comum.
+VIRTUAL_SETORES: dict = {}
 
 def _resolve_setor(setor: str):
     cfg = VIRTUAL_SETORES.get(setor)

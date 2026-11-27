@@ -179,10 +179,6 @@ export function osBelongsToDashboardSector(
     return false;
   }
 
-  if (sector === "Gravação") {
-    return situacao === "Gravação" || situacao === "Gravação Parcial";
-  }
-
   const itemSetor = (item.setor ?? "").trim();
   return itemSetor === sector.trim();
 }

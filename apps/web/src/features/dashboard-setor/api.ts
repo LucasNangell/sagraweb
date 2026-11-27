@@ -38,9 +38,8 @@ function mapSearchRowToQueueItem(row: OsSearchRowWithPcp): PcpQueueItem {
 async function fetchMaterializedDashboardQueue(
   sector: string,
 ): Promise<PcpQueueItem[]> {
-  const isGravacao = sector === "Gravação";
   const params = new URLSearchParams();
-  params.append("setor", isGravacao ? "SEFOC" : sector);
+  params.append("setor", sector);
   params.append("include_finished", "false");
   params.append("limit", "200");
   params.append("painel", "1");
@@ -49,13 +48,7 @@ async function fetchMaterializedDashboardQueue(
     `/os/search?${params}`,
     DASHBOARD_FETCH_INIT,
   );
-  let data = (result.data ?? []) as OsSearchRowWithPcp[];
-
-  if (isGravacao) {
-    const allowed = new Set(["Gravação", "Gravação Parcial"]);
-    data = data.filter((item) => allowed.has(item.situacao ?? ""));
-  }
-
+  const data = (result.data ?? []) as OsSearchRowWithPcp[];
   return data.map(mapSearchRowToQueueItem);
 }
 

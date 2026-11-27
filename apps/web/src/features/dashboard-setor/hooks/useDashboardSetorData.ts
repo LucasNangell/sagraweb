@@ -69,9 +69,6 @@ function wsEventAffectsSectors(
     if (eventSetor === cfg) {
       return true;
     }
-    if (cfg === "Gravação" && eventSetor === "SEFOC") {
-      return true;
-    }
   }
   return false;
 }

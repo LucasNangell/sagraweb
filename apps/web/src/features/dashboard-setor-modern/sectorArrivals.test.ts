@@ -126,13 +126,14 @@ describe("chegadas ao setor", () => {
     expect(process([{ ...op, setor: "SEPAC" }]).hasSectorArrivals).toBe(true);
   });
 
-  it("reconhece entrada na Gravação pelo andamento, mesmo com setor físico SEFOC", () => {
+  it("reconhece entrada na Gravação pelo setor, como os demais", () => {
     const { process } = setup([], { ...config, sector: "Gravação" });
-    expect(process([{ ...op, situacao: "Gravação" }]).hasSectorArrivals).toBe(
+    expect(process([{ ...op, setor: "Gravação" }]).hasSectorArrivals).toBe(
       true,
     );
     expect(
-      process([{ ...op, situacao: "Gravação Parcial" }]).hasSectorArrivals,
+      process([{ ...op, setor: "SEFOC", situacao: "Gravação" }])
+        .hasSectorArrivals,
     ).toBe(false);
   });
 });

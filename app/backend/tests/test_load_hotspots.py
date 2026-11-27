@@ -288,7 +288,8 @@ class TestPcpQueueCache:
         pcp_routes._build_pcp_queue_payload("Gravação", "Gravação", True)
         sql = captured["sql"]
         assert "AS cand" in sql and "c.SetorLink = %s" in sql
-        assert captured["params"] == ["Gravação", "SEFOC", "Gravação", "SEFOC", "Gravação", "Gravação Parcial"]
+        assert captured["params"] == ["Gravação", "Gravação", "Gravação", "Gravação"]
+        assert "a.SituacaoLink IN" not in sql
         assert sql.count("%s") == len(captured["params"])
 
 

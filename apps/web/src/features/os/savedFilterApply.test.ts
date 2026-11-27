@@ -90,6 +90,23 @@ describe("savedFilterApply", () => {
     ).toBeNull();
   });
 
+  it("filtro salvo guarda e restaura vários Nr OS", () => {
+    const withList: SavedFilter = {
+      ...baseFilter,
+      criterios: {
+        ...baseFilter.criterios!,
+        nr_os: 2244,
+        nr_os_list: [2244, 2250],
+      },
+    };
+    const patch = savedFilterToOsPatch(withList);
+    expect(patch.nrOs).toBe(2244);
+    expect(patch.nrOsList).toEqual([2244, 2250]);
+    const payload = osFiltersToSavedPayload({ ...defaultOsFilters(), ...patch });
+    expect(payload.criterios?.nr_os).toBe(2244);
+    expect(payload.criterios?.nr_os_list).toEqual([2244, 2250]);
+  });
+
   it("osFiltersToSavedPayload faz round-trip com savedFilterToOsPatch", () => {
     const withNr: SavedFilter = {
       ...baseFilter,
@@ -103,6 +120,7 @@ describe("savedFilterApply", () => {
     expect(payload.setores).toEqual(withNr.setores);
     expect(payload.criterios).toEqual({
       nr_os: 2244,
+      nr_os_list: [],
       anos: [2026],
       processo: "12345",
       categorias: ["Deputado"],

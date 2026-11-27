@@ -1350,6 +1350,7 @@ def search_os(
     request: Request,
     response: Response,
     nr_os: Optional[int] = None,
+    nros: Optional[List[int]] = Query(None, description="Vários Nr OS (lookup exato)"),
     ano: Optional[int] = None,
     ano_mode: Optional[str] = Query(None, pattern="^(specific|from)$"),
     anos: Optional[List[int]] = Query(None),
@@ -1395,12 +1396,13 @@ def search_os(
 
     try:
         # Nr OS na home: lookup exato indexável (ignora filtros de escolha lentos).
-        if nr_os is not None:
+        if nr_os is not None or nros:
             exact_os_lookup = True
 
         started = time.perf_counter()
         search_kwargs = dict(
             nr_os=nr_os,
+            nros=nros,
             ano=ano,
             ano_mode=ano_mode,
             anos=anos,
@@ -1496,6 +1498,7 @@ def search_os(
 def export_os_search_xlsx(
     response: Response,
     nr_os: Optional[int] = None,
+    nros: Optional[List[int]] = Query(None, description="Vários Nr OS (lookup exato)"),
     ano: Optional[int] = None,
     ano_mode: Optional[str] = Query(None, pattern="^(specific|from)$"),
     anos: Optional[List[int]] = Query(None),
@@ -1530,11 +1533,12 @@ def export_os_search_xlsx(
     response.headers["Expires"] = "0"
 
     try:
-        if nr_os is not None:
+        if nr_os is not None or nros:
             exact_os_lookup = True
 
         rows = fetch_all_os_search_rows(
             nr_os=nr_os,
+            nros=nros,
             ano=ano,
             ano_mode=ano_mode,
             anos=anos,

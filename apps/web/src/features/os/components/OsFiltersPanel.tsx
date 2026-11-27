@@ -27,6 +27,11 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { homeTestIds } from "@/lib/testId";
+import {
+  formatNrOsFilter,
+  nrOsPatchFromValues,
+  parseNrOsInput,
+} from "../nrOsFilter";
 import { hasOsHomeAdvancedFilters } from "../osSearchUtils";
 import { useOsFiltersStore } from "../osFiltersStore";
 import { formatProcessoMask } from "../processoMask";
@@ -94,14 +99,17 @@ export function OsFiltersPanel({
     filters.categorias,
   );
 
-  const parseOptionalInt = (raw: string): number | undefined => {
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      return undefined;
-    }
-    const n = Number.parseInt(trimmed, 10);
-    return Number.isNaN(n) ? undefined : n;
-  };
+  // Texto livre do Nr OS ("2244, 2250"): preserva vírgula/espaço enquanto digita.
+  const nrOsFromFilters = formatNrOsFilter(filters);
+  const [nrOsText, setNrOsText] = useState(nrOsFromFilters);
+  useEffect(() => {
+    // Mudança externa (limpar, filtro salvo): reflete no campo se divergir.
+    setNrOsText((current) =>
+      parseNrOsInput(current).join(", ") === nrOsFromFilters
+        ? current
+        : nrOsFromFilters,
+    );
+  }, [nrOsFromFilters]);
 
   const yearOptions = useMemo(() => {
     const years = yearsQuery.data?.data ?? [];
@@ -233,15 +241,22 @@ export function OsFiltersPanel({
                   <input
                     type="text"
                     inputMode="numeric"
-                    placeholder="Ex: 2244"
-                    value={filters.nrOs != null ? String(filters.nrOs) : ""}
-                    onChange={(e) =>
+                    placeholder="Ex: 2244, 2250"
+                    title="Vários números: separe por vírgula (ex.: 2244, 2250, 5012)"
+                    value={nrOsText}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d,;\s]/g, "");
+                      setNrOsText(raw);
+                      const values = parseNrOsInput(raw);
+                      if (values.join(", ") === nrOsFromFilters) {
+                        return;
+                      }
                       onPatchFilters({
-                        nrOs: parseOptionalInt(e.target.value),
+                        ...nrOsPatchFromValues(values),
                         page: 1,
-                      })
-                    }
-                    className={cn(inputClass, "w-[5.75rem] shrink-0")}
+                      });
+                    }}
+                    className={cn(inputClass, "min-w-0 flex-1")}
                     aria-label="Nr OS"
                     data-testid={homeTestIds.osFiltersNrOs}
                   />

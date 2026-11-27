@@ -38,6 +38,8 @@ OS_SEARCH_IN_CHUNK = 500
 OS_SEARCH_MIN_LIKE_CHARS = OS_TEXT_SEARCH_MIN_CHARS
 OS_SEARCH_DEFAULT_LIMIT = 20
 OS_SEARCH_MAX_MULTI_FILTER_ITEMS = 20
+# Vários Nr OS separados por vírgula no filtro da home.
+OS_SEARCH_MAX_NR_OS_ITEMS = 100
 
 
 def build_os_search_etag(result: Dict[str, Any]) -> str:
@@ -324,6 +326,26 @@ def _clean_anos_filter_values(values: Optional[List[int]]) -> List[int]:
             continue
         seen.add(year)
         result.append(year)
+    return result
+
+
+def _clean_nr_os_values(
+    nr_os: Optional[int], nros: Optional[List[int]]
+) -> List[int]:
+    """Une `nr_os` (único) e `nros` (lista) sem duplicatas, preservando ordem."""
+    seen: set[int] = set()
+    result: List[int] = []
+    for raw in [nr_os, *(nros or [])]:
+        if raw is None:
+            continue
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0 or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
     return result
 
 
@@ -1424,6 +1446,7 @@ def _enrich_operacional_gaps(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 def execute_os_search(
     *,
     nr_os: Optional[int] = None,
+    nros: Optional[List[int]] = None,
     ano: Optional[int] = None,
     ano_mode: Optional[str] = None,
     anos: Optional[List[int]] = None,
@@ -1463,7 +1486,10 @@ def execute_os_search(
     page, limit, pagination_max = _resolve_os_search_pagination(
         page, limit, fetch_all=fetch_all
     )
-    has_nr_os = nr_os is not None
+    nr_os_values = _clean_nr_os_values(nr_os, nros)
+    if len(nr_os_values) > OS_SEARCH_MAX_NR_OS_ITEMS:
+        raise ValueError(f"Máximo de {OS_SEARCH_MAX_NR_OS_ITEMS} Nr OS por busca")
+    has_nr_os = bool(nr_os_values)
     clean_anos = _clean_anos_filter_values(anos)
     has_ano = bool(clean_anos) or ano is not None
     skip_choice_filters = bool(exact_os_lookup and has_nr_os)
@@ -1668,9 +1694,16 @@ def execute_os_search(
         if not include_sp:
             filters += " AND p.NroProtocolo < 5000"
 
-    if nr_os:
+    if len(nr_os_values) == 1:
         filters += " AND p.NroProtocolo = %(nr_os)s"
-        params["nr_os"] = nr_os
+        params["nr_os"] = nr_os_values[0]
+    elif nr_os_values:
+        nr_placeholders = ", ".join(
+            f"%(nr_os_sel_{i})s" for i in range(len(nr_os_values))
+        )
+        filters += f" AND p.NroProtocolo IN ({nr_placeholders})"
+        for i, val in enumerate(nr_os_values):
+            params[f"nr_os_sel_{i}"] = val
     if clean_anos:
         ano_placeholders = ", ".join(
             f"%(ano_sel_{i})s" for i in range(len(clean_anos))

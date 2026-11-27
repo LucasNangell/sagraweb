@@ -447,6 +447,15 @@ describe("applyOsHomeViewFilters", () => {
     expect(filtered.map((r) => r.nr_os)).toEqual([11]);
   });
 
+  it("filtra vários Nr OS no ano", () => {
+    const filtered = applyOsHomeViewFilters(rows, {
+      ...baseFilters,
+      nrOs: 10,
+      nrOsList: [10, 11],
+    });
+    expect(filtered.map((r) => r.nr_os).sort()).toEqual([10, 11]);
+  });
+
   it("filtra produtos localmente sobre row.produto", () => {
     const withProduto: OsSearchRow[] = [
       row({ nr_os: 1, ano: 2026, produto: "Cartaz" }),

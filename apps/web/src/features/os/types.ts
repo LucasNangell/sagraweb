@@ -72,7 +72,10 @@ export type OsSortColumn =
 export type YearFilterMode = "from" | "specific";
 
 export interface OsSearchFilters {
+  /** Primeiro Nr OS digitado (âncora/lookup exato). */
   nrOs?: number;
+  /** Vários Nr OS (campo separado por vírgula). Só com 2+ números; inclui `nrOs`. */
+  nrOsList?: number[];
   /** @deprecated Preferir `anos` (home). Mantido para compatibilidade legado. */
   ano?: number;
   /** @deprecated Home usa anos específicos via `anos`. */
@@ -341,6 +344,8 @@ export interface OsVinculoReplicacaoCheck {
 
 export interface SavedFilterCriterios {
   nr_os?: number | null;
+  /** Vários Nr OS (2+); inclui `nr_os`. */
+  nr_os_list?: number[];
   anos: number[];
   processo: string;
   categorias: string[];
@@ -354,6 +359,7 @@ export interface SavedFilterCriterios {
 export function emptySavedFilterCriterios(): SavedFilterCriterios {
   return {
     nr_os: null,
+    nr_os_list: [],
     anos: [],
     processo: "",
     categorias: [],

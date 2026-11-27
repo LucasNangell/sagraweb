@@ -77,6 +77,7 @@ describe("OsSaveCurrentFiltersModal", () => {
       setores: ["Arte"],
       criterios: {
         nr_os: null,
+        nr_os_list: [],
         anos: [2026],
         processo: "12345",
         categorias: [],

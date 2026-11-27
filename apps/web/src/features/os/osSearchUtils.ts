@@ -30,6 +30,7 @@ function processoMeetsMinDigits(value: string | undefined): boolean {
 export type OsHomeDebouncedText = Pick<
   OsSearchFilters,
   | "nrOs"
+  | "nrOsList"
   | "titulo"
   | "processo"
   | "papel"
@@ -71,6 +72,7 @@ export function buildOsHomeSearchFilters(
   const merged: OsSearchFilters = {
     ...filters,
     nrOs: debouncedText.nrOs,
+    nrOsList: debouncedText.nrOsList,
     titulo: textMeetsMinLength(debouncedText.titulo, hasAnchor)
       ? debouncedText.titulo
       : "",
@@ -105,6 +107,7 @@ export function normalizeOsSearchFilters(
 ): OsSearchFilters {
   return {
     nrOs: filters.nrOs,
+    nrOsList: filters.nrOsList?.length ? [...filters.nrOsList] : undefined,
     anos: [...(filters.anos ?? [])].sort((a, b) => a - b),
     produto: (filters.produto ?? "").trim(),
     produtos: [...filters.produtos].sort(),

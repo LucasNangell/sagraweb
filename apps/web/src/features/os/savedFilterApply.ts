@@ -1,3 +1,4 @@
+import { getNrOsFilterValues, nrOsPatchFromValues } from "./nrOsFilter";
 import { formatProcessoMask } from "./processoMask";
 import type {
   OsSearchFilters,
@@ -16,6 +17,9 @@ export function normalizeSavedFilterCriterios(
   }
   return {
     nr_os: raw.nr_os ?? null,
+    nr_os_list: Array.isArray(raw.nr_os_list)
+      ? raw.nr_os_list.filter((n) => Number.isFinite(n) && n > 0)
+      : [],
     anos: Array.isArray(raw.anos) ? raw.anos.filter((n) => Number.isFinite(n)) : [],
     processo: typeof raw.processo === "string" ? raw.processo : "",
     categorias: Array.isArray(raw.categorias) ? raw.categorias : [],
@@ -31,11 +35,13 @@ export function normalizeSavedFilterCriterios(
 export function osFiltersToSavedPayload(
   filters: OsSearchFilters,
 ): Pick<SavedFilter, "situacoes" | "setores" | "criterios"> {
+  const nrOsValues = getNrOsFilterValues(filters);
   return {
     situacoes: filters.situacao ?? [],
     setores: filters.setor ?? [],
     criterios: {
-      nr_os: filters.nrOs ?? null,
+      nr_os: nrOsValues[0] ?? null,
+      nr_os_list: nrOsValues.length > 1 ? nrOsValues : [],
       anos: Array.isArray(filters.anos)
         ? filters.anos.filter((n) => Number.isFinite(n))
         : [],
@@ -58,7 +64,12 @@ export function savedFilterToOsPatch(
 ): Partial<OsSearchFilters> {
   const c = normalizeSavedFilterCriterios(filter.criterios);
   const patch: Partial<OsSearchFilters> = {
-    nrOs: c.nr_os ?? undefined,
+    ...nrOsPatchFromValues(
+      getNrOsFilterValues({
+        nrOs: c.nr_os ?? undefined,
+        nrOsList: c.nr_os_list,
+      }),
+    ),
     processo: c.processo ? formatProcessoMask(c.processo) : "",
     categorias: c.categorias,
     solicitantes: c.solicitantes,

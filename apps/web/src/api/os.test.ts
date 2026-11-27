@@ -89,6 +89,18 @@ describe("buildOsSearchQueryString", () => {
     expect(qs).not.toContain("include_total=true");
   });
 
+  it("envia vários Nr OS como nros", () => {
+    const qs = buildOsSearchQueryString({
+      ...base,
+      nrOs: 2244,
+      nrOsList: [2244, 2250],
+      exactOsLookup: true,
+    });
+    expect(qs).toContain("nros=2244");
+    expect(qs).toContain("nros=2250");
+    expect(qs).not.toContain("nr_os=");
+  });
+
   it("envia fetch_all na busca da home e mantém include_total", () => {
     const qs = buildOsSearchQueryString({
       ...base,

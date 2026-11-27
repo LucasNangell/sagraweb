@@ -1,5 +1,6 @@
 import { osSearchQueryKey } from "./osSearchQueryKey";
 import { DEFAULT_OS_SORTS, resolveOsSorts } from "./osSortKeys";
+import { getNrOsFilterValues } from "./nrOsFilter";
 import { OS_TEXT_SEARCH_MIN_CHARS } from "./osSearchUtils";
 import type { OsSearchFilters, OsSearchRow, OsSortColumn, OsSortDir } from "./types";
 
@@ -27,6 +28,7 @@ export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilter
   return {
     ...dataset,
     nrOs: undefined,
+    nrOsList: undefined,
     exactOsLookup: false,
     titulo: "",
     solicitante: "",
@@ -122,12 +124,13 @@ export function applyOsHomeViewFilters(
   const produtos = cleanList(filters.produtos);
   const produtoTerm = (filters.produto ?? "").trim().toLowerCase();
   const solicitanteTerm = (filters.solicitante ?? "").trim().toLowerCase();
-  const nrOs = filters.nrOs;
+  const nrOsValues = getNrOsFilterValues(filters);
+  const nrOsSet = nrOsValues.length > 0 ? new Set(nrOsValues) : null;
   const tituloTerm = (filters.titulo ?? "").trim().toLowerCase();
   const tituloActive =
     tituloTerm.length >= OS_TEXT_SEARCH_MIN_CHARS ||
     (tituloTerm.length > 0 &&
-      (nrOs != null ||
+      (nrOsSet != null ||
         produtos.length > 0 ||
         solicitantes.length > 0));
 
@@ -139,7 +142,7 @@ export function applyOsHomeViewFilters(
     if (!filters.includeSp && nro >= OS_NR_SP_THRESHOLD) {
       return false;
     }
-    if (nrOs != null && !Number.isNaN(nrOs) && nro !== nrOs) {
+    if (nrOsSet != null && !nrOsSet.has(nro)) {
       return false;
     }
     if (!displayedAndamentoMatches(row, situacoes, setores)) {

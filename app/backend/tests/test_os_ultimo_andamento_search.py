@@ -1,6 +1,8 @@
 """Tabela materializada + busca OS otimizada + ordenação default."""
 from __future__ import annotations
 
+import pytest
+
 from unittest.mock import MagicMock, patch
 
 from services.os_search_service import (
@@ -297,6 +299,29 @@ class TestOsSearchActiveFilter:
         assert "subfx_setor" not in sql
         assert "subfx_sit" not in sql
         assert "prio_0" not in sql
+
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
+    def test_multiple_nr_os_uses_in_clause(self, _enrich, mock_db, _pop, _prefer):
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            nros=[2244, 2250, 2244],
+            exact_os_lookup=True,
+            simple_pagination=True,
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        params = mock_db.execute_query.call_args.args[1]
+        assert "p.NroProtocolo IN (%(nr_os_sel_0)s, %(nr_os_sel_1)s)" in sql
+        assert params["nr_os_sel_0"] == 2244
+        assert params["nr_os_sel_1"] == 2250
+        assert "nr_os" not in params
+
+    @patch("services.os_search_service.db")
+    def test_multiple_nr_os_rejects_over_limit(self, _mock_db):
+        with pytest.raises(ValueError):
+            execute_os_search(nros=list(range(1, 200)), exact_os_lookup=True)
 
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
     @patch(_MAT_POPULATED, return_value=True)

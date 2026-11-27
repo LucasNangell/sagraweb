@@ -139,6 +139,7 @@ export function OsHomePage() {
   }, [requestedMobileView]);
 
   const debouncedNrOs = useDebouncedValue(filters.nrOs, 200);
+  const debouncedNrOsList = useDebouncedValue(filters.nrOsList, 200);
   const debouncedTitulo = useDebouncedValue(filters.titulo, 450);
   const debouncedProcesso = useDebouncedValue(filters.processo, 450);
   const debouncedPapel = useDebouncedValue(filters.papel, 450);
@@ -168,6 +169,7 @@ export function OsHomePage() {
       localViewPending
         ? {
             nrOs: filters.nrOs,
+            nrOsList: filters.nrOsList,
             titulo: filters.titulo,
             processo: debouncedProcesso,
             papel: debouncedPapel,
@@ -177,6 +179,7 @@ export function OsHomePage() {
           }
         : {
             nrOs: debouncedNrOs,
+            nrOsList: debouncedNrOsList,
             titulo: debouncedTitulo,
             processo: debouncedProcesso,
             papel: debouncedPapel,
@@ -188,11 +191,13 @@ export function OsHomePage() {
       debouncedAcabamento,
       debouncedCores,
       debouncedNrOs,
+      debouncedNrOsList,
       debouncedObservacao,
       debouncedPapel,
       debouncedProcesso,
       debouncedTitulo,
       filters.nrOs,
+      filters.nrOsList,
       filters.titulo,
       localViewPending,
     ],
@@ -260,6 +265,7 @@ export function OsHomePage() {
     return (
       !textBelowMinLength &&
       (filters.nrOs !== debouncedNrOs ||
+        filters.nrOsList !== debouncedNrOsList ||
         filters.titulo !== debouncedTitulo ||
         processoPending ||
         extraTextPending)
@@ -268,6 +274,7 @@ export function OsHomePage() {
     debouncedAcabamento,
     debouncedCores,
     debouncedNrOs,
+    debouncedNrOsList,
     debouncedObservacao,
     debouncedPapel,
     debouncedProcesso,
@@ -551,7 +558,8 @@ export function OsHomePage() {
       patch.situacao !== undefined ||
       patch.setor !== undefined ||
       patch.prioridade !== undefined ||
-      patch.nrOs !== undefined ||
+      "nrOs" in patch ||
+      "nrOsList" in patch ||
       patch.anos !== undefined ||
       patch.ano !== undefined ||
       patch.anoMode !== undefined ||

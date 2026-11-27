@@ -1,3 +1,4 @@
+import { getNrOsFilterValues } from "./nrOsFilter";
 import { OS_TEXT_SEARCH_MIN_CHARS } from "./osSearchUtils";
 import type { OsSearchFilters } from "./types";
 
@@ -86,7 +87,8 @@ export function getActiveFilterLabels(filters: OsSearchFilters): string[] {
  */
 export function getActiveFilterValueSummary(filters: OsSearchFilters): string[] {
   const parts: string[] = [];
-  if (filters.nrOs != null) parts.push(String(filters.nrOs));
+  const nrOsValues = getNrOsFilterValues(filters);
+  if (nrOsValues.length) parts.push(summarizeValues(nrOsValues.map(String)));
   const anos = filters.anos ?? [];
   if (anos.length) parts.push(summarizeValues(anos.map(String)));
   else if (filters.ano != null) parts.push(String(filters.ano));

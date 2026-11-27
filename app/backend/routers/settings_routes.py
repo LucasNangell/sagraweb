@@ -50,6 +50,8 @@ class SavedFilterCriterios(BaseModel):
     """Critérios extras além de situacoes/setores (compatível: omitidos = vazio)."""
 
     nr_os: Optional[int] = None
+    # Vários Nr OS (campo separado por vírgula na home); inclui `nr_os`.
+    nr_os_list: List[int] = Field(default_factory=list)
     anos: List[int] = Field(default_factory=list)
     processo: str = ""
     categorias: List[str] = Field(default_factory=list)

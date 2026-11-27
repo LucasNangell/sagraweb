@@ -15,6 +15,7 @@ import type {
   SubOsHistoryRow,
   SubOsRow,
 } from "@/features/os/types";
+import { getNrOsFilterValues } from "@/features/os/nrOsFilter";
 import { digitsOnly } from "@/features/os/processoMask";
 
 const osSearchEtagCache = new Map<string, { etag: string; body: OsSearchResponse }>();
@@ -34,8 +35,13 @@ function appendList(
 export function buildOsSearchQueryString(filters: OsSearchFilters): string {
   const params = new URLSearchParams();
 
-  if (filters.nrOs != null && !Number.isNaN(filters.nrOs)) {
-    params.append("nr_os", String(filters.nrOs));
+  const nrOsValues = getNrOsFilterValues(filters);
+  if (nrOsValues.length === 1) {
+    params.append("nr_os", String(nrOsValues[0]));
+  } else {
+    for (const nr of nrOsValues) {
+      params.append("nros", String(nr));
+    }
   }
   const anos = filters.anos ?? [];
   if (anos.length > 0) {

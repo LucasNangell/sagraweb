@@ -298,9 +298,11 @@ def detectar_molduras(doc: Any, alvo_mm: tuple[float, float], faces: int) -> lis
 # ---------------------------------------------------------------------------
 
 # Versão do processamento da base: bases e PDFs de imposição montados antes
-# desta versão são limpos (o contorno da moldura ia junto) ao serem usados.
-VERSAO_MONTAGEM = 2
-MARCA_MONTAGEM = f"sagra-base-repeticao v{VERSAO_MONTAGEM}"
+# desta versão são limpos ao serem usados (v2: o contorno da moldura ia junto;
+# v3: o carimbo de prova de dentro da moldura ia junto).
+VERSAO_MONTAGEM = 3
+PREFIXO_MARCA_MONTAGEM = "sagra-base-repeticao v"
+MARCA_MONTAGEM = f"{PREFIXO_MARCA_MONTAGEM}{VERSAO_MONTAGEM}"
 
 _SEPARADORES = " \t\r\n\f\x00()<>[]{}/%"
 _RE_FIM_IMAGEM = re.compile(r"\sEI(?=\s|$)")
@@ -502,6 +504,164 @@ def _apagar_contorno(doc: Any, page: Any, r: Any, tol: float = 1.0) -> int:
     return total
 
 
+# Carimbo de prova (caixa «Prova SEFOC», «Não vale como prova fiel de cor»,
+# nome e medidas do produto). Nas provas antigas de produtos do tamanho da
+# folha (Timbrado A4) ele ficava dentro da BordaF — não pode ir para a base.
+_CARIMBO_ANCORAS = ("prova sefoc", "vale como prova fiel de cor")
+_CARIMBO_DIMENSOES = re.compile(r"\d+\s*mm\s*\((larg|alt)\)\s*x\s*\d+\s*mm\s*\((larg|alt)\)")
+_CARIMBO_LINHAS = (
+    re.compile(r"^(sp|os|op|xx)\s*n[o.]?\s*:?$"),  # «SP nº» (º some sem acento)
+    re.compile(r"^prova\s*n[o.]?\s*:?$"),
+    re.compile(r"^data\s*:?$"),
+    re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$"),  # data
+    re.compile(r"^\d{1,5}\s*/\s*\d{2,4}$"),  # número da OS
+    re.compile(r"^\d{1,2}$"),  # número da prova
+)
+CARIMBO_ZONA_MM = 15.0
+CARIMBO_CAIXA_MAX_MM = (120.0, 45.0)
+
+
+def _linhas_de_texto(page: Any, clip: Any) -> list[tuple[Any, str]]:
+    import fitz
+
+    out = []
+    for b in page.get_text("dict", clip=clip)["blocks"]:
+        for linha in b.get("lines", []):
+            # \s pega também o espaço não separável (NBSP), que _sem_acento descartaria.
+            bruto = re.sub(r"\s+", " ", " ".join(s["text"] for s in linha["spans"]))
+            texto = " ".join(_sem_acento(bruto).split())
+            if texto:
+                out.append((fitz.Rect(linha["bbox"]), texto))
+    return out
+
+
+def areas_do_carimbo(page: Any, clip: Any = None) -> tuple[list[Any], list[Any]]:
+    """
+    ``(textos, caixas)``: retângulos (coordenadas da página) do carimbo de
+    prova dentro de ``clip`` — as linhas de texto dele e as caixas que as
+    contêm. Vazios quando não há «Prova SEFOC» nem «Não vale como prova fiel
+    de cor».
+    """
+    import fitz
+
+    clip = fitz.Rect(clip or page.rect)
+    linhas = _linhas_de_texto(page, clip)
+    ancoras = [r for r, t in linhas if any(a in t for a in _CARIMBO_ANCORAS)]
+    if not ancoras:
+        return [], []
+    zona = fitz.Rect(ancoras[0])
+    for r in ancoras[1:]:
+        zona |= r
+    for r, t in linhas:
+        if _CARIMBO_DIMENSOES.search(t) and r.intersects(zona + (-60 * MM, -60 * MM, 60 * MM, 60 * MM)):
+            zona |= r
+    zona = (zona + (-CARIMBO_ZONA_MM * MM, -CARIMBO_ZONA_MM * MM, CARIMBO_ZONA_MM * MM, CARIMBO_ZONA_MM * MM)) & clip
+
+    def e_do_carimbo(t: str) -> bool:
+        return (
+            any(a in t for a in _CARIMBO_ANCORAS)
+            or bool(_CARIMBO_DIMENSOES.search(t))
+            or any(p.match(t) for p in _CARIMBO_LINHAS)
+        )
+
+    textos = [r for r, t in linhas if r in zona and e_do_carimbo(t)]
+    max_w, max_h = CARIMBO_CAIXA_MAX_MM[0] * MM, CARIMBO_CAIXA_MAX_MM[1] * MM
+    candidatas = [
+        fitz.Rect(d["rect"])
+        for d in page.get_drawings()
+        if d["rect"] in zona and d["rect"].width <= max_w and d["rect"].height <= max_h
+        and d["rect"].width > 0.5 and d["rect"].height > 0.5
+    ]
+    # Caixas do carimbo: as que têm texto dele dentro; depois as de dentro delas.
+    caixas = [c for c in candidatas if any((c & r).get_area() >= 0.5 * r.get_area() for r in textos)]
+    caixas += [c for c in candidatas if c not in caixas and any(c in k for k in caixas)]
+    # Texto qualquer dentro de uma caixa do carimbo (nome do produto).
+    textos += [r for r, _t in linhas if r not in textos and any(r in k for k in caixas)]
+    return textos, caixas
+
+
+def _edicoes_dentro(
+    textos: list[str], alvos: list[tuple[float, float, float, float]], tol: float
+) -> list[list[tuple[int, int, str]]]:
+    """
+    Pinturas de caminho (contorno/preenchimento) cujos pontos estão todos
+    dentro de um dos retângulos ``alvos`` (coordenadas PDF) viram ``n``.
+    Acompanha q/Q/cm como ``_edicoes_do_contorno``; nada mais é reescrito.
+    """
+    import fitz
+
+    ctm = fitz.Matrix(1, 0, 0, 1, 0, 0)
+    pilha: list[Any] = []
+    pontos: list[Any] = []
+    operandos: list[Optional[float]] = []
+    edicoes: list[list[tuple[int, int, str]]] = [[] for _ in textos]
+    for si, texto in enumerate(textos):
+        for tipo, valor, ini, fim in _tokens(texto):
+            if tipo != "op":
+                operandos.append(valor if tipo == "num" else None)
+                continue
+            op, args, operandos = valor, operandos, []
+            numeros = all(v is not None for v in args)
+            if op == "q":
+                pilha.append(ctm)
+            elif op == "Q":
+                ctm = pilha.pop() if pilha else ctm
+            elif op == "cm" and len(args) == 6 and numeros:
+                ctm = fitz.Matrix(*args) * ctm
+            elif op in ("m", "l", "c", "v", "y") and numeros and len(args) >= 2 and len(args) % 2 == 0:
+                pontos += [fitz.Point(args[k], args[k + 1]) * ctm for k in range(0, len(args), 2)]
+            elif op == "re" and len(args) == 4 and numeros:
+                x, y, w, h = args
+                pontos += [fitz.Point(a, b) * ctm for a, b in ((x, y), (x + w, y + h), (x + w, y), (x, y + h))]
+            elif op in _PINTURAS:
+                if op != "n" and pontos:
+                    x0, y0 = min(p.x for p in pontos), min(p.y for p in pontos)
+                    x1, y1 = max(p.x for p in pontos), max(p.y for p in pontos)
+                    if any(
+                        x0 >= a[0] - tol and y0 >= a[1] - tol and x1 <= a[2] + tol and y1 <= a[3] + tol
+                        for a in alvos
+                    ):
+                        edicoes[si].append((ini, fim, "n"))
+                pontos = []
+    return edicoes
+
+
+def _apagar_carimbo(page: Any, clip: Any = None) -> int:
+    """Tira da página o carimbo de prova (textos e caixas). Devolve quantos itens saíram."""
+    import fitz
+
+    textos, caixas = areas_do_carimbo(page, clip)
+    if not textos:
+        return 0
+    total = 0
+    if caixas:
+        # Caixas pelo conteúdo: a redação do MuPDF só tira o desenho coberto
+        # com muita sobra (folga do traço/esquadria), o que não é confiável.
+        doc = page.parent
+        inv = ~page.transformation_matrix
+        alvos = []
+        for c in caixas:
+            q = fitz.Rect(c) * inv
+            alvos.append((min(q.x0, q.x1), min(q.y0, q.y1), max(q.x0, q.x1), max(q.y0, q.y1)))
+        xrefs = page.get_contents()
+        streams = [(doc.xref_stream(x) or b"").decode("latin-1") for x in xrefs]
+        for xref, texto, eds in zip(xrefs, streams, _edicoes_dentro(streams, alvos, 1.0)):
+            if not eds:
+                continue
+            for ini, fim, novo in sorted(eds, reverse=True):
+                texto = texto[:ini] + novo + texto[fim:]
+            doc.update_stream(xref, texto.encode("latin-1"))
+            total += len(eds)
+    for r in textos:
+        page.add_redact_annot(r, fill=False)
+    page.apply_redactions(
+        images=fitz.PDF_REDACT_IMAGE_NONE,
+        graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+        text=fitz.PDF_REDACT_TEXT_REMOVE,
+    )
+    return total + len(textos)
+
+
 def _marcar_montagem(doc: Any) -> None:
     meta = dict(doc.metadata or {})
     meta["keywords"] = MARCA_MONTAGEM
@@ -511,15 +671,18 @@ def _marcar_montagem(doc: Any) -> None:
 
 def limpar_base_montada(pdf_bytes: bytes) -> tuple[bytes, int]:
     """
-    Base já montada (páginas no formato do produto): tira traços de contorno
-    sobre as bordas da página (a moldura que ficou em montagens antigas) e
-    marca a versão. Devolve ``(pdf, traços removidos)``.
+    Base já montada (páginas no formato do produto): tira o carimbo de prova
+    e os traços de contorno sobre as bordas da página (o que ficou em
+    montagens antigas) e marca a versão. Devolve ``(pdf, itens removidos)``.
     """
     import fitz
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
-        total = sum(_apagar_contorno(doc, page, page.rect) for page in doc)
+        total = 0
+        for page in doc:
+            total += _apagar_carimbo(page)
+            total += _apagar_contorno(doc, page, page.rect)
         _marcar_montagem(doc)
         return doc.tobytes(garbage=3, deflate=True), total
     finally:
@@ -546,8 +709,11 @@ def _montado_por_versao_antiga(caminho: str) -> bool:
             meta = doc.metadata or {}
     except Exception:  # noqa: BLE001
         return False
-    if meta.get("keywords") == MARCA_MONTAGEM:
+    marca = meta.get("keywords") or ""
+    if marca == MARCA_MONTAGEM:
         return False
+    if marca.startswith(PREFIXO_MARCA_MONTAGEM):
+        return True
     return not (meta.get("producer") or "").strip() and not (meta.get("creator") or "").strip()
 
 
@@ -571,6 +737,8 @@ def montar_face(src: Any, m: Moldura, alvo_mm: tuple[float, float]) -> bytes:
         if page.rotation:
             page.set_rotation(0)
         r = fitz.Rect(m.rect)
+        # 0) Carimbo de prova dentro da moldura (Timbrado A4 e afins).
+        _apagar_carimbo(page, r)
         if not m.pagina_inteira:
             # 1) Apaga o que está fora da moldura (rótulos, carimbo, a outra face…).
             pr = page.rect
@@ -682,15 +850,17 @@ def carregar_config_base(ano: int, nro: int) -> dict[str, Any]:
 
 
 def _atualizar_base_antiga(ano: int, nro: int, cfg: dict[str, Any]) -> dict[str, Any]:
-    """Base montada por versão antiga: tira a moldura que tinha ficado no PDF."""
+    """Base montada por versão antiga: tira a moldura e o carimbo que tinham ficado no PDF."""
     pdf = caminho_base(ano, nro)
     try:
+        cfg = {**cfg, "versao_montagem": VERSAO_MONTAGEM}
         if pdf.is_file():
             limpo, n = limpar_base_montada(pdf.read_bytes())
             pdf.write_bytes(limpo)
             if n:
-                logger.info("Repetição %s/%s: %d traço(s) da moldura removido(s) da base", nro, ano, n)
-        cfg = {**cfg, "versao_montagem": VERSAO_MONTAGEM}
+                logger.info("Repetição %s/%s: %d item(ns) da moldura/carimbo removido(s) da base", nro, ano, n)
+                # Os textos do carimbo não são mais campos editáveis.
+                cfg["campos"], _avisos = campos_editaveis(limpo)
         (_pasta_base(ano, nro) / "config.json").write_text(
             json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
         )

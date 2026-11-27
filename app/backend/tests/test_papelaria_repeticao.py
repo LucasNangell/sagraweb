@@ -547,3 +547,131 @@ def test_campos_obrigatorios_so_dispensados_sem_face_de_modelo():
     # Verso de um modelo: os campos dele aparecem no formulário e continuam obrigatórios.
     assert _textos_da_repeticao({"__repeticao": "2026-1", "__composicao": json.dumps(verso_modelo)}) is False
     assert _textos_da_repeticao({"nome_deputado": "x"}) is False
+
+
+# ---------------------------------------------------------------------------
+# Carimbo de prova dentro do formato (Timbrado A4)
+# ---------------------------------------------------------------------------
+
+_TEXTOS_CARIMBO = [
+    "Prova SEFOC",
+    "SP nº",
+    "06258/2026",
+    "Data:",
+    "18/11/2026",
+    "Prova nº",
+    "1",
+    "Não vale como prova fiel de cor",
+    "Timbrado A4",
+    "210mm (Larg) x 297mm (Alt)",
+]
+
+
+def _timbrado_com_carimbo() -> bytes:
+    """Prova antiga de Timbrado A4: a página é o produto e o carimbo fica dentro dela."""
+    _fonte_ok()
+    doc = fitz.open()
+    page = doc.new_page(width=210 * MM, height=297 * MM)
+    page.insert_font(fontname="F1", fontfile=_FONTE)
+
+    def t(xy, texto, size=9):
+        page.insert_text(xy, texto, fontname="F1", fontsize=size)
+
+    # Timbre (fica).
+    t((117, 57), "CÂMARA DOS DEPUTADOS", 12)
+    t((117, 70), "Gabinete do Deputado Fulano", 12)
+    t((560, 30), "1")  # número solto longe do carimbo: não é do carimbo
+    page.draw_line((38, 802), (557, 802), color=(0.35, 0.35, 0.35), width=0.5)
+    t((156, 816), "Câmara dos Deputados | Anexo IV | Gabinete 352", 8)
+    # Carimbo (sai).
+    page.draw_rect(fitz.Rect(28, 636, 136, 702), color=(0.8, 0.8, 0.8), fill=(0.8, 0.8, 0.8), radius=0.08)
+    page.draw_rect(fitz.Rect(30, 638, 134, 700), color=(0.8, 0.8, 0.8), fill=(1, 1, 1), radius=0.08)
+    page.draw_rect(fitz.Rect(53, 644, 113, 660), fill=(1, 1, 1), color=None, radius=0.2)
+    page.draw_rect(fitz.Rect(55, 663, 113, 678), fill=(1, 1, 1), color=None, radius=0.2)
+    page.draw_rect(fitz.Rect(65, 681, 85, 697), fill=(1, 1, 1), color=None, radius=0.2)
+    t((40, 636), "Prova SEFOC", 14)
+    t((36, 656), "SP nº", 6)
+    t((60, 657), "06258/2026")
+    t((39, 675), "Data:", 6)
+    t((62, 675), "18/11/2026")
+    t((39, 695), "Prova nº", 6)
+    t((72, 693), "1", 14)
+    t((28, 717), "Não vale como prova fiel de cor", 14)
+    page.draw_rect(fitz.Rect(28, 725, 258, 772), color=(0.1, 0.1, 0.1), width=1, radius=0.2)
+    t((37, 740), "Timbrado A4", 16)
+    t((38, 764), "210mm (Larg) x 297mm (Alt)", 16)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _sem_carimbo(pdf: bytes) -> None:
+    textos = _textos(pdf)[0]
+    for texto in _TEXTOS_CARIMBO:
+        if texto == "1":
+            assert textos.count("1") == 1, textos  # só o número solto do timbre
+        else:
+            assert texto not in textos, textos
+    assert "CÂMARA DOS DEPUTADOS" in textos and "Gabinete do Deputado Fulano" in textos
+    assert "Câmara dos Deputados | Anexo IV | Gabinete 352" in textos
+    with fitz.open(stream=pdf, filetype="pdf") as doc:
+        desenhos = [d["rect"] for d in doc[0].get_drawings()]
+    # Só a linha do rodapé do timbre continua.
+    assert len(desenhos) == 1 and desenhos[0].width > 500, desenhos
+
+
+def test_carimbo_de_prova_dentro_do_timbrado_nao_vai_para_a_base():
+    from services import papelaria_repeticao_service as rep
+
+    base, molduras = rep.montar_base(_timbrado_com_carimbo(), (210, 297), 1)
+    assert molduras[0].pagina_inteira
+    _sem_carimbo(base)
+
+
+def test_sem_carimbo_nada_muda():
+    from services import papelaria_repeticao_service as rep
+
+    with fitz.open(stream=_prova_a4(), filetype="pdf") as doc:
+        page = doc[0]
+        # «Prova SEFOC» fora da moldura: não é procurado dentro dela.
+        assert rep.areas_do_carimbo(page, fitz.Rect(150, 120, 150 + 85 * MM, 120 + 50 * MM)) == ([], [])
+    with fitz.open(stream=_prova_no_formato(), filetype="pdf") as doc:
+        assert rep.areas_do_carimbo(doc[0]) == ([], [])
+
+
+def test_base_com_carimbo_montada_antes_e_limpa_e_perde_os_campos_dele(tmp_path, monkeypatch):
+    from services import papelaria_prova_pdf_service as pdf_svc
+    from services import papelaria_repeticao_service as rep
+
+    monkeypatch.setattr(pdf_svc, "RAIZ_MODELOS_PDF", tmp_path)
+    antiga = _timbrado_com_carimbo()
+    doc = fitz.open(stream=antiga, filetype="pdf")
+    doc.set_metadata({"keywords": "sagra-base-repeticao v2", "creator": "SAGRA Papelaria"})
+    antiga = doc.tobytes()
+    doc.close()
+    campos, _ = rep.campos_editaveis(antiga)
+    assert any(c["marcador"] == "Prova SEFOC" for c in campos)
+    pasta = rep._pasta_base(2026, 7002)
+    pasta.mkdir(parents=True)
+    rep.caminho_base(2026, 7002).write_bytes(antiga)
+    (pasta / "config.json").write_text(json.dumps({"versao_montagem": 2, "campos": campos}), encoding="utf-8")
+
+    cfg = rep.carregar_config_base(2026, 7002)
+    assert cfg["versao_montagem"] == rep.VERSAO_MONTAGEM
+    _sem_carimbo(rep.caminho_base(2026, 7002).read_bytes())
+    marcadores = [c["marcador"] for c in cfg["campos"]]
+    assert "Prova SEFOC" not in marcadores and "Gabinete do Deputado Fulano" in marcadores
+
+
+def test_imposicao_limpa_base_marcada_por_versao_anterior(tmp_path, monkeypatch):
+    from services import papelaria_repeticao_service as rep
+
+    monkeypatch.setattr(rep, "formato_do_produto", lambda ano, nro: ((210.0, 297.0), 1, 15))
+    doc = fitz.open(stream=_timbrado_com_carimbo(), filetype="pdf")
+    doc.set_metadata({"keywords": "sagra-base-repeticao v2", "creator": "SAGRA Papelaria"})
+    base = tmp_path / "06242-Fulano-Timbrado-BaseSefoc.pdf"
+    base.write_bytes(doc.tobytes())
+    doc.close()
+    assert rep.pdf_base_para_imposicao(2026, 6242, str(base)) == str(base)
+    _sem_carimbo(base.read_bytes())
+    assert rep.montagem_atual(str(base))
